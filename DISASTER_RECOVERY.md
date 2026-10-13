@@ -32,9 +32,10 @@ cp .env.example .env
 nano .env
 # Wprowadź hasła (GRAFANA_ADMIN_PASSWORD, KUMA_ADMIN_PASS), token GitHub i Cloudflare Tunnel
 
-# Utworzenie zabezpieczonego pliku poświadczeń dla scrapera Prometheusa (ISO 27001):
+# Utworzenie zabezpieczonego pliku poświadczeń dla scrapera Prometheusa (UID 65534 - ISO 27001):
 echo -n "WprowadzHasloKuma" > config/prometheus/kuma_password
-chmod 600 config/prometheus/kuma_password
+sudo chown 65534:ubuntu config/prometheus/kuma_password
+sudo chmod 640 config/prometheus/kuma_password
 ```
 
 ### Krok 4: Utworzenie wolumenów i sieci Dockera (Czas: ~1 min)

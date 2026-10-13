@@ -253,10 +253,11 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
    ```
    *Uzupełnij: `CLOUDFLARE_TUNNEL_TOKEN`, `RUNNER_ORG_TOKEN`, `GITHUB_TOKEN` oraz hasła do Grafany i Uptime Kuma.*
    
-   Utwórz zabezpieczony plik poświadczeń dla scrapera Prometheusa:
+   Utwórz zabezpieczony plik poświadczeń dla scrapera Prometheusa (UID 65534):
    ```bash
    echo -n "TwojeHasloKuma" > config/prometheus/kuma_password
-   chmod 600 config/prometheus/kuma_password
+   sudo chown 65534:ubuntu config/prometheus/kuma_password
+   sudo chmod 640 config/prometheus/kuma_password
    ```
 
 5. **Uruchomienie pełnego stosu produkcyjnego wraz z runnerem**:
