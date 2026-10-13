@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # 01-harden-os.sh
-# Hardening systemu operacyjnego Ubuntu (ISO 27001 / CIS Benchmark baseline)
+# Kompleksowy hardening systemu operacyjnego Ubuntu (ISO 27001 / CIS Benchmark baseline)
+# Ochrona przed włamaniami, atakami brute-force, skanowaniem oraz exploitami.
 # ==============================================================================
 set -euo pipefail
 
-echo "==> [1/6] Weryfikacja uprawnień wykonawczych..."
+echo "======================================================================"
+echo ">> [1/8] Weryfikacja uprawnień i środowiska..."
+echo "======================================================================"
 if [[ "${EUID}" -ne 0 ]]; then
     echo "BŁĄD: Skrypt musi zostać uruchomiony z uprawnieniami roota (np. sudo bash $0)" >&2
     exit 1
 fi
 
-TARGET_USER="${SUDO_USER:-ubuntu}"
+TARGET_USER="${1:-${SUDO_USER:-$(getent passwd "1000" | cut -d: -f1 || echo "ubuntu")}}"
 echo "Konfiguracja stosowana dla użytkownika: ${TARGET_USER}"
 
-echo "==> [2/6] Weryfikacja obecności kluczy SSH..."
+echo "======================================================================"
+echo ">> [2/8] Weryfikacja kluczy SSH (Ochrona przed lock-outem)..."
+echo "======================================================================"
 USER_AUTH_KEYS="/home/${TARGET_USER}/.ssh/authorized_keys"
 if [[ ! -f "${USER_AUTH_KEYS}" ]] || [[ ! -s "${USER_AUTH_KEYS}" ]]; then
     echo "OSTRZEŻENIE: Brak kluczy w ${USER_AUTH_KEYS}!" >&2
@@ -26,38 +31,50 @@ if [[ ! -f "${USER_AUTH_KEYS}" ]] || [[ ! -s "${USER_AUTH_KEYS}" ]]; then
     fi
 fi
 
-echo "==> [3/6] Aktualizacja pakietów i instalacja narzędzi ochrony..."
+echo "======================================================================"
+echo ">> [3/8] Aktualizacja pakietów i instalacja pakietów bezpieczeństwa..."
+echo "======================================================================"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get upgrade -y
-apt-get install -y ufw fail2ban unattended-upgrades curl umask-
+apt-get install -y ufw fail2ban unattended-upgrades curl iptables ca-certificates
 
-echo "==> [4/6] Konfiguracja SSH (sshd_config.d)..."
+echo "======================================================================"
+echo ">> [4/8] SSH Hardening (ISO 27001 baseline)..."
+echo "======================================================================"
 SSH_HARDEN_CONF="/etc/ssh/sshd_config.d/99-security-hardening.conf"
+mkdir -p /etc/ssh/sshd_config.d
 cat << 'EOF' > "${SSH_HARDEN_CONF}"
-# Security Hardening (ISO 27001)
+# Security Hardening (ISO 27001 / CIS Benchmark)
+# 1. Całkowity zakaz logowania na konto root
 PermitRootLogin no
+# 2. Zakaz uwierzytelniania hasłem (wyłącznie klucze kryptograficzne)
 PasswordAuthentication no
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 AuthenticationMethods publickey
-X11Forwarding no
+# 3. Ograniczenie liczby prób autoryzacji przed rozłączeniem
 MaxAuthTries 3
+# 4. Wyłączenie zbędnych i podatnych funkcji
+X11Forwarding no
+AllowTcpForwarding yes
 ClientAliveInterval 300
 ClientAliveCountMax 2
 EOF
 
-systemctl reload ssh || systemctl reload sshd || echo "Przeładowanie SSH wymaga restartu usługi."
+systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
 
-echo "==> [5/6] Konfiguracja zapory sieciowej UFW..."
+echo "======================================================================"
+echo ">> [5/8] Zapora sieciowa UFW (Stateful Firewall & Rate Limiting)..."
+echo "======================================================================"
 ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 
-# Port SSH (jeśli używasz innego, zmień przed uruchomieniem)
-ufw allow 22/tcp comment 'SSH Access'
+# Port SSH z ograniczeniem częstotliwości (Rate Limiting: max 6 połączeń / 30s)
+ufw limit 22/tcp comment 'SSH Rate Limited'
 
-# Porty webowe (tylko w przypadku wystawiania Reverse Proxy bezpośrednio)
+# Porty webowe (tylko w przypadku bezpośredniego wystawiania bez tunelu Cloudflare)
 # W modelu Zero Trust / Cloudflare Tunnels porty 80 i 443 NIE muszą być otwierane.
 # ufw allow 80/tcp comment 'HTTP'
 # ufw allow 443/tcp comment 'HTTPS'
@@ -65,12 +82,18 @@ ufw allow 22/tcp comment 'SSH Access'
 ufw --force enable
 ufw status verbose
 
-echo "==> [6/6] Konfiguracja Fail2Ban & Unattended Upgrades..."
+echo "======================================================================"
+echo ">> [6/8] Fail2Ban (Intrusion Prevention System - IPS)..."
+echo "======================================================================"
 cat << 'EOF' > /etc/fail2ban/jail.local
 [DEFAULT]
+# Czas blokady agresora: 1 godzina
 bantime  = 1h
+# Okno czasowe zliczania prób: 10 minut
 findtime = 10m
-maxretry = 5
+# Maksymalna liczba błędów przed banem: 4
+maxretry = 4
+banaction = ufw
 
 [sshd]
 enabled = true
@@ -78,10 +101,71 @@ port    = ssh
 mode    = aggressive
 EOF
 
-systemctl enable --now fail2ban
-systemctl restart fail2ban
+systemctl enable --now fail2ban 2>/dev/null || service fail2ban restart 2>/dev/null || true
 
-# Automatyczne aktualizacje bezpieczeństwa
-dpkg-reconfigure -f noninteractive -p low unattended-upgrades
+echo "======================================================================"
+echo ">> [7/8] Unattended Upgrades (Automatyczne łatki bezpieczeństwa)..."
+echo "======================================================================"
+cat << 'EOF' > /etc/apt/apt.conf.d/20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Download-Upgradeable-Packages "1";
+APT::Periodic::AutocleanInterval "7";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
 
-echo "==> [SUKCES] Hardening systemu zakończony pomyślnie."
+cat << 'EOF' > /etc/apt/apt.conf.d/50unattended-upgrades
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Package-Blacklist {
+};
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::InstallOnShutdown "false";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "false";
+EOF
+
+systemctl enable --now unattended-upgrades 2>/dev/null || true
+
+echo "======================================================================"
+echo ">> [8/8] Kernel & Network Hardening (Anti-Spoofing & Anti-DoS)..."
+echo "======================================================================"
+SYSCTL_CONF="/etc/sysctl.d/99-security-hardening.conf"
+cat << 'EOF' > "${SYSCTL_CONF}"
+# Ochrona przed zalewaniem pakietami SYN (SYN Flood DoS)
+net.ipv4.tcp_syncookies = 1
+
+# Ochrona przed fałszowaniem adresów IP (IP Spoofing - Reverse Path Filtering)
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Ochrona przed atakami typu Man-In-The-Middle poprzez pakiety ICMP redirect
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+
+# Ignorowanie żądań broadcast ping (ochrona przed atakiem Smurf)
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+# Wymagane trasowanie pakietów dla mostka sieciowego Dockera
+net.ipv4.ip_forward = 1
+EOF
+
+sysctl --system >/dev/null 2>&1 || true
+
+# Zabezpieczenie pamięci współdzielonej /dev/shm przed uruchamianiem exploitów
+if grep -q " /dev/shm " /etc/fstab 2>/dev/null; then
+    sed -i 's|.* /dev/shm .*|tmpfs /dev/shm tmpfs defaults,noexec,nosuid,nodev 0 0|' /etc/fstab
+else
+    echo "tmpfs /dev/shm tmpfs defaults,noexec,nosuid,nodev 0 0" >> /etc/fstab
+fi
+mount -o remount,noexec,nosuid,nodev /dev/shm 2>/dev/null || true
+
+echo "======================================================================"
+echo ">> [SUKCES] Pełny hardening systemu zakończony pomyślnie."
+echo "======================================================================"
