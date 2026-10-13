@@ -29,6 +29,7 @@ cert.pem
 *.zip
 *.bak
 backups/
+dist/
 
 # Runtime data & Docker volumes persisted locally
 data/
