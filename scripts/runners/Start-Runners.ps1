@@ -10,9 +10,11 @@
 
 [CmdletBinding()]
 param(
+    [string]$UnifiedRunnerPath = "E:\actions-runner-zeslownikiem",
     [string]$DesktopRunnerPath = "E:\actions-runner",
     [string]$WebRunnerPath = "E:\actions-runner-web",
-    [switch]$SkipNightlyResume
+    [switch]$SkipNightlyResume,
+    [switch]$ForceLegacySplit
 )
 
 $ErrorActionPreference = "Continue"
@@ -45,11 +47,15 @@ function Start-RunnerInstance([string]$name, [string]$path) {
     }
 }
 
-# 1. Start runnera desktopowego
-Start-RunnerInstance -name "Desktop (gal-anonym)" -path $DesktopRunnerPath
-
-# 2. Start runnera webowego
-Start-RunnerInstance -name "Web (gal-anonim-web)" -path $WebRunnerPath
+# 1. Zunifikowany runner organizacji (obsługuje gal-anonym, gal-anonim-web i całą organizację zeslownikiem)
+if ((Test-Path $UnifiedRunnerPath) -and (-not $ForceLegacySplit)) {
+    Write-Host "Wykryto zunifikowanego runnera organizacji zeslownikiem." -ForegroundColor Green
+    Start-RunnerInstance -name "Unified Org Runner (zeslownikiem)" -path $UnifiedRunnerPath
+} else {
+    # Tryb legacy (stare rozdzielone repozytoria)
+    Start-RunnerInstance -name "Desktop (gal-anonym)" -path $DesktopRunnerPath
+    Start-RunnerInstance -name "Web (gal-anonim-web)" -path $WebRunnerPath
+}
 
 # 3. Wznowienie zadan przerwanych podczas offline runnerow
 if (-not $SkipNightlyResume) {
