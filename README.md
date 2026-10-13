@@ -29,20 +29,27 @@
  │  │  (CPU/RAM/Dysk) │         │                       │                 │
  │  └─────────────────┘         │                       │                 │
  │  ┌─────────────────┐         │                       │                 │
- │  │  cAdvisor       ├─────────┘                       │                 │
- │  │  (Docker stats) │                                 │                 │
- │  └─────────────────┘                                 │                 │
- │                              └────── data source ────┘                 │
+ │  │  cAdvisor       ├─────────┤                       │                 │
+ │  │  (Docker stats) │         │                       │                 │
+ │  └─────────────────┘         │                       │                 │
+ │  ┌─────────────────┐         │                       │                 │
+ │  │ GitHub Exporter ├─────────┘                       │                 │
+ │  │ (CI/CD Actions) │                                 │                 │
+ │  └─────────────────┘         ┌───────────────────────┴──────────────┐  │
+ │                              │ Dozzle: Logi Kontenerów w Przeglądarce│  │
+ │                              │ 127.0.0.1:8888                       │  │
+ │                              └──────────────────────────────────────┘  │
  │                                                                        │
  │  ┌───────────────────────────────────┐ ┌────────────────────────────┐  │
  │  │  Runner gal-anonym (Desktop)      │ │ Runner gal-anonim-web (Web)│  │
  │  │  (Konteneryzowany GitHub Runner)  │ │ (Konteneryzowany Runner)   │  │
  │  └───────────────────────────────────┘ └────────────────────────────┘  │
  │                                                                        │
- │  Trwałe wolumeny danych (Data Persistence):                            │
+ │  Trwałe wolumeny danych & Kopia Offsite:                               │
  │  ├── uptime_kuma_data                                                  │
  │  ├── prometheus_data                                                   │
- │  └── grafana_data                                                      │
+ │  ├── grafana_data                                                      │
+ │  └── backup-offsite.sh ──> S3 / Cloudflare R2 / Oracle Cloud (Alerty)  │
  └────────────────────────────────────────────────────────────────────────┘
 ```
 
