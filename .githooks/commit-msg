@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Git hook to enforce Conventional Commits (wzorowane na _site-template & Gal Anonim)
+
+commit_msg=$(cat "$1")
+regex="^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-zA-Z0-9_\-\ ]+\))?!?: .+"
+
+if [[ ! $commit_msg =~ $regex ]]; then
+    echo "=================================================================" >&2
+    echo " ❌ ZATRZYMANO COMMITA - Niepoprawny format komunikatu! ❌ " >&2
+    echo "=================================================================" >&2
+    echo "Twój komunikat to: '$commit_msg'" >&2
+    echo "" >&2
+    echo "Wymagany format zgodny ze standardem Conventional Commits:" >&2
+    echo " ✨ feat:     [opis] - nowa funkcja / usługa w stacku" >&2
+    echo " 🐛 fix:      [opis] - naprawa konfiguracji / kontenera" >&2
+    echo " ♻️ refactor: [opis] - refaktoryzacja skryptów / compose" >&2
+    echo " 📝 docs:     [opis] - aktualizacja dokumentacji / runbooków" >&2
+    echo " 🔧 chore:    [opis] - zadania konfiguracyjne i zależności" >&2
+    echo " 🚀 ci:       [opis] - potoki CI/CD i automatyzacja deployu" >&2
+    echo " 🧪 test:     [opis] - testy walidacyjne i higieny repozytorium" >&2
+    echo "" >&2
+    echo "Przykład: feat(compose): dodaj monitoring dozzle dla podglądu logów" >&2
+    echo "=================================================================" >&2
+    exit 1
+fi

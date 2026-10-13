@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🛡️ Zgłoszenie podatności bezpieczeństwa (ISO 27001)
+    url: mailto:kontakt@twojastronawww.pl
+    about: Zgłaszaj podatności zgodnie z polityką Responsible Disclosure opisaną w SECURITY.md.

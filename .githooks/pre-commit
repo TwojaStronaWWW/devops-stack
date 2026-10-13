@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -e
+
+echo "🔍 [pre-commit] Uruchamianie lokalnej bramy jakościowej (Quality Gate VPS)..."
+
+# 1. Blokada przypadkowego commitowania prywatnych kluczy i sekretów (ISO 27001)
+if git diff --cached --name-only | grep -E "(\.env|\.env\.local|scripts/.*\.env|\.pem|\.key|\.pfx|id_ed25519|id_rsa)$"; then
+  echo "❌ BŁĄD: Wykryto plik z wrażliwymi sekretami/kluczami w paczce do zatwierdzenia!"
+  echo "Usuń plik z indeksu poleceniem: git reset HEAD <plik>"
+  exit 1
+fi
+
+# 2. Blokada markerów konfliktów scalania (merge conflict markers: 7 znaków < na początku linii)
+if git diff --cached -G"^[<]{7} " --name-only | grep -v "tests/" | grep -q .; then
+  echo "❌ BŁĄD: Wykryto markery konfliktu scalania w plikach do zatwierdzenia!"
+  exit 1
+fi
+
+# 3. Uruchomienie testów higieny repozytorium i walidacji
+if [ -f package.json ]; then
+  npm run check
+  RESULT=$?
+  if [ $RESULT -ne 0 ]; then
+    echo "❌ BŁĄD: Walidacja konfiguracji lub testy nie przeszły! Popraw błędy przed commitem."
+    exit 1
+  fi
+fi
+
+echo "✅ [pre-commit] Wszystkie testy przeszły pomyślnie! Zezwolono na commit."
+exit 0

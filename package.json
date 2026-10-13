@@ -1,0 +1,11 @@
+{
+  "name": "devops-stack",
+  "version": "1.0.0",
+  "description": "TwojaStronaWWW DevOps & Monitoring Stack - Oracle Cloud Always Free",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "check": "npm test",
+    "prepare": "git config core.hooksPath .githooks || true"
+  }
+}

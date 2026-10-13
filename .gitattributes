@@ -1,8 +1,20 @@
-# Enforce LF line endings for shell scripts and Docker/CI configurations
-# to prevent execution errors (\r: command not found) on Linux/WSL2/VPS.
+# Normalizacja końców linii (LF) dla repozytorium TwojaStronaWWW VPS
+# Zapobiega błędom '\r: command not found' w środowiskach Linux, Docker, WSL2 i GitHub Actions
+* text=auto eol=lf
+
+# Skrypty powłoki i hooki gita bezwzględnie w formacie LF
 *.sh text eol=lf
+.githooks/* text eol=lf
+*.bash text eol=lf
+
+# Konfiguracje Docker, Compose i CI/CD
 *.yml text eol=lf
 *.yaml text eol=lf
 *.env* text eol=lf
 *.conf text eol=lf
 Dockerfile text eol=lf
+
+# Pliki skryptowe Windows
+*.ps1 text eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

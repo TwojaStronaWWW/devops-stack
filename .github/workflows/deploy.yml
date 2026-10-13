@@ -10,16 +10,32 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy Stack to Target Host
+  ci:
+    name: 🧪 Run Quality Gate
     runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 🛡️ Full Quality Gate
+        run: npm run check
+
+  deploy:
+    name: 🚀 Deploy Stack to Target Host
+    needs: ci
+    runs-on: ubuntu-latest
+    if: "${{ secrets.VPS_HOST != '' }}"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Deploy via SSH Key (Ed25519)
-        uses: appleboy/ssh-action@v1.0.3
-        if: "${{ secrets.VPS_HOST != '' }}"
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}

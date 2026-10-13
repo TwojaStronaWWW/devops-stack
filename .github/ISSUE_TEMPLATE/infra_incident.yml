@@ -1,0 +1,36 @@
+name: 🚨 Zgłoszenie awarii infrastruktury (Incydent)
+description: Zgłoś błąd, awarię kontenera lub problem z dostępnością usług VPS
+title: "fix(infra): [Krótki opis awarii]"
+labels: ["bug", "incident", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Dziękujemy za zgłoszenie incydentu w infrastrukturze TwojaStronaWWW DevOps Stack.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Komponent dotknięty awarią
+      options:
+        - Cloudflare Zero Trust Tunnel (cloudflared)
+        - GitHub Actions Runner (runner-zeslownikiem-unified)
+        - Monitoring Uptime Kuma
+        - Prometheus / Grafana
+        - cAdvisor / Node Exporter / Dozzle
+        - Oracle Cloud Compute / System operacyjny Ubuntu
+        - Sieć Docker / Skrypty pomocnicze
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Opis incydentu i symptomy
+      description: Co dokładnie nie działa? Jakie błędy zwraca usługa lub przeglądarka?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logi z kontenera lub serwera
+      description: Wklej odpowiednie logi z polecenia `docker compose logs <usługa>` lub `journalctl`
+      render: shell

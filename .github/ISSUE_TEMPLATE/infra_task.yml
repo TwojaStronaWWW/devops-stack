@@ -1,0 +1,28 @@
+name: 🛠️ Zadanie techniczne / Rozwój infrastruktury
+description: Zgłoś potrzebę dodania nowej usługi, optymalizacji lub aktualizacji stacku
+title: "feat(infra): [Krótki opis zadania]"
+labels: ["enhancement", "infrastructure"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Zgłoś planowane ulepszenie lub nowe wymaganie infrastrukturalne.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Cel i zakres zadania
+      description: Co ma zostać wdrożone lub zmienione w infrastrukturze VPS?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Kryteria sukcesu (Definition of Done)
+      description: Jak zweryfikujemy, że usługa działa poprawnie i bezpiecznie?
+      value: |
+        - [ ] Konfiguracja w compose przetestowana lokalnie lub na VPS
+        - [ ] Brak przekroczenia limitów Oracle Always Free (0.00 PLN)
+        - [ ] Routing zabezpieczony tunelem Cloudflare Zero Trust
+        - [ ] Zgodność z ISO 27001 i zaktualizowana dokumentacja
+    validations:
+      required: true

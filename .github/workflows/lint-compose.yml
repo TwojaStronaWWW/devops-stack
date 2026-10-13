@@ -1,4 +1,4 @@
-name: Lint Docker Compose
+name: CI & Quality Gate
 
 on:
   push:
@@ -6,33 +6,64 @@ on:
   pull_request:
     branches: [ "main" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate-compose:
-    name: Validate Compose Syntax & Config
+  quality-gate:
+    name: 1. Quality Gate & Repo Hygiene
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: 1.1 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup environment variables mock
+      - name: 1.2 Ochrona przed wyciekiem prywatnych kluczy i sekretów (.env, *.pem, *.key)
         run: |
-          cp .env.example .env
+          if git ls-files | grep -E "(\.env|\.env\.local|scripts/.*\.env|\.pem|\.key|\.pfx|id_ed25519|id_rsa)$"; then
+            echo "❌ Wykryto plik z wrażliwymi danymi lub kluczami prywatnymi w repozytorium!"
+            exit 1
+          fi
 
-      - name: Validate main docker-compose.yml
+      - name: 1.3 Konfiguracja środowiska Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 1.4 Uruchomienie testów higieny repozytorium i bezpieczeństwa (node:test)
+        run: npm run check
+
+      - name: 1.5 Walidacja składni skryptów powłoki (bash -n)
+        run: |
+          echo "Sprawdzanie składni skryptów bash..."
+          find scripts -maxdepth 2 -type f -name "*.sh" -print0 | xargs -0 -n1 bash -n
+          echo "Wszystkie skrypty bash są syntaktycznie poprawne."
+
+  validate-compose:
+    name: 2. Validate Docker Compose Syntax
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: 2.1 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 2.2 Setup environment variables mock
+        run: cp .env.example .env
+
+      - name: 2.3 Validate main docker-compose.yml
         working-directory: compose
         run: |
           docker compose -f docker-compose.yml config > /dev/null
           echo "docker-compose.yml is valid!"
 
-      - name: Validate extensions.yml
+      - name: 2.4 Validate extensions.yml
         working-directory: compose
         run: |
-          # Create fake external network to test extensions config
           docker network create devops_internal_network || true
           docker compose -f extensions.yml config > /dev/null
           echo "extensions.yml is valid!"
 
-      - name: Validate runners.yml
+      - name: 2.5 Validate runners.yml
         working-directory: compose
         run: |
           docker compose -f runners.yml config > /dev/null
