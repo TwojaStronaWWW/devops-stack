@@ -187,7 +187,32 @@ docker compose -f runners.yml up -d runner-unified
 
 ---
 
-## 6. Szybki Start na Świeżym Serwerze VPS (Oracle Cloud Ubuntu)
+## 6. Prowizjonowanie i Szybki Start na Serwerze VPS (Oracle Cloud Ubuntu)
+
+### A. Automatyczne Utworzenie Maszyny ARM w Oracle Cloud (Instance Hunter)
+W przypadku popularnych regionów (np. Paryż `eu-paris-1`), darmowe procesory ARM Ampere A1 (`VM.Standard.A1.Flex` - 4 OCPU, 24 GB RAM) bywają tymczasowo wyczerpane (*"Out of host capacity"*).
+
+Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-hunter.sh`](file:///e:/Projekty/VPS/scripts/oracle-arm-hunter.sh):
+1. **Konfiguracja OCI CLI w WSL2**:
+   ```bash
+   # Instalacja narzędzia
+   bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- --accept-all-defaults
+   exec -l $SHELL
+   ```
+2. **Automatyczne wykrycie identyfikatorów konta**:
+   ```bash
+   ./scripts/oracle-arm-hunter.sh --discover
+   ```
+3. **Uruchomienie łowcy w tle (z powiadomieniami Ntfy na telefon)**:
+   ```bash
+   nohup ./scripts/oracle-arm-hunter.sh > oracle-hunter.log 2>&1 &
+   # Podgląd polowania:
+   tail -f oracle-hunter.log
+   ```
+
+---
+
+### B. Konfiguracja Nowego Serwera po Utworzeniu
 
 1. **Klonowanie repozytorium**:
    ```bash
