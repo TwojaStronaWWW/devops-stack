@@ -18,9 +18,12 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # 2. Uptime Kuma metrics endpoint (włącz w Uptime Kuma Settings -> Metrics)
+  # 2. Uptime Kuma metrics endpoint
   - job_name: 'uptime-kuma'
     metrics_path: '/metrics'
+    basic_auth:
+      username: 'kpoczatek'
+      password: 'ChangeMe_Kuma_Password_2026!'
     static_configs:
       - targets: ['uptime-kuma:3001']
 
