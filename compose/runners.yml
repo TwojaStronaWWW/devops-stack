@@ -13,6 +13,7 @@ services:
     networks:
       - internal_network
     environment:
+      - RUNNER_SCOPE=org
       - ORG_NAME=zeslownikiem
       - RUNNER_TOKEN=${RUNNER_ORG_TOKEN}
       - RUNNER_NAME=vps-runner-unified
