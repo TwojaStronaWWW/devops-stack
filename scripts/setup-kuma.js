@@ -9,8 +9,8 @@ const KUMA_URL = process.env.KUMA_URL || "http://127.0.0.1:3001";
 
 const SITES = [
     { name: "Raricart.pl", url: "https://raricart.pl" },
-    { name: "TwojaStrona.pl", url: "https://twojastrona.pl" },
-    { name: "DancePolus.pl", url: "https://dancepolus.pl" },
+    { name: "TwojaStronaWWW.pl", url: "https://twojastronawww.pl" },
+    { name: "DancePuls.pl", url: "https://dancepuls.pl" },
     { name: "KatoSalsaHub.pl", url: "https://katosalsahub.pl" },
     { name: "GalAnonim.pl", url: "https://galanonim.pl" },
     { name: "Serwis Maxbit", url: "https://serwis.maxbit.com.pl/" },
