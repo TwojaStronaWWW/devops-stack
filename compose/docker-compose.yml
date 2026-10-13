@@ -56,6 +56,7 @@ services:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
+      - "--storage.tsdb.retention.size=10GB"
       - "--web.enable-lifecycle"
       - "--web.console.libraries=/usr/share/prometheus/console_libraries"
       - "--web.console.templates=/usr/share/prometheus/consoles"
@@ -171,12 +172,13 @@ services:
     devices:
       - /dev/kmsg
     command:
-      - "--disable_metrics=disk,diskIO"
-      - "--housekeeping_interval=10s"
+      - "--docker_only=true"
+      - "--housekeeping_interval=30s"
+      - "--disable_metrics=disk,diskIO,tcp,udp,percpu,sched,process"
     deploy:
       resources:
         limits:
-          cpus: "0.5"
+          cpus: "0.3"
           memory: 128M
         reservations:
           memory: 32M
