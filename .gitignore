@@ -12,8 +12,8 @@ id_rsa*
 
 # Cloudflare / Tunnel credentials
 cert.pem
-*.json
-!grafana/provisioning/**/*.json
+!config/grafana/provisioning/**/*.json
+!package*.json
 
 # Database dumps, archives & local backups
 *.sql
