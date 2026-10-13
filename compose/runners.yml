@@ -2,11 +2,41 @@ name: devops-stack-runners
 
 services:
   # ============================================================================
-  # GitHub Actions Runner dla repozytorium gal-anonym (Desktop)
+  # 1. JEDEN ZUNIFIKOWANY RUNNER NA POZIOMIE ORGANIZACJI (OPCJA ZALECANA)
+  # Obsługuje automatycznie ZARÓWNO gal-anonym, jak i gal-anonim-web!
+  # Token generowany w: https://github.com/organizations/zeslownikiem/settings/actions/runners
+  # ============================================================================
+  runner-unified:
+    image: myoung34/github-runner:ubuntu-jammy
+    container_name: runner-zeslownikiem-unified
+    restart: unless-stopped
+    networks:
+      - internal_network
+    environment:
+      - ORG_NAME=zeslownikiem
+      - RUNNER_TOKEN=${RUNNER_ORG_TOKEN}
+      - RUNNER_NAME=vps-runner-unified
+      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps,unified
+      - DOCKER_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+  # ============================================================================
+  # 2. OPCJA ALTERNATYWNA (ROZDZIELONE RUNNERY PER REPOZYTORIUM - profil 'split')
+  # Użyj tylko jeśli nie posiadasz uprawnień administratora organizacji:
+  # docker compose --profile split up -d
   # ============================================================================
   runner-desktop:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-gal-anonym
+    profiles: ["split"]
     restart: unless-stopped
     networks:
       - internal_network
@@ -26,12 +56,10 @@ services:
         reservations:
           memory: 512M
 
-  # ============================================================================
-  # GitHub Actions Runner dla repozytorium gal-anonim-web (Web)
-  # ============================================================================
   runner-web:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-gal-anonim-web
+    profiles: ["split"]
     restart: unless-stopped
     networks:
       - internal_network
