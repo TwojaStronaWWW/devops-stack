@@ -172,6 +172,56 @@ services:
         reservations:
           memory: 32M
 
+  # ============================================================================
+  # Dozzle: Ultralekki podgląd logów kontenerów w czasie rzeczywistym
+  # ============================================================================
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal_network
+    ports:
+      - "127.0.0.1:8888:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_NO_ANALYTICS=true
+      - DOZZLE_LEVEL=info
+      - TZ=${TZ:-Europe/Warsaw}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 64M
+        reservations:
+          memory: 16M
+
+  # ============================================================================
+  # GitHub Exporter: Telemetria zadań GitHub Actions & repozytoriów dla Prometheusa
+  # ============================================================================
+  github-exporter:
+    image: promhippie/github-exporter:latest
+    container_name: github-exporter
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal_network
+    environment:
+      - GITHUB_EXPORTER_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_EXPORTER_ORGS=TwojaStronaWWW,zeslownikiem
+      - GITHUB_EXPORTER_REPOS=TwojaStronaWWW/devops-stack,TwojaStronaWWW/twojastronawww,TwojaStronaWWW/katosalsahub,TwojaStronaWWW/raricart,TwojaStronaWWW/hd-osticket-helpdesk,zeslownikiem/gal-anonym,zeslownikiem/gal-anonim-web
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 64M
+        reservations:
+          memory: 16M
+
 # ==============================================================================
 # Sieć izolowana
 # ==============================================================================

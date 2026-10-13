@@ -100,12 +100,12 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │       ├── lint-compose.yml       # Sprawdzanie poprawności składni Compose w CI
 │       └── deploy.yml             # Automatyczny deploy na serwer VPS po merge'u do main
 ├── compose/
-│   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor
+│   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, GitHub Exporter
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust
 │   └── runners.yml                # Konteneryzowane runnery GitHub Actions dla VPS
 ├── config/
 │   ├── prometheus/
-│   │   └── prometheus.yml         # Scrape: Prometheus, Uptime Kuma, Node Exporter, cAdvisor
+│   │   └── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/       # Automatyczne podpinanie Prometheus API
@@ -115,7 +115,8 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 ├── scripts/
 │   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001)
 │   ├── 02-install-docker.sh       # Instalacja Docker Engine z optymalizacją pod WSL2/VPS
-│   ├── backup-volumes.sh          # Bezpieczny backup wolumenów :ro z retencją 7 dni
+│   ├── backup-offsite.sh          # Automatyczny backup do chmury (S3/R2/Oracle) z alertami Ntfy
+│   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── preview-tunnel.sh          # Quick Tunnel (Linux/WSL) – natychmiastowy link HTTPS
 │   ├── preview-tunnel.ps1         # Quick Tunnel (Windows/PowerShell)
 │   └── runners/
