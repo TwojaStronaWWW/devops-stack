@@ -5,7 +5,7 @@ services:
   # Cloudflare Tunnel: Bezpieczny tunel Zero Trust (brak otwartych portów na VPS)
   # ============================================================================
   cloudflared:
-    image: cloudflare/cloudflared:2024.4.0
+    image: cloudflare/cloudflared:latest
     container_name: cloudflared
     restart: unless-stopped
     security_opt:
