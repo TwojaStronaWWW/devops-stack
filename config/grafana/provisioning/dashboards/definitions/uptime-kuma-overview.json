@@ -643,7 +643,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "none",
               "mode": "none"
@@ -697,7 +697,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m])) * 100",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[2m])) * 100",
           "instant": false,
           "legendFormat": "{{name}}",
           "range": true,
