@@ -11,6 +11,9 @@ scripts/*-created.json
 *.pub
 id_ed25519*
 id_rsa*
+*.password
+config/prometheus/*password*
+node_modules/
 
 # Cloudflare / Tunnel credentials
 cert.pem

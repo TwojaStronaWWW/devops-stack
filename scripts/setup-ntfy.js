@@ -1,10 +1,15 @@
 // scripts/setup-ntfy.js
 const { io } = require("socket.io-client");
 
-const ADMIN_USER = process.env.KUMA_ADMIN_USER || "kpoczatek";
-const ADMIN_PASS = process.env.KUMA_ADMIN_PASS || "ChangeMe_Kuma_Password_2026!";
+const ADMIN_USER = process.env.KUMA_ADMIN_USER;
+const ADMIN_PASS = process.env.KUMA_ADMIN_PASS;
 const KUMA_URL = process.env.KUMA_URL || "http://127.0.0.1:3001";
 const TOPIC = process.env.NTFY_TOPIC || "kpoczatek-vps-alerty";
+
+if (!ADMIN_USER || !ADMIN_PASS) {
+    console.error("BŁĄD: Zmienne KUMA_ADMIN_USER i KUMA_ADMIN_PASS są wymagane w środowisku (.env).");
+    process.exit(1);
+}
 
 const socket = io(KUMA_URL, {
     reconnection: false,

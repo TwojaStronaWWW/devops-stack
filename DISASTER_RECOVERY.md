@@ -26,11 +26,15 @@ sudo bash scripts/01-harden-os.sh
 sudo bash scripts/02-install-docker.sh
 ```
 
-### Krok 3: Odtworzenie zmiennych środowiskowych (Czas: ~1 min)
+### Krok 3: Odtworzenie zmiennych środowiskowych i poświadczeń (Czas: ~1 min)
 ```bash
 cp .env.example .env
 nano .env
-# Wprowadź hasło Grafana i token Cloudflare Tunnel
+# Wprowadź hasła (GRAFANA_ADMIN_PASSWORD, KUMA_ADMIN_PASS), token GitHub i Cloudflare Tunnel
+
+# Utworzenie zabezpieczonego pliku poświadczeń dla scrapera Prometheusa (ISO 27001):
+echo -n "WprowadzHasloKuma" > config/prometheus/kuma_password
+chmod 600 config/prometheus/kuma_password
 ```
 
 ### Krok 4: Utworzenie wolumenów i sieci Dockera (Czas: ~1 min)

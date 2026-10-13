@@ -102,6 +102,18 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /id_rsa/);
     assert.match(content, /backups\//);
     assert.match(content, /volumes\//);
+    assert.match(content, /node_modules\//);
+    assert.match(content, /\*password\*/);
+  });
+
+  it('skrypty automatyzacji 1-klik open-dashboard powinny istnieć i być zdefiniowane', () => {
+    const ps1Path = path.join(ROOT_DIR, 'scripts', 'open-dashboard.ps1');
+    const cmdPath = path.join(ROOT_DIR, 'scripts', 'open-dashboard.cmd');
+
+    assert.ok(fs.existsSync(ps1Path), 'Brak scripts/open-dashboard.ps1');
+    assert.ok(fs.existsSync(cmdPath), 'Brak scripts/open-dashboard.cmd');
+    assert.ok(fs.statSync(ps1Path).size > 0, 'Plik scripts/open-dashboard.ps1 jest pusty');
+    assert.ok(fs.statSync(cmdPath).size > 0, 'Plik scripts/open-dashboard.cmd jest pusty');
   });
 
   it('hooki gita (.githooks/pre-commit oraz .githooks/commit-msg) powinny istnieć i posiadać poprawny shebang', () => {

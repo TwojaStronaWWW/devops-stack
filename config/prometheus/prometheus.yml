@@ -23,7 +23,7 @@ scrape_configs:
     metrics_path: '/metrics'
     basic_auth:
       username: 'kpoczatek'
-      password: 'ChangeMe_Kuma_Password_2026!'
+      password_file: '/etc/prometheus/kuma_password'
     static_configs:
       - targets: ['uptime-kuma:3001']
 

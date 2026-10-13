@@ -103,16 +103,22 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 ```text
 .
 ├── .github/
+│   ├── ISSUE_TEMPLATE/            # Szablony incydentów i zadań infrastrukturalnych
+│   ├── pull_request_template.md   # Quality Gate checklist dla zmian infra
+│   ├── dependabot.yml             # Comiesięczny nadzór nad wersjami akcji i obrazów Docker
 │   └── workflows/
-│       ├── lint-compose.yml       # Sprawdzanie poprawności składni Compose w CI
-│       └── deploy.yml             # Automatyczny deploy na serwer VPS po merge'u do main
+│       ├── lint-compose.yml       # Quality Gate: walidacja Compose, składni skryptów i higieny
+│       └── deploy.yml             # Automatyczny deploy po SSH na serwer produkcyjny
+├── .githooks/
+│   ├── pre-commit                 # Git hook blokujący wycieki sekretów (.env, *.pem, *.key)
+│   └── commit-msg                 # Git hook wymuszający format Conventional Commits
 ├── compose/
 │   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, GitHub Exporter
-│   ├── extensions.yml             # Tunel Cloudflare Zero Trust
-│   └── runners.yml                # Zunifikowany runner GitHub Actions dla organizacji zeslownikiem
+│   ├── extensions.yml             # Tunel Cloudflare Zero Trust (cloudflared)
+│   └── runners.yml                # Zunifikowany runner GitHub Actions (ARM64, organizacja zeslownikiem)
 ├── config/
 │   ├── prometheus/
-│   │   └── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter
+│   │   └── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter (password_file)
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/       # Automatyczne podpinanie Prometheus API
@@ -121,20 +127,26 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
 │   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001) + auto-SWAP
-│   ├── 02-install-docker.sh       # Instalacja Docker Engine z optymalizacją pod WSL2/VPS
+│   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
 │   ├── backup-offsite.sh          # Automatyczny backup do chmury (S3/R2/Oracle) z alertami Ntfy
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
-│   ├── preview-tunnel.sh          # Quick Tunnel (Linux/WSL) – natychmiastowy link HTTPS
-│   ├── preview-tunnel.ps1         # Quick Tunnel (Windows/PowerShell)
-│   └── runners/
-│       ├── Resume-NightlyRuns.ps1 # Zoptymalizowane wznawianie przerwanych zadan CI/CD
-│       ├── Start-Runners.ps1      # Orkiestrator zunifikowanego runnera organizacji zeslownikiem
-│       └── start-runners.cmd      # Skrót uruchomieniowy dla systemu Windows
-├── .env.example                   # Szablon zmiennych środowiskowych i tokenów
-├── .gitattributes                 # Wymuszenie zakończeń linii LF (ochrona przed CRLF)
-├── .gitignore                     # Blokada wycieku sekretów, haseł i kopii zapasowych
+│   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie przeglądarki)
+│   ├── preview-tunnel.ps1/.sh     # Quick Tunnel – natychmiastowy szyfrowany link HTTPS dla stagingu
+│   ├── setup-kuma.js              # Rejestracja monitorowanych witryn w Uptime Kuma
+│   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
+│   └── runners/                   # Skrypty sterowania runnerami CI/CD
+├── tests/
+│   └── unit/
+│       └── repo-hygiene.test.js   # Natywne testy higieny repozytorium (node:test)
+├── AGENTS.md / GEMINI.md          # Wytyczne architektoniczne dla modeli AI i rygor Always Free
+├── DISASTER_RECOVERY.md           # Procedura odtworzenia środowiska z kopii w < 15 minut
 ├── README.md                      # Główna dokumentacja architektury i bezpieczeństwa
-└── DISASTER_RECOVERY.md           # Procedura odtworzenia środowiska z kopii w < 15 minut
+├── SECURITY.md                    # Polityka bezpieczeństwa ISO 27001 i Responsible Disclosure
+├── LICENSE                        # Licencja TwojaStronaWWW
+├── .editorconfig                  # Standard kodowania LF, UTF-8 i wcięć
+├── .gitattributes                 # Wymuszenie zakończeń linii LF (ochrona przed CRLF)
+├── .gitignore                     # Rygor ISO 27001: wykluczenie kluczy, certyfikatów, haseł i .env
+└── package.json                   # Skrypty jakościowe (npm test, npm run check)
 ```
 
 ---
@@ -234,12 +246,18 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
    newgrp docker
    ```
 
-4. **Konfiguracja zmiennych środowiskowych**:
+4. **Konfiguracja zmiennych środowiskowych i poświadczeń**:
    ```bash
    cp .env.example .env
    nano .env
    ```
-   *Uzupełnij: `CLOUDFLARE_TUNNEL_TOKEN`, `RUNNER_ORG_TOKEN` (pobrany z GitHub -> zeslownikiem -> Actions -> Runners -> New runner) oraz hasła do Grafany.*
+   *Uzupełnij: `CLOUDFLARE_TUNNEL_TOKEN`, `RUNNER_ORG_TOKEN`, `GITHUB_TOKEN` oraz hasła do Grafany i Uptime Kuma.*
+   
+   Utwórz zabezpieczony plik poświadczeń dla scrapera Prometheusa:
+   ```bash
+   echo -n "TwojeHasloKuma" > config/prometheus/kuma_password
+   chmod 600 config/prometheus/kuma_password
+   ```
 
 5. **Uruchomienie pełnego stosu produkcyjnego wraz z runnerem**:
    ```bash
@@ -256,3 +274,47 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
    docker compose -f docker-compose.yml -f extensions.yml -f runners.yml ps
    docker logs -f runner-zeslownikiem-unified
    ```
+
+---
+
+## 7. Błyskawiczny Dostęp 1-Klik z Pulpitu (Windows Workstation)
+
+Aby wyeliminować konieczność manualnego otwierania terminala, zestawiania tuneli SSH i żmudnego logowania się do każdego z paneli, wdrożono zautomatyzowany mechanizm **1-Klik**:
+
+- **Lokalizacja skryptu**: [`scripts/open-dashboard.ps1`](file:///e:/Projekty/VPS/scripts/open-dashboard.ps1) / [`scripts/open-dashboard.cmd`](file:///e:/Projekty/VPS/scripts/open-dashboard.cmd)
+- **Skrót na pulpicie Windows**: `DevOps Monitoring.cmd`
+
+### Jak działa mechanizm:
+1. Sprawdza, czy porty lokalne (3000, 3001, 8888, 9090) są już aktywne.
+2. Jeśli tunel nie działa, cicho uruchamia proces SSH w tle z asymetrycznym kluczem `id_ed25519`:
+   ```bash
+   ssh -N -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 -L 8888:127.0.0.1:8888 -L 9090:127.0.0.1:9090 ubuntu@89.168.62.31
+   ```
+3. Po ustabilizowaniu portów (do 15 s) automatycznie otwiera domyślną przeglądarkę z gotowymi kartami:
+   - **Grafana** (`http://127.0.0.1:3000`): Działa z natywnym autologowaniem Anonymous Admin (`GF_AUTH_ANONYMOUS_ENABLED=true`), od razu prezentując pulpit operacyjny z metrykami hosta, Uptime Kuma i CI/CD GitHub Actions.
+   - **Uptime Kuma** (`http://127.0.0.1:3001`): Panel statusu usług zewnętrznych.
+   - **Dozzle** (`http://127.0.0.1:8888`): Podgląd logów kontenerów w czasie rzeczywistym.
+
+---
+
+## 8. Model Bezpieczeństwa Publicznego Repozytorium (ISO 27001 & Zero Trust)
+
+> **Często Zadawane Pytanie Bezpieczeństwa:**  
+> *„Jeśli to repozytorium jest publiczne na GitHubie, czy ktokolwiek z internetu może sklonować kod i uzyskać dostęp do serwera, kontenerów lub monitorowanych usług?”*
+
+### Odpowiedź: KATEGORYCZNIE NIE.
+
+Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-Depth (Obrona w głąb)** oraz normę **ISO 27001**. Posiadanie kodu źródłowego repozytorium **nie daje atakującemu żadnej ścieżki wejścia** na serwer.
+
+### Wielowarstwowe Mechanizmy Ochrony:
+
+| Warstwa Bezpieczeństwa | Mechanizm Obronny | Skutek dla Atakującego z Internetu |
+|---|---|---|
+| **1. Sieciowa (WAN)** | Wszystkie porty aplikacji (3000, 3001, 8888, 9090) są powiązane wyłącznie z `127.0.0.1` (loopback). Brak mapowania na `0.0.0.0`. | Porty aplikacji są **niewidoczne i nieosiągalne** z internetu. Skany Nmap wskazują porty jako zamknięte/odfiltrowane. |
+| **2. Firewall (UFW & OCI)** | Porty 80 i 443 oraz wszystkie porty aplikacji są zablokowane na zaporze UFW i listach OCI Security Lists. | Nawet celowe zapytania pod publiczny adres IP `89.168.62.31` są natychmiast odrzucane na poziomie jądra (`DROP`). |
+| **3. Tożsamość & SSH** | Port 22 ma wyłączone uwierzytelnianie hasłem (`PasswordAuthentication no`) oraz zablokowane konto roota (`PermitRootLogin no`). | Zgadnięcie lub złamanie hasła jest niemożliwe. Wejście wymaga prywatnego klucza `id_ed25519`, który znajduje się wyłącznie na Twoim fizycznym dysku i **nigdy nie trafił do Git**. |
+| **4. Ochrona Brute-Force** | UFW rate-limiting (`limit 22/tcp`) + Fail2ban IPS (`mode = aggressive`, `bantime = 1h`). | Automatyczny ban na poziomie zapory ogniowej po 4 nieudanych próbach połączenia SSH. |
+| **5. Higiena Sekretów** | Rygor `.gitignore` wyklucza pliki `.env`, klucze `*.pem`, `*.key`, `id_*`, certyfikaty oraz pliki haseł `kuma_password`. | W publicznym repozytorium znajdują się **wyłącznie zanonimizowane szablony** (`.env.example`). Zero realnych tokenów w historii gita. |
+| **6. Git Hooks (Pre-commit)** | Skrypt `.githooks/pre-commit` skanuje każdy commit i blokuje wysłanie plików o wrażliwych rozszerzeniach. | Ochrona przed przypadkowym wysłaniem klucza lub hasła przez administratora. |
+| **7. Uprawnienia Usług (PoLP)** | Usługi działają w kontenerach z `no-new-privileges:true` na dedykowanych użytkownikach (`nobody:65534`, `grafana:472`). | Nawet w hipotetycznym scenariuszu luki w oprogramowaniu eskalacja uprawnień do roota hosta jest zablokowana. |
+
