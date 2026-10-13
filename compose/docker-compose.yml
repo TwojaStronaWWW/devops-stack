@@ -133,7 +133,7 @@ services:
     command:
       - "--path.procfs=/host/proc"
       - "--path.sysfs=/host/sys"
-      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|run)($$|/)"
     deploy:
       resources:
         limits:
@@ -159,10 +159,12 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+      - /etc/machine-id:/etc/machine-id:ro
     privileged: true
     devices:
       - /dev/kmsg
     command:
+      - "--disable_metrics=disk,diskIO"
       - "--housekeeping_interval=10s"
     deploy:
       resources:
