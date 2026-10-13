@@ -140,14 +140,13 @@ discover_resources() {
     fi
     echo "  ✔ Wykryto Availability Domain: ${ad}"
 
-    # 3. Pobierz Subnet OCID
+    # 3. Pobierz Subnet OCID (tylko publiczną podsieć, zezwalającą na Public IP)
     echo "  ⏳ Wyszukiwanie publicznej podsieci w VCN..."
     local subnet
-    subnet="$(oci network subnet list --compartment-id "${tenancy_id}" --query 'data[0].id' --raw-output 2>/dev/null || true)"
+    subnet="$(oci network subnet list --compartment-id "${tenancy_id}" --query 'data[?"prohibit-public-ip-on-vnic"==`false`].id | [0]' --raw-output 2>/dev/null || true)"
     if [[ -z "${subnet}" || "${subnet}" == "null" || "${subnet}" == "None" ]]; then
-        echo "⚠️ Nie wykryto automatycznie podsieci. Utwórz domyślny VCN w konsoli Oracle ('Start VCN Wizard') i podaj jej OCID."
-    else
-        echo "  ✔ Wykryto Subnet OCID: ${subnet}"
+        # Fallback do pierwszej podsieci
+        subnet="$(oci network subnet list --compartment-id "${tenancy_id}" --query 'data[0].id' --raw-output 2>/dev/null || true)"
     fi
 
     # 4. Pobierz oficjalny obraz Canonical Ubuntu ARM64

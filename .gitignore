@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+scripts/*.env
+scripts/*-created.json
 *.pem
 *.key
 *.crt
