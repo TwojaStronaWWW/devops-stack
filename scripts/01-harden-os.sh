@@ -167,5 +167,31 @@ fi
 mount -o remount,noexec,nosuid,nodev /dev/shm 2>/dev/null || true
 
 echo "======================================================================"
+echo ">> [9/9] Optymalizacja pamięci SWAP (Ochrona przed OOM Killerem)..."
+echo "======================================================================"
+TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+CURRENT_SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
+
+if [[ "${TOTAL_MEM_MB}" -le 2048 ]] && [[ "${CURRENT_SWAP_MB}" -lt 1024 ]]; then
+    echo "Wykryto serwer z małą ilością pamięci RAM (${TOTAL_MEM_MB}MB). Konfiguracja 2GB pliku SWAP..."
+    if [[ ! -f /swapfile ]]; then
+        fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        if ! grep -q '/swapfile' /etc/fstab; then
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        fi
+        sysctl vm.swappiness=10
+        sysctl vm.vfs_cache_pressure=50
+        echo "vm.swappiness=10" >> /etc/sysctl.d/99-security-hardening.conf
+        echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-security-hardening.conf
+        echo ">> Utworzono i aktywowano 2GB SWAP (swappiness=10)."
+    fi
+else
+    echo "Dostępny RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB - pomijanie tworzenia pliku SWAP."
+fi
+
+echo "======================================================================"
 echo ">> [SUKCES] Pełny hardening systemu zakończony pomyślnie."
 echo "======================================================================"
