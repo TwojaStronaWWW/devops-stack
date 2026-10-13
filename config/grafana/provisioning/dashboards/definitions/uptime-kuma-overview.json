@@ -831,7 +831,7 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(github_repo_open_issues)",
+          "expr": "sum(github_repo_issues) or sum(github_repo_open_issues)",
           "instant": true,
           "legendFormat": "Otwarte Zgłoszenia",
           "range": false,
@@ -868,5 +868,5 @@
   "timezone": "browser",
   "title": "Centrum Monitoringu Stron WWW & Usług",
   "uid": "uptime-kuma-overview",
-  "version": 3
+  "version": 4
 }
