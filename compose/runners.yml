@@ -1,0 +1,57 @@
+name: devops-stack-runners
+
+services:
+  # ============================================================================
+  # GitHub Actions Runner dla repozytorium gal-anonym (Desktop)
+  # ============================================================================
+  runner-desktop:
+    image: myoung34/github-runner:ubuntu-jammy
+    container_name: runner-gal-anonym
+    restart: unless-stopped
+    networks:
+      - internal_network
+    environment:
+      - REPO_URL=https://github.com/zeslownikiem/gal-anonym
+      - RUNNER_TOKEN=${RUNNER_DESKTOP_TOKEN}
+      - RUNNER_NAME=vps-runner-desktop
+      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps
+      - DOCKER_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+  # ============================================================================
+  # GitHub Actions Runner dla repozytorium gal-anonim-web (Web)
+  # ============================================================================
+  runner-web:
+    image: myoung34/github-runner:ubuntu-jammy
+    container_name: runner-gal-anonim-web
+    restart: unless-stopped
+    networks:
+      - internal_network
+    environment:
+      - REPO_URL=https://github.com/zeslownikiem/gal-anonim-web
+      - RUNNER_TOKEN=${RUNNER_WEB_TOKEN}
+      - RUNNER_NAME=vps-runner-web
+      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps
+      - DOCKER_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+networks:
+  internal_network:
+    external: true
+    name: devops_internal_network

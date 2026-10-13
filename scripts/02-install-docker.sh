@@ -10,7 +10,7 @@ if [[ "${EUID}" -ne 0 ]]; then
     exit 1
 fi
 
-TARGET_USER="${SUDO_USER:-ubuntu}"
+TARGET_USER="${1:-${SUDO_USER:-$(getent passwd "1000" | cut -d: -f1 || echo "ubuntu")}}"
 ARCH="$(dpkg --print-architecture)"
 
 echo "==> Wykryto architekturę procesora: ${ARCH}"
@@ -45,14 +45,12 @@ cat << 'EOF' > /etc/docker/daemon.json
   "log-opts": {
     "max-size": "10m",
     "max-file": "3"
-  },
-  "live-restore": true
+  }
 }
 EOF
 
 # 7. Start i włączenie usługi
-systemctl enable --now docker
-systemctl restart docker
+systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
 
 # 8. Dodanie użytkownika do grupy docker
 usermod -aG docker "${TARGET_USER}"
