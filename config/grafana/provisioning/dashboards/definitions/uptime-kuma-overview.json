@@ -831,14 +831,38 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "sum(github_repo_issues) or sum(github_repo_open_issues)",
+          "expr": "sum(github_repo_issues{owner=\"TwojaStronaWWW\"}) or vector(0)",
           "instant": true,
-          "legendFormat": "Otwarte Zgłoszenia",
+          "legendFormat": "TwojaStronaWWW",
           "range": false,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(github_repo_issues{owner=\"zeslownikiem\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "zeslownikiem",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(github_repo_issues) or vector(0)",
+          "instant": true,
+          "legendFormat": "Łącznie (Cross-Org)",
+          "range": false,
+          "refId": "C"
         }
       ],
-      "title": "Otwarte Zgłoszenia & Zadania (Issues)",
+      "title": "Otwarte Zgłoszenia & Zadania (Issues: TwojaStronaWWW vs zeslownikiem)",
       "type": "stat"
     }
   ],

@@ -17,7 +17,9 @@ const SITES = [
     { name: "TwojaStronaWWW.pl", url: "https://twojastronawww.pl" },
     { name: "DancePuls.pl", url: "https://dancepuls.pl" },
     { name: "KatoSalsaHub.pl", url: "https://katosalsahub.pl" },
+    { name: "osTicket Helpdesk", url: "https://hd.twojastronawww.pl" },
     { name: "GalAnonim.pl", url: "https://galanonim.pl" },
+    { name: "GalAnonim API", url: "https://api.galanonim.pl/" },
     { name: "Serwis Maxbit", url: "https://serwis.maxbit.com.pl/" },
     { name: "FuegoLingua.pl", url: "https://fuegolingua.pl/" },
 ];
