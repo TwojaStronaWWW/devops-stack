@@ -19,9 +19,7 @@ jobs:
 
       - name: Deploy via SSH Key (Ed25519)
         uses: appleboy/ssh-action@v1.0.3
-        if: "${{ env.SSH_HOST != '' }}"
-        env:
-          SSH_HOST: ${{ secrets.VPS_HOST }}
+        if: "${{ secrets.VPS_HOST != '' }}"
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}

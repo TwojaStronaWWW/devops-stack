@@ -31,3 +31,9 @@ jobs:
           docker network create devops_internal_network || true
           docker compose -f extensions.yml config > /dev/null
           echo "extensions.yml is valid!"
+
+      - name: Validate runners.yml
+        working-directory: compose
+        run: |
+          docker compose -f runners.yml config > /dev/null
+          echo "runners.yml is valid!"

@@ -16,7 +16,7 @@ services:
       - ORG_NAME=zeslownikiem
       - RUNNER_TOKEN=${RUNNER_ORG_TOKEN}
       - RUNNER_NAME=vps-runner-unified
-      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps,unified
+      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -44,7 +44,7 @@ services:
       - REPO_URL=https://github.com/zeslownikiem/gal-anonym
       - RUNNER_TOKEN=${RUNNER_DESKTOP_TOKEN}
       - RUNNER_NAME=vps-runner-desktop
-      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps
+      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -67,7 +67,7 @@ services:
       - REPO_URL=https://github.com/zeslownikiem/gal-anonim-web
       - RUNNER_TOKEN=${RUNNER_WEB_TOKEN}
       - RUNNER_NAME=vps-runner-web
-      - RUNNER_LABELS=self-hosted,linux,x64,arm64,vps
+      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

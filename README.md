@@ -212,27 +212,47 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
 
 ---
 
-### B. Konfiguracja Nowego Serwera po Utworzeniu
+### B. Konfiguracja Nowego Serwera po Utworzeniu (Oracle VPS)
 
-1. **Klonowanie repozytorium**:
+1. **Połączenie SSH z serwerem**:
    ```bash
-   git clone <URL_REPOZYTORIUM> /opt/devops-stack
+   ssh -i ~/.ssh/id_ed25519 ubuntu@89.168.62.31
+   ```
+
+2. **Klonowanie repozytorium do katalogu docelowego**:
+   ```bash
+   sudo git clone https://github.com/TwojaStronaWWW/devops-stack.git /opt/devops-stack
+   sudo chown -R ubuntu:ubuntu /opt/devops-stack
    cd /opt/devops-stack
    ```
-2. **Wykonanie hardeningu systemu i instalacja Dockera**:
+
+3. **Wykonanie hardeningu systemu i instalacja silnika Dockera**:
    ```bash
    sudo bash scripts/01-harden-os.sh
    sudo bash scripts/02-install-docker.sh
+   # Przeładuj grupę docker:
+   newgrp docker
    ```
-3. **Konfiguracja zmiennych środowiskowych**:
+
+4. **Konfiguracja zmiennych środowiskowych**:
    ```bash
    cp .env.example .env
    nano .env
    ```
-4. **Uruchomienie stosu**:
+   *Uzupełnij: `CLOUDFLARE_TUNNEL_TOKEN`, `RUNNER_ORG_TOKEN` (pobrany z GitHub -> zeslownikiem -> Actions -> Runners -> New runner) oraz hasła do Grafany.*
+
+5. **Uruchomienie pełnego stosu produkcyjnego wraz z runnerem**:
    ```bash
    cd compose
+   # 1. Start głównego monitoringu:
    docker compose up -d
-   # Opcjonalnie z tunelem Cloudflare i runnerami:
+
+   # 2. Start rozszerzeń (Cloudflare Tunnel) oraz Zunifikowanego Runnera GitHub Actions:
    docker compose -f docker-compose.yml -f extensions.yml -f runners.yml up -d
+   ```
+
+6. **Weryfikacja stanu usług**:
+   ```bash
+   docker compose -f docker-compose.yml -f extensions.yml -f runners.yml ps
+   docker logs -f runner-zeslownikiem-unified
    ```
