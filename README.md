@@ -40,10 +40,10 @@
  │                              │ 127.0.0.1:8888                       │  │
  │                              └──────────────────────────────────────┘  │
  │                                                                        │
- │  ┌───────────────────────────────────┐ ┌────────────────────────────┐  │
- │  │  Runner gal-anonym (Desktop)      │ │ Runner gal-anonim-web (Web)│  │
- │  │  (Konteneryzowany GitHub Runner)  │ │ (Konteneryzowany Runner)   │  │
- │  └───────────────────────────────────┘ └────────────────────────────┘  │
+ │  ┌────────────────────────────────────────────────────────────────────────┐  │
+ │  │  Zunifikowany Runner Organizacji zeslownikiem (zeslownikiem-pc-unified)│  │
+ │  │  Obsługuje automatycznie: gal-anonym, gal-anonim-web & nowe projekty   │  │
+ │  └────────────────────────────────────────────────────────────────────────┘  │
  │                                                                        │
  │  Trwałe wolumeny danych & Kopia Offsite:                               │
  │  ├── uptime_kuma_data                                                  │
@@ -109,7 +109,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 ├── compose/
 │   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, GitHub Exporter
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust
-│   └── runners.yml                # Konteneryzowane runnery GitHub Actions dla VPS
+│   └── runners.yml                # Zunifikowany runner GitHub Actions dla organizacji zeslownikiem
 ├── config/
 │   ├── prometheus/
 │   │   └── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter
@@ -120,7 +120,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 ├── docs/
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
-│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001)
+│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001) + auto-SWAP
 │   ├── 02-install-docker.sh       # Instalacja Docker Engine z optymalizacją pod WSL2/VPS
 │   ├── backup-offsite.sh          # Automatyczny backup do chmury (S3/R2/Oracle) z alertami Ntfy
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
@@ -128,7 +128,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── preview-tunnel.ps1         # Quick Tunnel (Windows/PowerShell)
 │   └── runners/
 │       ├── Resume-NightlyRuns.ps1 # Zoptymalizowane wznawianie przerwanych zadan CI/CD
-│       ├── Start-Runners.ps1      # Orkiestrator runnerow dla stacji roboczej Windows
+│       ├── Start-Runners.ps1      # Orkiestrator zunifikowanego runnera organizacji zeslownikiem
 │       └── start-runners.cmd      # Skrót uruchomieniowy dla systemu Windows
 ├── .env.example                   # Szablon zmiennych środowiskowych i tokenów
 ├── .gitattributes                 # Wymuszenie zakończeń linii LF (ochrona przed CRLF)
@@ -158,10 +158,18 @@ Dzięki wdrożeniu tuneli Cloudflare możesz **całkowicie skasować subdomeny `
 
 ---
 
-## 5. Obsługa Runnerów GitHub Actions
+## 5. Obsługa Runnerów GitHub Actions (Zunifikowany Runner Organizacji)
 
-### Na stacji roboczej (Windows):
-Uruchomienie lokalnych instancji runnerów (`gal-anonym` oraz `gal-anonim-web`) wraz z automatycznym wznawianiem nocnych zadań:
+Zamiast utrzymywać osobne instancje runnerów dla każdego repozytorium, wdrożono **Jeden Zunifikowany Runner na Poziomie Organizacji `zeslownikiem`** (`zeslownikiem-pc-unified`). 
+
+Runner ten automatycznie obsługuje kolejki zadań dla:
+- `gal-anonym` (Desktop)
+- `gal-anonim-web` (Web)
+- Każdego nowego projektu dodanego do organizacji `zeslownikiem`.
+
+### A. Na stacji roboczej (Windows):
+Instalacja znajduje się w `E:\actions-runner-zeslownikiem` (etykiety: `self-hosted`, `Windows`, `X64`).
+Uruchomienie procesu w tle:
 ```cmd
 scripts\runners\start-runners.cmd
 ```
@@ -170,11 +178,11 @@ Lub z poziomu PowerShell:
 pwsh scripts/runners/Start-Runners.ps1
 ```
 
-### Na serwerze produkcyjnym (Oracle Cloud VPS / Linux):
-Runnery działają w izolacji kontenerowej w sieci wewnętrznej:
+### B. Na serwerze produkcyjnym (Linux / VPS):
+Jeśli zadania CI/CD mają wykonywać się na maszynie w chmurze w kontenerze Docker:
 ```bash
 cd compose
-docker compose -f runners.yml up -d
+docker compose -f runners.yml up -d runner-unified
 ```
 
 ---

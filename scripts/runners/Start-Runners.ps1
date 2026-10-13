@@ -1,9 +1,10 @@
 <#
 .SYNOPSIS
-    Orkiestrator lokalnych self-hosted runnerow GitHub Actions (Desktop + Web).
+    Orkiestrator zunifikowanego self-hosted runnera GitHub Actions dla organizacji zeslownikiem.
 .DESCRIPTION
-    Weryfikuje stan procesow Runner.Listener dla obu katalogow (actions-runner i actions-runner-web).
-    Uruchamia brakujace instancje w tle oraz wywoluje skrypt wznawiania nocnych zadan.
+    Weryfikuje stan procesu Runner.Listener dla zunifikowanego runnera organizacji (actions-runner-zeslownikiem),
+    ktory automatycznie obsluguje wszystkie repozytoria (gal-anonym, gal-anonim-web itp.).
+    Uruchamia brakujaca instancje w tle oraz opcjonalnie wywoluje skrypt wznawiania nocnych zadan.
 .EXAMPLE
     pwsh -File scripts/runners/Start-Runners.ps1
 #>
