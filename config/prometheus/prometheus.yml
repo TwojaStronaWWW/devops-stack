@@ -27,7 +27,12 @@ scrape_configs:
     static_configs:
       - targets: ['uptime-kuma:3001']
 
-  # 3. Node Exporter (opcjonalny punkt zrzutu metryk hosta)
-  # - job_name: 'node-exporter'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
+  # 3. Node Exporter (metryki sprzętowe i systemowe hosta)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # 4. cAdvisor (metryki zasobów kontenerów Dockera)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']

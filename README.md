@@ -22,7 +22,16 @@
  │  │  127.0.0.1:3001 │ │ 127.0.0.1:9090│ │  127.0.0.1:3000           │  │
  │  └────────┬────────┘ └───────▲───────┘ └─────────────┬──────────────┘  │
  │           │                  │                       │                 │
- │           └────── metrics ───┘                       │                 │
+ │           └────── metrics ───┤                       │                 │
+ │                              │                       │                 │
+ │  ┌─────────────────┐         │                       │                 │
+ │  │  Node Exporter  ├─────────┤                       │                 │
+ │  │  (CPU/RAM/Dysk) │         │                       │                 │
+ │  └─────────────────┘         │                       │                 │
+ │  ┌─────────────────┐         │                       │                 │
+ │  │  cAdvisor       ├─────────┘                       │                 │
+ │  │  (Docker stats) │                                 │                 │
+ │  └─────────────────┘                                 │                 │
  │                              └────── data source ────┘                 │
  │                                                                        │
  │  ┌───────────────────────────────────┐ ┌────────────────────────────┐  │
@@ -91,14 +100,16 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │       ├── lint-compose.yml       # Sprawdzanie poprawności składni Compose w CI
 │       └── deploy.yml             # Automatyczny deploy na serwer VPS po merge'u do main
 ├── compose/
-│   ├── docker-compose.yml         # Główny stos monitoringu (Prometheus, Grafana, Uptime Kuma)
+│   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust
 │   └── runners.yml                # Konteneryzowane runnery GitHub Actions dla VPS
 ├── config/
 │   ├── prometheus/
-│   │   └── prometheus.yml         # Konfiguracja odpytywania metryk (Prometheus, Kuma)
+│   │   └── prometheus.yml         # Scrape: Prometheus, Uptime Kuma, Node Exporter, cAdvisor
 │   └── grafana/
-│       └── provisioning/          # Automatyczne podpinanie źródeł danych i dashboardów
+│       └── provisioning/
+│           ├── datasources/       # Automatyczne podpinanie Prometheus API
+│           └── dashboards/        # Automatyczny pulpit: Centrum Monitoringu Stron WWW & Usług
 ├── docs/
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
