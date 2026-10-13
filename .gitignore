@@ -1,0 +1,40 @@
+# Security & Secrets (ISO 27001 compliance)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+*.pfx
+*.pub
+id_ed25519*
+id_rsa*
+
+# Cloudflare / Tunnel credentials
+cert.pem
+*.json
+!grafana/provisioning/**/*.json
+
+# Database dumps, archives & local backups
+*.sql
+*.dump
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.bak
+backups/
+
+# Runtime data & Docker volumes persisted locally
+data/
+volumes/
+logs/
+*.log
+
+# OS & Editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

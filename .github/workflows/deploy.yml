@@ -1,0 +1,49 @@
+name: Deploy Stack to VPS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Stack to Target Host
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH Key (Ed25519)
+        uses: appleboy/ssh-action@v1.0.3
+        if: "${{ env.SSH_HOST != '' }}"
+        env:
+          SSH_HOST: ${{ secrets.VPS_HOST }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -e
+            DEPLOY_PATH="/opt/devops-stack"
+            echo "==> Wdrażanie aktualizacji w ${DEPLOY_PATH}..."
+            
+            if [ ! -d "${DEPLOY_PATH}" ]; then
+              echo "BŁĄD: Katalog ${DEPLOY_PATH} nie istnieje na serwerze docelowym."
+              exit 1
+            fi
+            
+            cd "${DEPLOY_PATH}"
+            git fetch origin main
+            git reset --hard origin/main
+            
+            cd compose
+            docker compose pull
+            docker compose up -d --remove-orphans
+            
+            echo "==> Wdrożenie zakończone pomyślnie."

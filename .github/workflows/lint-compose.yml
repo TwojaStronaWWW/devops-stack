@@ -1,0 +1,33 @@
+name: Lint Docker Compose
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validate-compose:
+    name: Validate Compose Syntax & Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup environment variables mock
+        run: |
+          cp .env.example .env
+
+      - name: Validate main docker-compose.yml
+        working-directory: compose
+        run: |
+          docker compose -f docker-compose.yml config > /dev/null
+          echo "docker-compose.yml is valid!"
+
+      - name: Validate extensions.yml
+        working-directory: compose
+        run: |
+          # Create fake external network to test extensions config
+          docker network create devops_internal_network || true
+          docker compose -f extensions.yml config > /dev/null
+          echo "extensions.yml is valid!"

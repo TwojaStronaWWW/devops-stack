@@ -1,0 +1,30 @@
+# Global settings
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+# Alertmanager configuration (optional / future)
+alerting:
+  alertmanagers: []
+
+# Rule files (optional / future)
+rule_files: []
+
+# Scrape targets
+scrape_configs:
+  # 1. Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # 2. Uptime Kuma metrics endpoint (włącz w Uptime Kuma Settings -> Metrics)
+  - job_name: 'uptime-kuma'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['uptime-kuma:3001']
+
+  # 3. Node Exporter (opcjonalny punkt zrzutu metryk hosta)
+  # - job_name: 'node-exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
