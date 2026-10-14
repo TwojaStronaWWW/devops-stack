@@ -116,6 +116,21 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.ok(fs.statSync(cmdPath).size > 0, 'Plik scripts/open-dashboard.cmd jest pusty');
   });
 
+  it('skrypty procedur backupu (wolumeny i hosting LH) powinny istnieć i posiadać poprawny shebang', () => {
+    const backupScripts = [
+      path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'),
+      path.join(ROOT_DIR, 'scripts', 'backup-volumes.sh'),
+      path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'),
+    ];
+
+    for (const bScript of backupScripts) {
+      assert.ok(fs.existsSync(bScript), `Brak skryptu backupu: ${bScript}`);
+      assert.ok(fs.statSync(bScript).size > 0, `Skrypt backupu jest pusty: ${bScript}`);
+      const firstLine = fs.readFileSync(bScript, 'utf-8').split(/\r?\n/)[0];
+      assert.match(firstLine, /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    }
+  });
+
   it('hooki gita (.githooks/pre-commit oraz .githooks/commit-msg) powinny istnieć i posiadać poprawny shebang', () => {
     const preCommitPath = path.join(ROOT_DIR, '.githooks', 'pre-commit');
     const commitMsgPath = path.join(ROOT_DIR, '.githooks', 'commit-msg');

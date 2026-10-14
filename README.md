@@ -170,31 +170,22 @@ Dzięki wdrożeniu tuneli Cloudflare możesz **całkowicie skasować subdomeny `
 
 ---
 
-## 5. Obsługa Runnerów GitHub Actions (Zunifikowany Runner Organizacji)
+## 5. Obsługa Runnerów GitHub Actions (Zunifikowane Runnery Organizacji)
 
-Zamiast utrzymywać osobne instancje runnerów dla każdego repozytorium, wdrożono **Jeden Zunifikowany Runner na Poziomie Organizacji `zeslownikiem`** (`zeslownikiem-pc-unified`). 
+Zamiast utrzymywać osobne instancje runnerów dla każdego repozytorium, wdrożono **Dwa Zunifikowane Runnery Organizacji** działające w kontenerach Docker na architekturze ARM64:
 
-Runner ten automatycznie obsługuje kolejki zadań dla:
-- `gal-anonym` (Desktop)
-- `gal-anonim-web` (Web)
-- Każdego nowego projektu dodanego do organizacji `zeslownikiem`.
+1. **`runner-zeslownikiem-unified`** (Organizacja: `zeslownikiem`):
+   - Automatycznie obsługuje: `gal-anonym` (Desktop), `gal-anonim-web` (Web) oraz każde nowe repozytorium w organizacji.
+   - Etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`.
+2. **`runner-twojastronawww-unified`** (Organizacja: `TwojaStronaWWW`):
+   - Automatycznie obsługuje: `devops-stack`, `twojastronawww`, `katosalsahub`, `raricart`, `hd-osticket-helpdesk` oraz wszystkie szablony witryn `_site-template`.
+   - Etykiety: `self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww`.
 
-### A. Na stacji roboczej (Windows):
-Instalacja znajduje się w `E:\actions-runner-zeslownikiem` (etykiety: `self-hosted`, `Windows`, `X64`).
-Uruchomienie procesu w tle:
-```cmd
-scripts\runners\start-runners.cmd
-```
-Lub z poziomu PowerShell:
-```powershell
-pwsh scripts/runners/Start-Runners.ps1
-```
-
-### B. Na serwerze produkcyjnym (Linux / VPS):
-Jeśli zadania CI/CD mają wykonywać się na maszynie w chmurze w kontenerze Docker:
+### Uruchomienie runnerów na serwerze produkcyjnym (VPS):
 ```bash
-cd compose
-docker compose -f runners.yml up -d runner-unified
+cd /opt/devops-stack/compose
+# Start obu zunifikowanych runnerów w tle:
+docker compose -f runners.yml up -d runner-unified runner-twojastronawww
 ```
 
 ---
@@ -318,4 +309,58 @@ Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-D
 | **5. Higiena Sekretów** | Rygor `.gitignore` wyklucza pliki `.env`, klucze `*.pem`, `*.key`, `id_*`, certyfikaty oraz pliki haseł `kuma_password`. | W publicznym repozytorium znajdują się **wyłącznie zanonimizowane szablony** (`.env.example`). Zero realnych tokenów w historii gita. |
 | **6. Git Hooks (Pre-commit)** | Skrypt `.githooks/pre-commit` skanuje każdy commit i blokuje wysłanie plików o wrażliwych rozszerzeniach. | Ochrona przed przypadkowym wysłaniem klucza lub hasła przez administratora. |
 | **7. Uprawnienia Usług (PoLP)** | Usługi działają w kontenerach z `no-new-privileges:true` na dedykowanych użytkownikach (`nobody:65534`, `grafana:472`). | Nawet w hipotetycznym scenariuszu luki w oprogramowaniu eskalacja uprawnień do roota hosta jest zablokowana. |
+
+---
+
+## 9. Architektura Kopii Zapasowych & Disaster Recovery (ISO 27001)
+
+Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla całej infrastruktury TwojaStronaWWW:
+
+### A. Backup Wolumenów Monitoringu (`scripts/backup-offsite.sh`):
+- Tworzy spójne snapshoty wolumenów `uptime_kuma_data`, `grafana_data` oraz `prometheus_data` montowanych w trybie tylko do odczytu (`:ro`).
+- Pakuje wolumeny do archiwum zbiorczego `vps_full_backup_YYYYMMDD_HHMMSS.tar.gz`.
+- Rotacja: automatyczne usuwanie lokalnych kopii starszych niż **14 dni**.
+- Offsite Sync: jeśli w `.env` skonfigurowano klucze chmurowe (`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`), paczka jest natychmiast przesyłana do Cloudflare R2 / S3.
+
+### B. Backup Stron WWW z Hostingu LH.pl (`scripts/backup-websites-lh.sh`):
+- Łączy się ze zdalnym hostingiem LH.pl przez bezpieczny protokół FTP/SFTP (dane z GitHub Secrets / `.env`).
+- Pobiera strukturę plików witryn (`public_html`) za pomocą izolowanego kontenera `lftp`/`rclone`.
+- Tworzy archiwum `lh_websites_backup_YYYYMMDD_HHMMSS.tar.gz` i rotuje kopie z retencją 14 dni.
+- Opcjonalnie przesyła kopię do Cloudflare R2 (`${S3_BUCKET}/websites/`).
+
+### C. Automatyzacja Harmonogramu (Systemd Timer):
+Zadania backupu są zautomatyzowane przez usługę i timer jądra Linuksa:
+- **Timer:** `devops-backup.timer`
+- **Częstotliwość:** Codziennie o **03:00 UTC** (05:00 rano czasu polskiego).
+- **Weryfikacja:** `systemctl list-timers devops-backup.timer`
+
+### D. Telemetria i Wskaźniki w Grafanie:
+Każdy przebieg skryptu backupu generuje metryki w standardzie Prometheus Textfile Collector (`config/node-exporter/*.prom`).
+Na głównym pulpicie w Grafanie sekcja **Kopie Zapasowe i Odporność na Awarie** prezentuje w czasie rzeczywistym:
+- **Status Ostatniego Backupu Wolumenów i Stron LH** (Zielony "SUKCES" / Czerwony "BŁĄD").
+- **Czas od Ostatniego Backupu** (dynamiczny licznik czasu, alarm > 24h).
+- **Wielkość Archiwów** (w MB/GB).
+- **Status Wysyłki Offsite do Chmury (Cloudflare R2 / S3)**.
+
+---
+
+## 10. Strategia Zarządzania Poświadczeniami i Sekretami (KeePass & GitHub Secrets)
+
+W celu zapewnienia bezwzględnej zgodności z normą **ISO 27001** oraz uniknięcia jakichkolwiek wycieków poświadczeń, wdrożono **Dwuwarstwowy Model Zarządzania Sekretami**:
+
+1. **Warstwa Główna: Baza KeePass Password Safe (`Databasekpoczatek.kdbx`):**
+   - Wszystkie poświadczenia produkcyjne są scentralizowane w zaszyfrowanej bazie KeePass w dedykowanej grupie **`VPS - TwojaStronaWWW`**.
+   - Obejmuje: hasła administracyjne Grafana, Uptime Kuma, dane klucza SSH Ed25519, tokeny Cloudflare Zero Trust oraz tokeny rejestracyjne runnerów CI/CD.
+   - Wszystkie hasła generowane są z zachowaniem rygoru kryptograficznego (min. 32 znaki, wysoka entropia, brak słów słownikowych).
+
+2. **Warstwa Automatyzacji: GitHub Actions Secrets:**
+   - Wszystkie zmienne używane w potokach wdrożeniowych (np. `.github/workflows/deploy.yml` oraz potoki serwisów WWW na hostingu LH.pl) są zdefiniowane w GitHub Secrets:
+     - `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_SSH_PORT` (wdrożenie stacku na serwerze).
+     - `FTP_SERVER`, `FTP_USERNAME`, `FTP_PASSWORD`, `FTP_PORT` (wdrożenia stron na hostingu LH.pl).
+   - Żadne hasło ani klucz prywatny nigdy nie są zapisywane w kodzie repozytorium.
+
+3. **Warstwa Hosta VPS: Izolowany Plik `.env`:**
+   - Na serwerze VPS zmienne środowiskowe znajdują się w pliku `/opt/devops-stack/.env` zabezpieczonym uprawnieniem `chmod 600` (dostępnym wyłącznie dla użytkownika `ubuntu`).
+   - Plik ten jest trwale wykluczony z systemu kontroli wersji przez `.gitignore`.
+
 
