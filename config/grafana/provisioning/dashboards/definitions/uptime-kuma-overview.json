@@ -874,7 +874,7 @@
         "y": 41
       },
       "id": 105,
-      "title": "Kopie Zapasowe i Odporność na Awarie (Disaster Recovery & ISO 27001)",
+      "title": "Kopie Zapasowe: Wolumeny Stacka VPS (Uptime Kuma, Grafana, Prometheus)",
       "type": "row"
     },
     {
@@ -939,7 +939,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -949,14 +949,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_status or vector(0)",
+          "expr": "devops_backup_status or on() vector(0)",
           "instant": true,
-          "legendFormat": "Status Backupu",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Status Ostatniego Backupu",
+      "title": "Status Backupu Wolumenów VPS",
       "type": "stat"
     },
     {
@@ -982,7 +982,7 @@
               },
               {
                 "color": "red",
-                "value": 100000
+                "value": 172800
               }
             ]
           },
@@ -1009,7 +1009,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1019,9 +1019,9 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "(time() - devops_backup_last_timestamp_seconds) or vector(0)",
+          "expr": "(time() - devops_backup_last_timestamp_seconds) or on() vector(0)",
           "instant": true,
-          "legendFormat": "Czas od backupu",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
@@ -1071,7 +1071,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1081,14 +1081,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_size_bytes or vector(0)",
+          "expr": "devops_backup_size_bytes or on() vector(0)",
           "instant": true,
-          "legendFormat": "Rozmiar",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Rozmiar Archiwum Backupu",
+      "title": "Rozmiar Archiwum Wolumenów",
       "type": "stat"
     },
     {
@@ -1153,7 +1153,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1163,15 +1163,27 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_offsite_status or vector(0)",
+          "expr": "devops_backup_offsite_status or on() vector(0)",
           "instant": true,
-          "legendFormat": "Status Offsite",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Wysyłka Offsite (S3 / R2)",
+      "title": "Wysyłka Offsite (Cloudflare R2 / S3)",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 106,
+      "title": "Kopie Zapasowe: Serwisy WWW z Hostingu LH.pl (Pliki stron WWW)",
+      "type": "row"
     },
     {
       "datasource": {
@@ -1220,7 +1232,7 @@
         "h": 5,
         "w": 6,
         "x": 0,
-        "y": 47
+        "y": 48
       },
       "id": 15,
       "options": {
@@ -1235,7 +1247,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1245,14 +1257,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_websites_status or vector(0)",
+          "expr": "devops_backup_websites_status or on() vector(0)",
           "instant": true,
-          "legendFormat": "Status Backupu Stron LH",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Status Backupu Stron (LH.pl)",
+      "title": "Status Pobierania Stron LH.pl",
       "type": "stat"
     },
     {
@@ -1278,7 +1290,7 @@
               },
               {
                 "color": "red",
-                "value": 100000
+                "value": 172800
               }
             ]
           },
@@ -1290,7 +1302,7 @@
         "h": 5,
         "w": 6,
         "x": 6,
-        "y": 47
+        "y": 48
       },
       "id": 16,
       "options": {
@@ -1305,7 +1317,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1315,14 +1327,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "(time() - devops_backup_websites_last_timestamp_seconds) or vector(0)",
+          "expr": "(time() - devops_backup_websites_last_timestamp_seconds) or on() vector(0)",
           "instant": true,
-          "legendFormat": "Czas od backupu stron",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Czas od Backupu Stron (LH.pl)",
+      "title": "Czas od Pobrania Stron LH.pl",
       "type": "stat"
     },
     {
@@ -1352,7 +1364,7 @@
         "h": 5,
         "w": 6,
         "x": 12,
-        "y": 47
+        "y": 48
       },
       "id": 17,
       "options": {
@@ -1367,7 +1379,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1377,14 +1389,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_websites_size_bytes or vector(0)",
+          "expr": "devops_backup_websites_size_bytes or on() vector(0)",
           "instant": true,
-          "legendFormat": "Rozmiar stron LH",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Rozmiar Archiwum Stron (LH.pl)",
+      "title": "Rozmiar Archiwum Stron LH.pl",
       "type": "stat"
     },
     {
@@ -1434,7 +1446,7 @@
         "h": 5,
         "w": 6,
         "x": 18,
-        "y": 47
+        "y": 48
       },
       "id": 18,
       "options": {
@@ -1449,7 +1461,7 @@
           "fields": "",
           "values": false
         },
-        "textMode": "auto"
+        "textMode": "value"
       },
       "pluginVersion": "10.4.1",
       "targets": [
@@ -1459,14 +1471,14 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "devops_backup_websites_offsite_status or vector(0)",
+          "expr": "devops_backup_websites_offsite_status or on() vector(0)",
           "instant": true,
-          "legendFormat": "Status Offsite Stron LH",
+          "legendFormat": "",
           "range": false,
           "refId": "A"
         }
       ],
-      "title": "Wysyłka Offsite Stron LH",
+      "title": "Wysyłka Offsite Stron LH (R2 / S3)",
       "type": "stat"
     }
   ],
@@ -1496,5 +1508,5 @@
   "timezone": "browser",
   "title": "Centrum Monitoringu Stron WWW & Usług",
   "uid": "uptime-kuma-overview",
-  "version": 5
+  "version": 6
 }
