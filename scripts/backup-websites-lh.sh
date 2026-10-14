@@ -12,8 +12,10 @@ STACK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 # Ładowanie zmiennych środowiskowych jeśli plik .env istnieje
 if [[ -f "${STACK_ROOT}/.env" ]]; then
-    # Bezpieczne wczytanie tylko zmiennych LH i S3
-    eval "$(grep -E '^(LH_|S3_|NTFY_|TZ=)' "${STACK_ROOT}/.env" || true)"
+    set -a
+    # shellcheck disable=SC1090
+    source "${STACK_ROOT}/.env"
+    set +a
 fi
 
 BACKUP_DIR="${LH_BACKUP_DIR:-/opt/devops-stack/backups/websites}"
@@ -113,24 +115,28 @@ echo "--> [1/3] Pobieranie plików stron z hostingu LH (${LH_FTP_SERVER})..."
 mkdir -p "${STAGING_DIR}"
 
 # Pobieranie danych za pomocą dedykowanego, izolowanego kontenera z lftp
+LFTP_CMD_FILE="$(mktemp)"
+chmod 600 "${LFTP_CMD_FILE}"
+cat <<EOF > "${LFTP_CMD_FILE}"
+set ftp:ssl-allow no
+set net:timeout 15
+set net:max-retries 3
+open -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
+mirror --verbose --delete --parallel=3 "${LH_REMOTE_DIR}" /target
+quit
+EOF
+
 docker run --rm \
     -v "${STAGING_DIR}:/target" \
+    -v "${LFTP_CMD_FILE}:/cmd:ro" \
     alpine:latest \
-    sh -c "
-        apk add --no-cache lftp ca-certificates >/dev/null 2>&1
-        echo '--> Rozpoczynanie synchronizacji lustrzanej (mirror)...'
-        lftp -c '
-            set ftp:ssl-allow yes;
-            set ssl:verify-certificate no;
-            open -u \"${LH_FTP_USERNAME}\",\"${LH_FTP_PASSWORD}\" -p ${LH_FTP_PORT} ${LH_FTP_SERVER};
-            mirror --verbose --delete --parallel=3 \"${LH_REMOTE_DIR}\" /target;
-            quit
-        '
-    "
+    sh -c "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd"
+
+rm -f "${LFTP_CMD_FILE}"
 
 echo "--> [2/3] Kompresja i archiwizacja kopii stron WWW..."
 tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" .
-rm -rf "${STAGING_DIR}"
+sudo rm -rf "${STAGING_DIR}" 2>/dev/null || rm -rf "${STAGING_DIR}"
 
 ARCHIVE_SIZE="$(du -h "${ARCHIVE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${ARCHIVE_PATH}" | tr -d ' ')"
