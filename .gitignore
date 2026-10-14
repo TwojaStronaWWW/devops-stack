@@ -36,6 +36,7 @@ data/
 volumes/
 logs/
 *.log
+*.prom
 
 # OS & Editor artifacts
 .DS_Store
