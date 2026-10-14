@@ -1,7 +1,7 @@
 // scripts/setup-kuma.js
 // Automatyczna konfiguracja konta admina i monitorowanych serwisów w Uptime Kuma
 
-const { io } = require("socket.io-client");
+import { io } from "socket.io-client";
 
 const ADMIN_USER = process.env.KUMA_ADMIN_USER;
 const ADMIN_PASS = process.env.KUMA_ADMIN_PASS;
