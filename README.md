@@ -135,6 +135,13 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── setup-kuma.js              # Rejestracja monitorowanych witryn w Uptime Kuma
 │   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
 │   └── runners/                   # Skrypty sterowania runnerami CI/CD
+├── services/
+│   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, RAG per strona, Zero-Bloat)
+│       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~15 MB RAM)
+│       ├── src/chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, cURL do Gemini API, /health
+│       ├── data/                  # Bazy wiedzy RAG montowane :ro (katosalsahub, fuegolingua)
+│       ├── storage/               # Trwały wolumen na pliki rate-limit per IP
+│       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
 │       └── repo-hygiene.test.js   # Natywne testy higieny repozytorium (node:test)

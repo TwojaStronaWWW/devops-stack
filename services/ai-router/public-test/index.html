@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TwojaStronaWWW - AI Router Tester</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main class="chat-card">
+    <header class="header">
+      <div class="badge">
+        <span class="badge-dot"></span>
+        <span>TwojaStronaWWW • AI Router</span>
+      </div>
+      <h1>Centralny Asystent AI</h1>
+      <p class="subtitle">Testowanie połączenia z darmowym API Gemini i dynamicznym RAG.</p>
+    </header>
+
+    <!-- Pasek konfiguracji środowiska testowego -->
+    <section class="config-bar" aria-label="Konfiguracja testu">
+      <div class="config-group">
+        <label class="config-label" for="siteSelect">Identyfikator Witryny (site_id):</label>
+        <select id="siteSelect" class="config-select">
+          <option value="katosalsahub" selected>katosalsahub (Kato Salsa Hub)</option>
+          <option value="fuegolingua">fuegolingua (FuegoLingua)</option>
+        </select>
+      </div>
+      <div class="config-group">
+        <label class="config-label" for="routerUrlInput">Endpoint Routera:</label>
+        <input type="text" id="routerUrlInput" class="config-input" value="http://localhost:8085/chat-router.php" placeholder="https://twoj-vps/chat-router.php">
+      </div>
+    </section>
+
+    <!-- Formularz zapytania -->
+    <form id="chatForm">
+      <div class="input-group">
+        <label for="questionInput">Zadaj pytanie asystentowi:</label>
+        <textarea 
+          id="questionInput" 
+          placeholder="np. Jakie style tańca macie w ofercie i ile kosztuje karnet?" 
+          required
+        ></textarea>
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn-submit">
+        <span id="btnText">Wyślij zapytanie</span>
+      </button>
+    </form>
+
+    <!-- Komunikat o błędzie -->
+    <div id="errorAlert" class="alert-error" role="alert"></div>
+
+    <!-- Karta odpowiedzi modelu -->
+    <section id="responseCard" class="response-card" aria-live="polite">
+      <div class="response-header">
+        <span class="response-title">Odpowiedź Asystenta</span>
+        <span id="responseLatency" class="response-meta"></span>
+      </div>
+      <div id="responseBody" class="response-body"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

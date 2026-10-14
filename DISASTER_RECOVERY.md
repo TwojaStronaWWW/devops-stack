@@ -47,6 +47,7 @@ docker network create devops_internal_network || true
 docker volume create uptime_kuma_data
 docker volume create grafana_data
 docker volume create prometheus_data
+docker volume create ai_router_storage
 mkdir -p /opt/devops-stack/config/node-exporter
 mkdir -p /opt/devops-stack/backups/websites
 ```

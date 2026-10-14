@@ -169,4 +169,48 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /package-ecosystem:\s*"github-actions"/i);
     assert.match(content, /package-ecosystem:\s*"docker"/i);
   });
+
+  it('moduł services/ai-router powinien posiadać kompletną strukturę (Dockerfile, kod PHP, RAG, tester)', () => {
+    const requiredRouterFiles = [
+      path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'katosalsahub-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'fuegolingua-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'storage', 'rate_limits', '.gitkeep'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'style.css'),
+    ];
+
+    for (const rFile of requiredRouterFiles) {
+      assert.ok(fs.existsSync(rFile), `Brak wymaganego pliku routera: ${rFile}`);
+      assert.ok(fs.statSync(rFile).size > 0, `Plik routera jest pusty: ${rFile}`);
+    }
+  });
+
+  it('skrypt chat-router.php powinien realizować wymogi bezpieczeństwa (ISO 27001 / brak twardych kluczy)', () => {
+    const routerPhp = path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php');
+    const content = fs.readFileSync(routerPhp, 'utf-8');
+
+    // Brak zahardkodowanego klucza API
+    assert.strictEqual(content.includes('AIzaSy'), false, 'Wykryto zahardkodowany klucz Gemini API w chat-router.php');
+    // Odczyt z env
+    assert.match(content, /getenv\(['"]GEMINI_API_KEY['"]\)/);
+    // Odczyt z nagłówka Cloudflare
+    assert.match(content, /HTTP_CF_CONNECTING_IP/);
+    // Endpoint healthcheck
+    assert.match(content, /\/health/);
+    // Zabezpieczenie Content-Type
+    assert.match(content, /application\/json/);
+  });
+
+  it('docker-compose.yml powinien zawierać zdefiniowany serwis ai-router oraz wolumen ai_router_storage', () => {
+    const composePath = path.join(ROOT_DIR, 'compose', 'docker-compose.yml');
+    const content = fs.readFileSync(composePath, 'utf-8');
+
+    assert.match(content, /ai-router:/);
+    assert.match(content, /ai_router_storage:/);
+    assert.match(content, /127\.0\.0\.1:8085:8080/);
+    assert.match(content, /data:\/app\/data:ro/);
+  });
 });

@@ -58,6 +58,14 @@ VPS/
 │   ├── oracle-arm-hunter.sh       # Automatyczny łowca instancji ARM64 w OCI API
 │   ├── preview-tunnel.ps1/.sh     # Błyskawiczny Quick Tunnel dla lokalnego stagingu
 │   └── runners/                   # Skrypty rejestracji i sterowania runnerami CI/CD
+├── services/
+│   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, RAG per strona, Zero-Bloat)
+│       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~15 MB RAM)
+│       ├── src/
+│       │   └── chat-router.php    # Obsługa POST /chat-router.php, CORS, IP limiter, cURL do Gemini API, /health
+│       ├── data/                  # Bazy wiedzy RAG montowane :ro (np. katosalsahub.md, fuegolingua.md)
+│       ├── storage/               # Trwały wolumen na pliki rate-limit per IP
+│       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
 │       └── repo-hygiene.test.js   # Testy higieny repozytorium, walidacja JSON i bezpieczeństwa (node:test)
@@ -73,10 +81,10 @@ VPS/
 
 ## 4. STANDARDY BEZPIECZEŃSTWA INFRASTRUKTURY (ISO 27001)
 1. **Zarządzanie Poświadczeniami i Sekretami (Dual-Tier Secrets Management):**
-   - **Warstwa Główna (Sejf Administratora):** Wszystkie poświadczenia produkcyjne (hasła Grafana, Uptime Kuma, tokeny Cloudflare, klucze SSH, tokeny runnerów) przechowywane są w szyfrowanej bazie **KeePass Password Safe** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`).
+   - **Warstwa Główna (Sejf Administratora):** Wszystkie poświadczenia produkcyjne (hasła Grafana, Uptime Kuma, tokeny Cloudflare, klucze SSH, tokeny runnerów, klucze Gemini API) przechowywane są w szyfrowanej bazie **KeePass Password Safe** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`).
    - **Warstwa Automatyzacji CI/CD:** Dane uwierzytelniające dla pipeline'ów GitHub Actions (`VPS_HOST`, `VPS_SSH_KEY`, `FTP_*`, `LH_*`) przechowywane są wyłącznie w **GitHub Actions Secrets**.
    - **Środowisko Hosta VPS:** Na serwerze plik `.env` posiada rygorystyczne uprawnienia `chmod 600` (właściciel `ubuntu`).
-   - **Bezwzględna Procedura Rejestracji w KeePass (KeePass-First Secret Provisioning):** Zanim jakikolwiek nowy klucz, hasło lub token (Cloudflare R2, SSH, API, baza danych, token runnera) zostanie wdrożony do pliku `.env` na serwerze lub do kodu aplikacji, Agent ma bezwzględny obowiązek natychmiastowego zapisania/zaktualizowania go w bazie **KeePass** (`Databasekpoczatek.kdbx`) w odpowiedniej grupie projektowej. Żaden sekret nie może istnieć w infrastrukturze ani kodzie bez odzwierciedlenia w sejfie administratora. W przypadku braku wpisu Agent automatycznie tworzy stosowny wpis w KeePassie.
+   - **Bezwzględna Procedura Rejestracji w KeePass (KeePass-First Secret Provisioning):** Zanim jakikolwiek nowy klucz, hasło lub token (Cloudflare R2, SSH, API, baza danych, token runnera, Gemini API) zostanie wdrożony do pliku `.env` na serwerze lub do kodu aplikacji, Agent ma bezwzględny obowiązek natychmiastowego zapisania/zaktualizowania go w bazie **KeePass** (`Databasekpoczatek.kdbx`) w odpowiedniej grupie projektowej. Żaden sekret nie może istnieć w infrastrukturze ani kodzie bez odzwierciedlenia w sejfie administratora. W przypadku braku wpisu Agent automatycznie tworzy stosowny wpis w KeePassie.
    - **Zakaz Haseł Słownikowych:** Wszystkie nowe hasła muszą być kryptograficznie silnymi ciągami (min. 32 znaki, litery wielkie/małe, cyfry, symbole, wysoka entropia, brak znaku `$` unikający kolizji z interpolacją Compose).
    - **Zero Secret Leakage:** Pliki `.env`, certyfikaty, klucze prywatne (`*.pem`, `*.key`, `id_ed25519*`) oraz pliki metryk runtime (`*.prom`) pod żadnym pozorem nie mogą trafić do repozytorium Git (`.gitignore`).
 2. **Kopie Zapasowe i Odporność na Awarie (Disaster Recovery):**
@@ -90,6 +98,14 @@ VPS/
      1. `runner-zeslownikiem-unified` (organizacja `zeslownikiem`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`)
      2. `runner-twojastronawww-unified` (organizacja `TwojaStronaWWW`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww`)
    - Obsługują zadania CI/CD dla wszystkich repozytoriów organizacji bez limitów minut GitHub Actions.
+4. **Bezpieczeństwo Bramki AI (AI Router & LLM Proxy):**
+   - **Klucz Gemini API:** Przechowywany wyłącznie w zmiennej `GEMINI_API_KEY` wstrzykiwanej z serwerowego pliku `.env` (uprzednio zarejestrowany w KeePass). Bezwzględny zakaz umieszczania klucza w kodzie źródłowym lub testowym.
+   - **Ochrona Limitów (IP Rate Limiting):** Identyfikacja klienta przez nagłówek Cloudflare `HTTP_CF_CONNECTING_IP` (z fallbackiem do `X-Forwarded-For`), aby nie blokować wspólnego IP mostka tunelu. Limit: domyślnie 5 zapytań/min per IP.
+   - **Izolacja Wiedzy (Dynamic RAG):** Katalog `data/` montowany w kontenerze w trybie Tylko do Odczytu (`:ro`). Rygorystyczna sanityzacja parametru `site_id` (regex `^[a-z0-9_-]{2,32}$`), uniemożliwiająca ataki Path Traversal.
+   - **Biała Lista CORS:** Router akceptuje wyłącznie żądania z zatwierdzonych domen platformy (`ALLOWED_ORIGINS`). Zapytania preflight `OPTIONS` zwracają `204 No Content`.
+   - **Telemetria:** Router udostępnia lekki endpoint `GET /health` dla monitoringu w Uptime Kuma.
+
+
 
 ---
 

@@ -32,11 +32,13 @@ backups/
 dist/
 
 # Runtime data & Docker volumes persisted locally
-data/
-volumes/
+/data/
+/volumes/
 logs/
 *.log
 *.prom
+services/ai-router/storage/rate_limits/*.json
+!services/ai-router/storage/rate_limits/.gitkeep
 
 # OS & Editor artifacts
 .DS_Store
