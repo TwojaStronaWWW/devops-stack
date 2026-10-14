@@ -11,22 +11,22 @@ concurrency:
 
 jobs:
   ci:
-    name: 🧪 Run Quality Gate
+    name: Run Quality Gate
     runs-on: ubuntu-latest
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🟢 Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: 🛡️ Full Quality Gate
+      - name: Full Quality Gate
         run: npm run check
 
   deploy:
-    name: 🚀 Deploy Stack to Target Host
+    name: Deploy Stack to Target Host
     needs: ci
     runs-on: ubuntu-latest
     if: ${{ secrets.VPS_HOST != '' }}
@@ -45,18 +45,18 @@ jobs:
           script: |
             set -e
             DEPLOY_PATH="/opt/devops-stack"
-            echo "==> Wdrażanie aktualizacji w ${DEPLOY_PATH}..."
-            
+            echo "==> Wdrazanie aktualizacji w ${DEPLOY_PATH}..."
+
             if [ ! -d "${DEPLOY_PATH}" ]; then
-              echo "BŁĄD: Katalog ${DEPLOY_PATH} nie istnieje na serwerze docelowym."
+              echo "BLAD: Katalog ${DEPLOY_PATH} nie istnieje na serwerze docelowym."
               exit 1
             fi
-            
+
             cd "${DEPLOY_PATH}"
             git fetch origin main
             git reset --hard origin/main
-            
+
             cd compose
             docker compose up -d --build --remove-orphans
-            
-            echo "==> Wdrożenie zakończone pomyślnie."
+
+            echo "==> Wdrozenie zakonczone pomyslnie."
