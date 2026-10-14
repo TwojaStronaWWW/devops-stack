@@ -109,11 +109,40 @@ function getClientIp(): string {
     return filter_var($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1', FILTER_VALIDATE_IP) ?: '127.0.0.1';
 }
 
+// Wczytanie zmiennych z lokalnego pliku .env (jako bezpieczny fallback poza kontenerem)
+if (!getenv('GEMINI_API_KEY')) {
+    $envCandidates = [
+        dirname(__DIR__, 3) . '/.env',
+        dirname(__DIR__, 2) . '/.env',
+        '/app/.env'
+    ];
+    foreach ($envCandidates as $envPath) {
+        if (file_exists($envPath) && is_readable($envPath)) {
+            $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) continue;
+                [$k, $v] = explode('=', $line, 2);
+                $k = trim($k);
+                $v = trim($v, " \t\n\r\0\x0B\"'");
+                if (!getenv($k)) {
+                    putenv("{$k}={$v}");
+                    $_ENV[$k] = $v;
+                }
+            }
+            break;
+        }
+    }
+}
+
 $clientIp = getClientIp();
 $rateLimitWindow = 60; // 60 sekund
 $rateLimitMax = 5;     // maksymalnie 5 zapytań na minutę
 
-$storageDir = '/app/storage/rate_limits';
+$storageDir = is_dir('/app/storage/rate_limits')
+    ? '/app/storage/rate_limits'
+    : (dirname(__DIR__) . '/storage/rate_limits');
+
 if (!is_dir($storageDir)) {
     @mkdir($storageDir, 0755, true);
 }
@@ -207,15 +236,13 @@ if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
 // -----------------------------------------------------------------------------
 // 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY)
 // -----------------------------------------------------------------------------
-$dataDir = realpath('/app/data');
-if (!$dataDir) {
-    $dataDir = dirname(__DIR__) . '/data';
-}
+$rawDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
+$normalizedDataDir = $rawDir ? rtrim(str_replace('\\', '/', $rawDir), '/') : '';
 
 $possibleFiles = [
-    $dataDir . '/' . strtolower($siteId) . '-knowledge.txt',
-    $dataDir . '/' . strtolower($siteId) . '.txt',
-    $dataDir . '/' . strtolower($siteId) . '.md',
+    $rawDir . '/' . strtolower($siteId) . '-knowledge.txt',
+    $rawDir . '/' . strtolower($siteId) . '.txt',
+    $rawDir . '/' . strtolower($siteId) . '.md',
 ];
 
 $knowledgeContent = null;
@@ -223,11 +250,14 @@ $loadedFile = null;
 
 foreach ($possibleFiles as $filePath) {
     $real = realpath($filePath);
-    // Weryfikacja czy plik istnieje i leży ściśle wewnątrz katalogu dataDir
-    if ($real && str_starts_with($real, $dataDir) && is_readable($real)) {
-        $knowledgeContent = file_get_contents($real, false, null, 0, 100000); // Max 100 KB
-        $loadedFile = basename($real);
-        break;
+    if ($real) {
+        $normalizedReal = str_replace('\\', '/', $real);
+        // Weryfikacja czy plik istnieje i leży ściśle wewnątrz katalogu dataDir
+        if ($normalizedDataDir !== '' && str_starts_with($normalizedReal, $normalizedDataDir) && is_readable($real)) {
+            $knowledgeContent = file_get_contents($real, false, null, 0, 100000); // Max 100 KB
+            $loadedFile = basename($real);
+            break;
+        }
     }
 }
 
@@ -284,8 +314,7 @@ $geminiPayload = [
 
 $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$geminiModel}:generateContent?key={$geminiApiKey}";
 
-$ch = curl_init();
-curl_setopt_array($ch, [
+$curlOptions = [
     CURLOPT_URL            => $apiUrl,
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => json_encode($geminiPayload, JSON_UNESCAPED_UNICODE),
@@ -298,7 +327,25 @@ curl_setopt_array($ch, [
     CURLOPT_CONNECTTIMEOUT => 5,
     CURLOPT_SSL_VERIFYPEER => true,
     CURLOPT_SSL_VERIFYHOST => 2
-]);
+];
+
+// Automatyczna detekcja certyfikatów CA w środowisku lokalnym Windows
+if (PHP_OS_FAMILY === 'Windows' && !ini_get('curl.cainfo')) {
+    $windowsCaCandidates = [
+        'C:/Program Files/Git/usr/ssl/certs/ca-bundle.crt',
+        'C:/Program Files/Git/ucrt64/etc/ssl/certs/ca-bundle.crt',
+        'C:/Program Files/Git/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
+    ];
+    foreach ($windowsCaCandidates as $caCandidate) {
+        if (file_exists($caCandidate)) {
+            $curlOptions[CURLOPT_CAINFO] = $caCandidate;
+            break;
+        }
+    }
+}
+
+$ch = curl_init();
+curl_setopt_array($ch, $curlOptions);
 
 $responseBody = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
