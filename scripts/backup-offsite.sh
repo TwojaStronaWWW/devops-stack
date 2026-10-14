@@ -6,6 +6,17 @@
 # ==============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STACK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# Ładowanie zmiennych środowiskowych jeśli plik .env istnieje
+if [[ -f "${STACK_ROOT}/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${STACK_ROOT}/.env"
+    set +a
+fi
+
 BACKUP_DIR="${BACKUP_DIR:-/opt/devops-stack/backups}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
@@ -14,7 +25,7 @@ NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
 
 # S3 / Object Storage Configuration (zmienne z .env)
 S3_ENDPOINT="${S3_ENDPOINT:-}"
-S3_BUCKET="${S3_BUCKET:-devops-vps-backups}"
+S3_BUCKET="${S3_BUCKET:-twojastronawww-backups}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-}"
 
@@ -45,8 +56,6 @@ OFFSITE_STATUS=0
 BACKUP_STATUS=0
 
 # Konfiguracja eksportu metryk dla Prometheusa / Grafany
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STACK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
 
 write_prometheus_metrics() {
@@ -128,14 +137,17 @@ BACKUP_STATUS=1
 if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; then
     echo "--> [3/3] Wysyłka archiwum offsite do chmury: ${S3_BUCKET} (${S3_ENDPOINT})..."
 
-    # Użycie izolowanego kontenera rclone bez zaśmiecania systemu
+    # Użycie izolowanego kontenera rclone z oficjalną konfiguracją Cloudflare R2
     if docker run --rm \
         -v "${BACKUP_DIR}:/data:ro" \
-        -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
-        -e AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+        -e RCLONE_CONFIG_R2_TYPE=s3 \
+        -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+        -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+        -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+        -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+        -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
         rclone/rclone:latest \
-        copy "/data/${BUNDLE_NAME}" ":s3,endpoint=${S3_ENDPOINT},provider=Other:${S3_BUCKET}/backups/" \
-        --s3-no-check-bucket; then
+        copy "/data/${BUNDLE_NAME}" "r2:${S3_BUCKET}/backups/"; then
         
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup ${BUNDLE_NAME} wysłany do ${S3_BUCKET}."

@@ -34,7 +34,7 @@ LH_REMOTE_DIR="${LH_REMOTE_DIR:-/public_html}"
 
 # S3 / Cloudflare R2
 S3_ENDPOINT="${S3_ENDPOINT:-}"
-S3_BUCKET="${S3_BUCKET:-devops-vps-backups}"
+S3_BUCKET="${S3_BUCKET:-twojastronawww-backups}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-}"
 
@@ -149,11 +149,14 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
 
     if docker run --rm \
         -v "${BACKUP_DIR}:/data:ro" \
-        -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
-        -e AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+        -e RCLONE_CONFIG_R2_TYPE=s3 \
+        -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+        -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+        -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+        -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+        -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
         rclone/rclone:latest \
-        copy "/data/${ARCHIVE_NAME}" ":s3,endpoint=${S3_ENDPOINT},provider=Other:${S3_BUCKET}/websites/" \
-        --s3-no-check-bucket; then
+        copy "/data/${ARCHIVE_NAME}" "r2:${S3_BUCKET}/websites/"; then
         
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup stron ${ARCHIVE_NAME} wysłany do ${S3_BUCKET}/websites/."
