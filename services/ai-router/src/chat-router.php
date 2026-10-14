@@ -283,7 +283,7 @@ if (!$geminiApiKey) {
     exit;
 }
 
-$geminiModel = getenv('GEMINI_MODEL') ?: 'gemini-3.5-flash-lite';
+$geminiModel = getenv('GEMINI_MODEL') ?: 'gemini-1.5-flash';
 
 // Budowa System Promptu zgodnie z wytycznymi RAG
 $systemInstruction = "Jesteś oficjalnym asystentem na stronie {$siteId}. " .
