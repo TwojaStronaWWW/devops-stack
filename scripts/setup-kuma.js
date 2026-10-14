@@ -22,6 +22,7 @@ const SITES = [
     { name: "GalAnonim API", url: "https://api.galanonim.pl/" },
     { name: "Serwis Maxbit", url: "https://serwis.maxbit.com.pl/" },
     { name: "FuegoLingua.pl", url: "https://fuegolingua.pl/" },
+    { name: "AI Router Healthcheck", url: "http://ai-router:8080/health" },
 ];
 
 console.log("==> Łączenie z Uptime Kuma pod " + KUMA_URL + "...");
@@ -99,7 +100,7 @@ socket.on("connect", () => {
                 });
             }
 
-            console.log("==> [SUKCES] Wszystkie 7 serwisów zostało pomyślnie dodanych i uruchomionych!");
+            console.log(`==> [SUKCES] Wszystkie ${SITES.length} serwisy zostały pomyślnie dodane i uruchomione!`);
             socket.close();
             process.exit(0);
         });
