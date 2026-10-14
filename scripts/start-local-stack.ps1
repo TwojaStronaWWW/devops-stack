@@ -40,7 +40,7 @@ wsl.exe -d Ubuntu-24.04 -u root bash -c "cd /mnt/e/Projekty/VPS/compose && docke
 
 Write-Host "`n======================================================================" -ForegroundColor Green
 Write-Host ">> [SUKCES] Stos monitoringu jest aktywny i dostępny:" -ForegroundColor Green
-Write-Host "   Grafana:     http://127.0.0.1:3000  (admin / DevOpsGrafanaSecure2026!)" -ForegroundColor White
+Write-Host "   Grafana:     http://127.0.0.1:3000  (admin / GF_Admin_9aF8#xK2$vP8!mQ4^zL7*tW1@b)" -ForegroundColor White
 Write-Host "   Uptime Kuma: http://127.0.0.1:3001" -ForegroundColor White
 Write-Host "   Prometheus:  http://127.0.0.1:9090" -ForegroundColor White
 Write-Host "======================================================================" -ForegroundColor Green

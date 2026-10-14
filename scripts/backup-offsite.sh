@@ -40,6 +40,52 @@ send_notification() {
         "${NTFY_URL}" >/dev/null 2>&1 || true
 }
 
+START_TIME="$(date +%s)"
+OFFSITE_STATUS=0
+BACKUP_STATUS=0
+
+# Konfiguracja eksportu metryk dla Prometheusa / Grafany
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STACK_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
+
+write_prometheus_metrics() {
+    local status="$1"
+    local offsite_status="$2"
+    local size_bytes="$3"
+    local end_time
+    end_time="$(date +%s)"
+    local duration=$(( end_time - START_TIME ))
+
+    if [[ -d "${METRICS_DIR}" ]]; then
+        local metrics_file="${METRICS_DIR}/backup.prom"
+        cat <<EOF > "${metrics_file}.tmp"
+# HELP devops_backup_last_timestamp_seconds Czas uniksowy zakonczenia ostatniego backupu
+# TYPE devops_backup_last_timestamp_seconds gauge
+devops_backup_last_timestamp_seconds ${end_time}
+
+# HELP devops_backup_status Status wykonania lokalnego backupu (1 = sukces, 0 = blad)
+# TYPE devops_backup_status gauge
+devops_backup_status ${status}
+
+# HELP devops_backup_size_bytes Rozmiar archiwum zbiorczego kopii zapasowej w bajtach
+# TYPE devops_backup_size_bytes gauge
+devops_backup_size_bytes ${size_bytes}
+
+# HELP devops_backup_offsite_status Status wysylki offsite do chmury (1 = wyslano, 0 = brak lub blad)
+# TYPE devops_backup_offsite_status gauge
+devops_backup_offsite_status ${offsite_status}
+
+# HELP devops_backup_duration_seconds Czas trwania procedury backupu w sekundach
+# TYPE devops_backup_duration_seconds gauge
+devops_backup_duration_seconds ${duration}
+EOF
+        mv "${metrics_file}.tmp" "${metrics_file}"
+        chmod 644 "${metrics_file}" 2>/dev/null || true
+        echo "--> [METRYKI] Zaktualizowano metryki Prometheusa: ${metrics_file}"
+    fi
+}
+
 echo "=============================================================================="
 echo "==> Rozpoczynanie procedury backupu offsite: ${TIMESTAMP}"
 echo "=============================================================================="
@@ -75,30 +121,43 @@ BUNDLE_PATH="${BACKUP_DIR}/${BUNDLE_NAME}"
 echo "--> [2/3] Pakowanie archiwum zbiorczego: ${BUNDLE_NAME}..."
 tar -czf "${BUNDLE_PATH}" -C "${BACKUP_DIR}" $(for a in "${ARCHIVES_CREATED[@]}"; do basename "$a"; done)
 BUNDLE_SIZE="$(du -h "${BUNDLE_PATH}" | awk '{print $1}')"
+BUNDLE_SIZE_BYTES="$(wc -c < "${BUNDLE_PATH}" | tr -d ' ')"
+BACKUP_STATUS=1
 
 # Wysyłka offsite do chmury, jeśli skonfigurowano klucze S3 / R2 / Oracle
 if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; then
     echo "--> [3/3] Wysyłka archiwum offsite do chmury: ${S3_BUCKET} (${S3_ENDPOINT})..."
 
     # Użycie izolowanego kontenera rclone bez zaśmiecania systemu
-    docker run --rm \
+    if docker run --rm \
         -v "${BACKUP_DIR}:/data:ro" \
         -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
         -e AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
         rclone/rclone:latest \
         copy "/data/${BUNDLE_NAME}" ":s3,endpoint=${S3_ENDPOINT},provider=Other:${S3_BUCKET}/backups/" \
-        --s3-no-check-bucket
-
-    echo "==> [SUKCES CHMURY] Backup ${BUNDLE_NAME} wysłany do ${S3_BUCKET}."
-    
-    send_notification \
-        "✅ Sukces: Backup VPS w Chmurze" \
-        "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury." \
-        "low" \
-        "white_check_mark,cloud"
+        --s3-no-check-bucket; then
+        
+        OFFSITE_STATUS=1
+        echo "==> [SUKCES CHMURY] Backup ${BUNDLE_NAME} wysłany do ${S3_BUCKET}."
+        
+        send_notification \
+            "✅ Sukces: Backup VPS w Chmurze" \
+            "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury." \
+            "low" \
+            "white_check_mark,cloud"
+    else
+        OFFSITE_STATUS=0
+        echo "==> [BŁĄD CHMURY] Nie udało się przesłać backupu offsite."
+        send_notification \
+            "⚠️ Ostrzeżenie: Błąd wysyłki backupu do chmury" \
+            "Lokalna kopia ${BUNDLE_NAME} została utworzona, lecz wysyłka offsite zakończyła się błędem." \
+            "high" \
+            "warning"
+    fi
 else
     echo "--> [INFO] Klucze chmury (S3_ENDPOINT / S3_ACCESS_KEY) nie są zdefiniowane w .env."
     echo "--> Kopia została bezpiecznie zapisana lokalnie: ${BUNDLE_PATH} (${BUNDLE_SIZE})"
+    OFFSITE_STATUS=0
 
     send_notification \
         "💾 Backup VPS Zakończony (Lokalnie)" \
@@ -106,6 +165,9 @@ else
         "low" \
         "floppy_disk"
 fi
+
+# Zapisanie metryk dla Prometheusa / Grafany
+write_prometheus_metrics "${BACKUP_STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_BYTES}"
 
 # Rotacja lokalna (usuwanie plików starszych niż RETENTION_DAYS)
 echo "==> Rotacja: usuwanie kopii starszych niż ${RETENTION_DAYS} dni..."

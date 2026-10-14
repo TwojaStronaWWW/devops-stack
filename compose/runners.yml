@@ -30,6 +30,35 @@ services:
           memory: 512M
 
   # ============================================================================
+  # 2. ZUNIFIKOWANY RUNNER DLA ORGANIZACJI TwojaStronaWWW
+  # Obsługuje automatycznie wszystkie repozytoria organizacji TwojaStronaWWW!
+  # Token generowany w: https://github.com/organizations/TwojaStronaWWW/settings/actions/runners
+  # ============================================================================
+  runner-twojastronawww:
+    image: myoung34/github-runner:ubuntu-jammy
+    container_name: runner-twojastronawww-unified
+    restart: unless-stopped
+    networks:
+      - internal_network
+    environment:
+      - RUNNER_SCOPE=org
+      - ORG_NAME=TwojaStronaWWW
+      - RUNNER_TOKEN=${RUNNER_TWOJASTRONAWWW_ORG_TOKEN}
+      - RUNNER_NAME=vps-runner-twojastronawww-unified
+      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww
+      - DOCKER_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2048M
+        reservations:
+          memory: 512M
+
+
+  # ============================================================================
   # 2. OPCJA ALTERNATYWNA (ROZDZIELONE RUNNERY PER REPOZYTORIUM - profil 'split')
   # Użyj tylko jeśli nie posiadasz uprawnień administratora organizacji:
   # docker compose --profile split up -d
