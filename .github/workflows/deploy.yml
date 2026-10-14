@@ -55,6 +55,7 @@ jobs:
             cd "${DEPLOY_PATH}"
             git fetch origin main
             git reset --hard origin/main
+            chmod +x scripts/*.sh
 
             cd compose
             docker compose -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans

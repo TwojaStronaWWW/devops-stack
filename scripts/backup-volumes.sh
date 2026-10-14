@@ -13,6 +13,7 @@ VOLUMES_TO_BACKUP=(
     "uptime_kuma_data"
     "grafana_data"
     "prometheus_data"
+    "ai_router_storage"
 )
 
 mkdir -p "${BACKUP_DIR}"
