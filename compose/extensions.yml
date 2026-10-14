@@ -1,4 +1,4 @@
-name: devops-stack-extensions
+name: devops-stack
 
 services:
   # ============================================================================

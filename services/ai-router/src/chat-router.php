@@ -8,7 +8,24 @@ declare(strict_types=1);
  * Standardy: PHP 8+, Zero-Bloat, ISO 27001, CORS Whitelist, IP Rate Limiter (Cloudflare).
  */
 
-// Wymuszenie formatu JSON i kodowania UTF-8
+$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+
+// Serwowanie uniwersalnego widgetu JS dla zewnętrznych stron WWW
+if ($requestUri === '/widget.js') {
+    header('Content-Type: application/javascript; charset=UTF-8');
+    header('Access-Control-Allow-Origin: *');
+    header('Cache-Control: public, max-age=3600');
+    $widgetPath = __DIR__ . '/widget.js';
+    if (file_exists($widgetPath)) {
+        readfile($widgetPath);
+    } else {
+        http_response_code(404);
+        echo '/* widget.js not found */';
+    }
+    exit;
+}
+
+// Wymuszenie formatu JSON i kodowania UTF-8 dla endpointów API
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
@@ -16,7 +33,6 @@ header('X-Frame-Options: DENY');
 // -----------------------------------------------------------------------------
 // 1. ENDPOINT KONTROLNY (HEALTHCHECK) DLA UPTIME KUMA & DOCKERA
 // -----------------------------------------------------------------------------
-$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 if ($requestUri === '/health') {
     http_response_code(200);
     echo json_encode([
@@ -212,7 +228,7 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($payload)) {
 }
 
 $siteId = trim((string)($payload['site_id'] ?? ''));
-$question = trim((string)($payload['question'] ?? ''));
+$question = trim((string)($payload['question'] ?? $payload['message'] ?? ''));
 
 // Rygorystyczna sanityzacja site_id (anty Path Traversal)
 if (!preg_match('/^[a-z0-9_-]{2,32}$/i', $siteId)) {

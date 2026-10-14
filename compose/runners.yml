@@ -1,4 +1,4 @@
-name: devops-stack-runners
+name: devops-stack
 
 services:
   # ============================================================================
