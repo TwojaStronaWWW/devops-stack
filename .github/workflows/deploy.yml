@@ -60,4 +60,6 @@ jobs:
             cd compose
             docker compose -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
 
-            echo "==> Wdrozenie zakonczone pomyslnie."
+            echo "==> Wdrozenie zakonczone pomyslnie. Uruchamianie audytu powykonawczego..."
+            sleep 5
+            NO_COLOR=1 bash "${DEPLOY_PATH}/scripts/audit-server.sh"

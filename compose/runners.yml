@@ -13,14 +13,19 @@ services:
     networks:
       - internal_network
     environment:
-      - RUNNER_SCOPE=org
+      - RUNNER_SCOPE=${RUNNER_ZESLOWNIKIEM_SCOPE:-repo}
       - ORG_NAME=zeslownikiem
-      - RUNNER_TOKEN=${RUNNER_ORG_TOKEN}
+      - REPO_URL=https://github.com/zeslownikiem/gal-anonym
+      - ACCESS_TOKEN=${GITHUB_TOKEN}
       - RUNNER_NAME=vps-runner-unified
+      - RANDOM_RUNNER_SUFFIX=false
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner-data
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - runner_zeslownikiem_data:/runner-data
     deploy:
       resources:
         limits:
@@ -31,8 +36,7 @@ services:
 
   # ============================================================================
   # 2. ZUNIFIKOWANY RUNNER DLA ORGANIZACJI TwojaStronaWWW
-  # Obsługuje automatycznie wszystkie repozytoria organizacji TwojaStronaWWW!
-  # Token generowany w: https://github.com/organizations/TwojaStronaWWW/settings/actions/runners
+  # Obsługuje automatycznie repozytoria TwojaStronaWWW!
   # ============================================================================
   runner-twojastronawww:
     image: myoung34/github-runner:ubuntu-jammy
@@ -41,14 +45,19 @@ services:
     networks:
       - internal_network
     environment:
-      - RUNNER_SCOPE=org
+      - RUNNER_SCOPE=${RUNNER_TWOJASTRONAWWW_SCOPE:-repo}
       - ORG_NAME=TwojaStronaWWW
-      - RUNNER_TOKEN=${RUNNER_TWOJASTRONAWWW_ORG_TOKEN}
+      - REPO_URL=https://github.com/TwojaStronaWWW/devops-stack
+      - ACCESS_TOKEN=${GITHUB_TOKEN}
       - RUNNER_NAME=vps-runner-twojastronawww-unified
+      - RANDOM_RUNNER_SUFFIX=false
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner-data
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - runner_twojastronawww_data:/runner-data
     deploy:
       resources:
         limits:
@@ -113,3 +122,10 @@ networks:
   internal_network:
     external: true
     name: devops_internal_network
+
+volumes:
+  runner_zeslownikiem_data:
+    name: runner_zeslownikiem_data
+  runner_twojastronawww_data:
+    name: runner_twojastronawww_data
+

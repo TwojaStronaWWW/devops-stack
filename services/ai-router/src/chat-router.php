@@ -25,14 +25,28 @@ if ($requestUri === '/widget.js') {
     exit;
 }
 
-// Wymuszenie formatu JSON i kodowania UTF-8 dla endpointów API
+// -----------------------------------------------------------------------------
+// 1. ENDPOINT METRYK PROMETHEUSA (/metrics) ORAZ HEALTHCHECK (/health)
+// -----------------------------------------------------------------------------
+if ($requestUri === '/metrics' || ($requestUri === '/health' && str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'Prometheus'))) {
+    header('Content-Type: text/plain; version=0.0.4; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    http_response_code(200);
+    $hasKey = getenv('GEMINI_API_KEY') ? 1 : 0;
+    echo "# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)\n";
+    echo "# TYPE ai_router_status gauge\n";
+    echo "ai_router_status 1\n";
+    echo "# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)\n";
+    echo "# TYPE ai_router_api_key_configured gauge\n";
+    echo "ai_router_api_key_configured {$hasKey}\n";
+    exit;
+}
+
+// Wymuszenie formatu JSON i kodowania UTF-8 dla pozostałych endpointów API
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 
-// -----------------------------------------------------------------------------
-// 1. ENDPOINT KONTROLNY (HEALTHCHECK) DLA UPTIME KUMA & DOCKERA
-// -----------------------------------------------------------------------------
 if ($requestUri === '/health') {
     http_response_code(200);
     echo json_encode([

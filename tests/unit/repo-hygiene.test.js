@@ -213,4 +213,21 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /127\.0\.0\.1:8085:8080/);
     assert.match(content, /data:\/app\/data:ro/);
   });
+
+  it('skrypty diagnostyki i audytu żywego serwera (audit-server.sh, verify-remote.ps1/.cmd) powinny istnieć i eksportować metryki', () => {
+    const auditSh = path.join(ROOT_DIR, 'scripts', 'audit-server.sh');
+    const verifyPs1 = path.join(ROOT_DIR, 'scripts', 'verify-remote.ps1');
+    const verifyCmd = path.join(ROOT_DIR, 'scripts', 'verify-remote.cmd');
+
+    assert.ok(fs.existsSync(auditSh), 'Brak scripts/audit-server.sh');
+    assert.ok(fs.existsSync(verifyPs1), 'Brak scripts/verify-remote.ps1');
+    assert.ok(fs.existsSync(verifyCmd), 'Brak scripts/verify-remote.cmd');
+
+    const auditContent = fs.readFileSync(auditSh, 'utf-8');
+    const firstLine = auditContent.split(/\r?\n/)[0];
+    assert.match(firstLine, /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    assert.match(auditContent, /devops_audit_status/);
+    assert.match(auditContent, /audit\.prom/);
+  });
 });
+

@@ -34,6 +34,8 @@ VOLUMES_TO_BACKUP=(
     "grafana_data"
     "prometheus_data"
     "ai_router_storage"
+    "runner_zeslownikiem_data"
+    "runner_twojastronawww_data"
 )
 
 mkdir -p "${BACKUP_DIR}"
