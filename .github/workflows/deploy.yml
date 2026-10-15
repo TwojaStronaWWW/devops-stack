@@ -56,9 +56,13 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             chmod +x scripts/*.sh
+            bash "${DEPLOY_PATH}/scripts/setup-audit-timer.sh" >/dev/null 2>&1 || true
 
             cd compose
-            docker compose -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
+            docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
+
+            # Odświeżenie pamięci podręcznej DNS (nscd) w Uptime Kuma po przebudowie kontenera ai-router
+            docker exec uptime-kuma nscd -i hosts >/dev/null 2>&1 || true
 
             echo "==> Wdrozenie zakonczone pomyslnie. Uruchamianie audytu powykonawczego..."
             sleep 5

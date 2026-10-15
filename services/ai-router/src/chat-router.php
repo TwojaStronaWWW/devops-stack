@@ -713,7 +713,7 @@ if (is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narus
 
 // Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
 if (count($sanitizedHistory) === 6) {
-    aiLog(['event' => 'hot_lead_detected', 'site' => $aiSite, 'turns' => 4]);
+    aiLog('hot_lead_detected', ['site' => $aiSite, 'turns' => 4]);
     $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
     if ($ntfyTopic !== '') {
         $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");

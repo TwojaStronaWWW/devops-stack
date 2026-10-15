@@ -4,10 +4,11 @@
 Bezpieczeństwo infrastruktury serwerowej oraz ciągłość działania usług monitoringu i CI/CD są dla nas kwestią priorytetową. Zgodnie z wytycznymi ISO 27001 oraz zasadą Principle of Least Privilege (PoLP) stosujemy rygorystyczne procedury utwardzania systemu (OS Hardening), ochrony tożsamości, izolacji sieciowej i bezpiecznego zarządzania sekretami.
 
 ## 2. Podstawowe Zasady Architektury Bezpieczeństwa
-- **Zero Trust Network:** Brak otwartych portów publicznych w sieci WAN dla usług wewnętrznych (Grafana, Uptime Kuma, Dozzle). Dostęp wyłącznie przez tunel Cloudflare Zero Trust.
-- **Dostęp SSH:** Wyłącznie klucze kryptograficzne Ed25519, blokada logowania hasłem, rate limiting UFW (`limit 22/tcp`) oraz ochrona Fail2ban.
-- **Zero Secret Leakage:** Bezwzględny zakaz commitowania kluczy prywatnych (`.pem`, `.key`, `id_ed25519*`), certyfikatów oraz plików `.env`.
-- **Kopie Zapasowe:** Szyfrowane symetrycznie archiwami `tar.gz` i przesyłane do Cloudflare R2 (`backup-offsite.sh`).
+- **Zero Trust Network & Segmentacja Sieci:** Brak otwartych portów publicznych w sieci WAN dla usług wewnętrznych (Grafana, Uptime Kuma, Dozzle, Prometheus). Dostęp zewnętrzny wyłącznie przez szyfrowany tunel Cloudflare Zero Trust, natomiast kontenery runnerów CI/CD działają w odseparowanej sieci `devops_runners_network` bez dostępu L3 do sieci `devops_internal_network`.
+- **Principle of Least Privilege (PoLP):** Dostęp lokalny do Grafany działa domyślnie w roli tylko do odczytu (`Viewer`), a kontenery działają na nieuprzywilejowanych użytkownikach (`nobody`, `grafana`) z flagą `no-new-privileges:true`.
+- **Dostęp SSH:** Wyłącznie klucze kryptograficzne Ed25519, blokada logowania hasłem (`PasswordAuthentication no`), rate limiting UFW (`limit 22/tcp`) oraz ochrona Fail2ban.
+- **Zero Secret Leakage & Zero-PII:** Bezwzględny zakaz commitowania kluczy prywatnych (`.pem`, `.key`, `id_ed25519*`), certyfikacji oraz plików `.env` i `.env.bak*`. Telemetria AI Routera (`ai-stats.php`) nie przetwarza ani nie loguje treści pytań ani adresów IP.
+- **Kopie Zapasowe i Audyt 24/7:** Archiwa wolumenów i stron WWW (pobierane przez FTPS TLS wraz ze zrzutem MySQL) są weryfikowane pod kątem integralności (`tar -tzf`), opcjonalnie szyfrowane AES-256-CBC i przesyłane do Cloudflare R2 (`backup-offsite.sh`, `backup-websites-lh.sh`), a harmonogram `devops-audit.timer` co 15 minut weryfikuje 5 warstw bezpieczeństwa serwera.
 
 ## 3. Odpowiedzialne Ujawnianie Podatności (Responsible Disclosure)
 Jeżeli odkryłeś potencjalną lukę bezpieczeństwa w konfiguracji, kontenerach lub skryptach infrastruktury, prosimy o natychmiastowe zgłoszenie tego faktu bezpośrednio do zespołu technicznego TwojaStronaWWW.

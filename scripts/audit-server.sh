@@ -429,6 +429,21 @@ else
         fi
     fi
 
+    # Sprawdzenie statusu monitorowanych stron i usług w Uptime Kuma (metryka monitor_status)
+    KUMA_MONITORS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/query?query=monitor_status" 2>/dev/null || true)"
+    if [[ -n "${KUMA_MONITORS}" ]]; then
+        KUMA_UP_COUNT="$(echo "${KUMA_MONITORS}" | grep -oE ',"1"\]\}' | wc -l | tr -d ' ')"
+        KUMA_DOWN_COUNT="$(echo "${KUMA_MONITORS}" | grep -oE ',"0"\]\}' | wc -l | tr -d ' ')"
+        if [[ "${KUMA_DOWN_COUNT}" -eq 0 && "${KUMA_UP_COUNT}" -gt 0 ]]; then
+            pass "Uptime Kuma Monitors: wszystkie monitorowane witryny i usługi (${KUMA_UP_COUNT}) mają status UP."
+        elif [[ "${KUMA_DOWN_COUNT}" -gt 0 ]]; then
+            # Samonaprawa cache DNS (nscd) w Uptime Kuma, jeśli ai-router zmienił wewnętrzne IP po przebudowie
+            docker exec uptime-kuma nscd -i hosts >/dev/null 2>&1 || true
+            warn "Uptime Kuma zgłasza ${KUMA_DOWN_COUNT} niedostępnych monitorów (UP=${KUMA_UP_COUNT}, odświeżono cache DNS nscd)." \
+                 "Sprawdź panel Uptime Kuma (http://127.0.0.1:3001)"
+        fi
+    fi
+
     # Sprawdzenie aktywnych alertów Prometheusa (rules/ai-router.yml) + wysyłka Push do Ntfy.sh
     PROM_ALERTS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/alerts" 2>/dev/null || true)"
     if [[ -n "${PROM_ALERTS}" ]]; then
