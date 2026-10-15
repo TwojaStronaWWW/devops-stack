@@ -60,6 +60,7 @@ START_TIME="$(date +%s)"
 OFFSITE_STATUS=0
 BACKUP_STATUS=0
 BACKUP_VERIFIED=0
+SQLITE_VERIFIED=1
 
 # Konfiguracja eksportu metryk dla Prometheusa / Grafany
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
@@ -86,6 +87,10 @@ devops_backup_status ${status}
 # HELP devops_backup_verified Status weryfikacji integralnosci archiwum tar -tzf (1 = poprawne, 0 = blad)
 # TYPE devops_backup_verified gauge
 devops_backup_verified ${BACKUP_VERIFIED}
+
+# HELP devops_backup_sqlite_verified Status weryfikacji spojnosci baz SQLite PRAGMA quick_check (1 = poprawne, 0 = blad)
+# TYPE devops_backup_sqlite_verified gauge
+devops_backup_sqlite_verified ${SQLITE_VERIFIED}
 
 # HELP devops_backup_size_bytes Rozmiar archiwum zbiorczego kopii zapasowej w bajtach
 # TYPE devops_backup_size_bytes gauge
@@ -124,6 +129,23 @@ for VOLUME in "${VOLUMES_TO_BACKUP[@]}"; do
             -v "${BACKUP_DIR}:/target" \
             alpine:latest \
             tar -czf "/target/${ARCHIVE_NAME}" -C /source .
+
+        # Weryfikacja spójności transakcyjnej baz SQLite (kuma.db / grafana.db) wewnątrz utworzonego archiwum
+        if command -v sqlite3 >/dev/null 2>&1 && [[ "${VOLUME}" == "uptime_kuma_data" || "${VOLUME}" == "grafana_data" ]]; then
+            DB_FILENAME="kuma.db"
+            [[ "${VOLUME}" == "grafana_data" ]] && DB_FILENAME="grafana.db"
+            TMP_SQLITE_DIR="$(mktemp -d)"
+            if tar -xzf "${ARCHIVE_PATH}" -C "${TMP_SQLITE_DIR}" "./${DB_FILENAME}" 2>/dev/null; then
+                tar -xzf "${ARCHIVE_PATH}" -C "${TMP_SQLITE_DIR}" "./${DB_FILENAME}-wal" "./${DB_FILENAME}-shm" 2>/dev/null || true
+                if sqlite3 "${TMP_SQLITE_DIR}/${DB_FILENAME}" "PRAGMA quick_check;" 2>/dev/null | grep -qx "ok"; then
+                    echo "--> [OK SQLite] Baza ${DB_FILENAME} (${VOLUME}) przeszła pomyślnie test PRAGMA quick_check."
+                else
+                    SQLITE_VERIFIED=0
+                    echo "--> [OSTRZEŻENIE SQLite] Baza ${DB_FILENAME} (${VOLUME}) zgłosiła niespójność podczas PRAGMA quick_check!"
+                fi
+            fi
+            rm -rf "${TMP_SQLITE_DIR}"
+        fi
             
         ARCHIVES_CREATED+=("${ARCHIVE_PATH}")
         FILE_SIZE="$(du -h "${ARCHIVE_PATH}" | awk '{print $1}')"

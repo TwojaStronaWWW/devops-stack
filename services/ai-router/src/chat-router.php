@@ -371,6 +371,12 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
     exit;
 }
 
+// Detekcja namiarów kontaktowych (e-mail / telefon) podanych przez klienta — Zero-PII na dysku (pomijamy zapis w cache)
+$hasEmail = (bool)preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/u', $question);
+$hasPhone = (bool)preg_match('/(?:\+?48[\s\-]?)?(?:\d[\s\-]?){8}\d/u', $question);
+$hasContactLead = $hasEmail || $hasPhone;
+$contactChannel = $hasEmail && $hasPhone ? 'email+phone' : ($hasEmail ? 'email' : ($hasPhone ? 'phone' : 'none'));
+
 // Klucz pamięci podręcznej zależny od witryny, mtime pliku wiedzy, kontekstu i znormalizowanego pytania
 $normalizedQ = preg_replace('/\s+/u', ' ', mb_strtolower(trim($question))) ?: '';
 $historySig  = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
@@ -378,7 +384,7 @@ $kbMtime     = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
 $cacheKey    = hash('sha256', "{$aiSite}|{$kbMtime}|{$historySig}|{$normalizedQ}");
 $cacheFile   = $cacheDir . '/' . $cacheKey . '.json';
 
-if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < $cacheTtl) {
+if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < $cacheTtl) {
     $cachedRaw = @file_get_contents($cacheFile);
     $cachedJson = $cachedRaw ? json_decode($cachedRaw, true) : null;
     if (is_array($cachedJson) && !empty($cachedJson['answer'])) {
@@ -424,7 +430,8 @@ $systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {
                      "2. Nigdy nie powtarzaj odpowiedzi ani zdań z wcześniejszych wiadomości. Jeśli klient dopytuje, dodaj nową informację lub zadaj jedno krótkie pytanie doprecyzowujące.\n" .
                      "3. Nie zmyślaj faktów, cen ani usług. Gdy baza nie zawiera odpowiedzi, powiedz to wprost własnymi słowami, powiedz co wiesz w temacie i odeślij do kontaktu (e-mail/telefon z bazy). Nie używaj jednej stałej formułki.\n" .
                      "4. Pamiętaj kontekst rozmowy i odnoś się do tego, co klient już powiedział.\n" .
-                     "5. Odpowiadaj w języku pytania. Pogrubiaj tylko kluczowe kwoty i terminy. Kończ, gdy to naturalne, ewentualnie jednym krótkim pytaniem lub zachętą do bezpłatnej konsultacji (nie w każdej wiadomości).\n\n" .
+                     "5. Odpowiadaj w języku pytania. Pogrubiaj tylko kluczowe kwoty i terminy. Kończ, gdy to naturalne, ewentualnie jednym krótkim pytaniem lub zachętą do bezpłatnej konsultacji (nie w każdej wiadomości).\n" .
+                     "6. Jeśli klient podał w wiadomości swój numer telefonu lub adres e-mail do kontaktu, podziękuj serdecznie i potwierdź, że przekazałeś namiary bezpośrednio do zespołu i wkrótce się z nim skontaktujemy.\n\n" .
                      "Baza wiedzy:\n" . $knowledgeContent;
 
 /**
@@ -699,8 +706,8 @@ if ($answer === null) {
     exit;
 }
 
-// Zapis odpowiedzi w pamięci podręcznej RAG (atomowo, z pominięciem komunikatów SAFETY)
-if (is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
+// Zapis odpowiedzi w pamięci podręcznej RAG (atomowo, z pominięciem komunikatów SAFETY oraz wiadomości z danymi kontaktowymi Zero-PII)
+if (!$hasContactLead && is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
     $tmpCache = $cacheFile . '.' . getmypid() . '.tmp';
     if (@file_put_contents($tmpCache, json_encode([
         'answer' => $answer,
@@ -711,10 +718,31 @@ if (is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narus
     }
 }
 
-// Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
-if (count($sanitizedHistory) === 6) {
+$ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
+
+// Przekazanie namiarów kontaktowych (e-mail / telefon) od klienta prosto na telefon właściciela (Zero-PII w logach i Prometheusie)
+if ($hasContactLead) {
+    aiLog('contact_lead_captured', ['site' => $aiSite, 'channel' => $contactChannel]);
+    if ($ntfyTopic !== '') {
+        $chLead = curl_init("https://ntfy.sh/{$ntfyTopic}");
+        curl_setopt_array($chLead, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => "Klient zostawił namiar kontaktowy ({$contactChannel}) na stronie {$aiSite}:\n\n\"{$question}\"",
+            CURLOPT_HTTPHEADER     => [
+                "Title: Nowy Kontakt z Czatbota ({$aiSite})",
+                'Priority: high',
+                'Tags: telephone_receiver,sparkles'
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 2,
+            CURLOPT_CONNECTTIMEOUT => 1
+        ]);
+        @curl_exec($chLead);
+        curl_close($chLead);
+    }
+} elseif (count($sanitizedHistory) === 6) {
+    // Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
     aiLog('hot_lead_detected', ['site' => $aiSite, 'turns' => 4]);
-    $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
     if ($ntfyTopic !== '') {
         $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");
         curl_setopt_array($chNtfy, [

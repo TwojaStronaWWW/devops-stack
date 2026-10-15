@@ -328,6 +328,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 2,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -352,8 +353,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
+        "h": 7,
+        "w": 4,
         "x": 0,
         "y": 16
       },
@@ -398,6 +399,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 2,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -422,9 +424,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 8,
+        "h": 7,
+        "w": 4,
+        "x": 4,
         "y": 16
       },
       "id": 5,
@@ -468,6 +470,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 2,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -492,9 +495,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
-        "w": 8,
-        "x": 16,
+        "h": 7,
+        "w": 4,
+        "x": 8,
         "y": 16
       },
       "id": 6,
@@ -529,12 +532,123 @@
       "type": "gauge"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "%",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "linearThreshold": 1,
+              "type": "symlog"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "none",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "instant": false,
+          "legendFormat": "Obciążenie CPU Hosta (%)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "instant": false,
+          "legendFormat": "Zużycie Pamięci RAM Hosta (%)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Obciążenie Hosta VPS w Czasie Rzeczywistym (CPU & RAM)",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 23
       },
       "id": 103,
       "title": "Kontenery Dockera (cAdvisor)",
@@ -576,7 +690,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 24
       },
       "id": 7,
       "options": {
@@ -601,7 +715,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sort_desc(max by (name) (container_memory_working_set_bytes{name!=\"\"}))",
+          "expr": "sort_desc(max by (name) (container_memory_working_set_bytes{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}))",
           "instant": true,
           "legendFormat": "{{name}}",
           "range": false,
@@ -638,12 +752,13 @@
             },
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "pointSize": 5,
+            "pointSize": 4,
             "scaleDistribution": {
-              "type": "linear"
+              "linearThreshold": 0.5,
+              "type": "symlog"
             },
-            "showPoints": "auto",
-            "spanNulls": true,
+            "showPoints": "never",
+            "spanNulls": false,
             "stacking": {
               "group": "none",
               "mode": "none"
@@ -652,7 +767,9 @@
               "mode": "off"
             }
           },
+          "decimals": 2,
           "mappings": [],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -670,7 +787,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 24
       },
       "id": 8,
       "options": {
@@ -697,7 +814,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[2m])) * 100",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}[1m])) * 100",
           "instant": false,
           "legendFormat": "{{name}}",
           "range": true,

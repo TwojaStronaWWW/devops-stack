@@ -60,3 +60,43 @@ groups:
         annotations:
           summary: "Duzo blokad rate-limit (429) na AI Routerze"
           description: "{{ $value }} zablokowanych zapytan w 10 min - mozliwy abuse lub zbyt niski limit per IP."
+
+  - name: devops-infrastructure
+    interval: 30s
+    rules:
+      - alert: WebsiteOrServiceDown
+        expr: monitor_status == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Serwis lub strona WWW {{ $labels.monitor_name }} nie odpowiada (DOWN)"
+          description: "Monitor Uptime Kuma dla {{ $labels.monitor_name }} ({{ $labels.monitor_url }}) zwraca status DOWN od ponad 3 minut."
+
+      - alert: SSLCertificateExpiringSoon
+        expr: monitor_cert_days_remaining > 0 and monitor_cert_days_remaining < 14
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certyfikat SSL dla {{ $labels.monitor_name }} wygasa za mniej niz 14 dni"
+          description: "Pozostalo {{ $value }} dni waznosci certyfikatu TLS dla {{ $labels.monitor_name }}."
+
+      - alert: VPSHostDiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Malo wolnego miejsca na dysku systemowym VPS (< 20%)"
+          description: "Na partycji glownej / pozostalo zaledwie {{ $value | printf \"%.1f\" }}% wolnego miejsca."
+
+      - alert: VPSHostMemoryLow
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wysokie zuzycie pamieci RAM na hoscie VPS (< 15% wolnego)"
+          description: "Dostepna pamiec RAM spadla do {{ $value | printf \"%.1f\" }}% calkowitej puli 24 GB."
+

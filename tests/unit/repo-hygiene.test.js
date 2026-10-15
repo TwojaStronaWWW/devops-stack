@@ -273,22 +273,38 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|openRouterApiKey)/.test(router), false);
   });
 
-  it('dashboard AI Router w Grafanie powinien być poprawnym JSON-em z unikalnymi ID paneli i metrykami kaskady', () => {
+  it('dashboard AI Router w Grafanie powinien być poprawnym JSON-em z unikalnymi ID paneli i metrykami kaskady oraz Cache RAG', () => {
     const dashPath = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions', 'ai-router-overview.json');
     const dash = JSON.parse(fs.readFileSync(dashPath, 'utf-8'));
     const ids = dash.panels.map((p) => p.id);
     assert.strictEqual(new Set(ids).size, ids.length, 'Zduplikowane ID paneli w dashboardzie ai-router-overview');
     const exprs = JSON.stringify(dash.panels);
-    for (const metric of ['ai_router_model_suspended', 'ai_router_model_requests_today', 'ai_router_answers_by_depth_total', 'ai_router_model_attempts_total']) {
+    for (const metric of [
+      'ai_router_model_suspended',
+      'ai_router_model_requests_today',
+      'ai_router_answers_by_depth_total',
+      'ai_router_model_attempts_total',
+      'ai_router_cache_hits_total',
+      'ai_router_cache_entries',
+    ]) {
       assert.ok(exprs.includes(metric), `Dashboard nie wizualizuje metryki ${metric}`);
     }
   });
 
-  it('reguły alertów Prometheusa dla AI Routera powinny być zamontowane i wczytywane', () => {
+  it('reguły alertów Prometheusa dla AI Routera oraz infrastruktury VPS powinny być zamontowane i wczytywane', () => {
     const rules = path.join(ROOT_DIR, 'config', 'prometheus', 'rules', 'ai-router.yml');
     assert.ok(fs.existsSync(rules), 'Brak config/prometheus/rules/ai-router.yml');
     const rulesContent = fs.readFileSync(rules, 'utf-8');
-    for (const alertName of ['AIRouterDown', 'AIRouterAllModelsFailed', 'AIRouterPrimaryModelSuspended', 'AIRouterModelQuotaNearLimit']) {
+    for (const alertName of [
+      'AIRouterDown',
+      'AIRouterAllModelsFailed',
+      'AIRouterPrimaryModelSuspended',
+      'AIRouterModelQuotaNearLimit',
+      'WebsiteOrServiceDown',
+      'SSLCertificateExpiringSoon',
+      'VPSHostDiskSpaceLow',
+      'VPSHostMemoryLow',
+    ]) {
       assert.match(rulesContent, new RegExp(`alert:\\s*${alertName}`));
     }
     assert.match(fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'prometheus.yml'), 'utf-8'), /\/etc\/prometheus\/rules\/\*\.yml/);
@@ -337,7 +353,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
   });
 
-  it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf, timer audytu 24/7) powinny być wdrożone', () => {
+  it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów i Kontaktów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf + SQLite, timer audytu 24/7) powinny być wdrożone', () => {
     const statsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'), 'utf-8');
     assert.match(statsPhp, /ai_router_cache_hits_total/);
     assert.match(statsPhp, /ai_router_cache_entries/);
@@ -346,12 +362,15 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
     assert.match(routerPhp, /aiRecordCacheHit/);
     assert.match(routerPhp, /hot_lead_detected/);
+    assert.match(routerPhp, /contact_lead_captured/);
 
     const runnersYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
     assert.match(runnersYml, /name:\s*devops_runners_network/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /devops_backup_verified/);
+    assert.match(offsiteBackup, /devops_backup_sqlite_verified/);
+    assert.match(offsiteBackup, /PRAGMA quick_check/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);

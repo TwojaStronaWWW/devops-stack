@@ -104,6 +104,18 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
     }
 
     before(async () => {
+      const rateDir = path.join(ROUTER_STORAGE_DIR, 'rate_limits');
+      if (fs.existsSync(rateDir)) {
+        for (const f of fs.readdirSync(rateDir)) {
+          if (f.endsWith('.json')) {
+            try {
+              fs.unlinkSync(path.join(rateDir, f));
+            } catch {
+              // ignoruj
+            }
+          }
+        }
+      }
       if (fs.existsSync(statsFilePath)) {
         statsExistedBefore = true;
         statsBackup = fs.readFileSync(statsFilePath);
