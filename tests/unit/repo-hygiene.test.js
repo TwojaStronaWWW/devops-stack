@@ -297,6 +297,18 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(compose, /PHP_CLI_SERVER_WORKERS=4/);
   });
 
+  it('uid źródła danych Prometheus w provisioningu Grafany powinien zgadzać się z uid używanym w dashboardach', () => {
+    const dsYml = fs.readFileSync(path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'datasources', 'prometheus.yml'), 'utf-8');
+    assert.match(dsYml, /uid:\s*prometheus\s*$/m, 'Brak stałego uid: prometheus w źródle danych Grafany');
+    const defsDir = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions');
+    for (const f of fs.readdirSync(defsDir).filter((n) => n.endsWith('.json'))) {
+      const uids = new Set([...fs.readFileSync(path.join(defsDir, f), 'utf-8').matchAll(/"datasource":\s*\{[^}]*"uid":\s*"([^"]+)"/g)].map((m) => m[1]));
+      for (const uid of [...uids].filter((u) => !u.startsWith('--'))) { // '-- Grafana --' to wbudowane źródło adnotacji
+        assert.strictEqual(uid, 'prometheus', `Dashboard ${f} używa nieznanego uid źródła danych: ${uid}`);
+      }
+    }
+  });
+
   it('narzędzia raportowe AI Routera (ai-router-report.sh/.ps1) powinny istnieć', () => {
     const sh = path.join(ROOT_DIR, 'scripts', 'ai-router-report.sh');
     const ps1 = path.join(ROOT_DIR, 'scripts', 'ai-router-report.ps1');
