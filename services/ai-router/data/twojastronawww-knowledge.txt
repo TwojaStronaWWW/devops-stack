@@ -1,0 +1,35 @@
+# BAZA WIEDZY: TWOJASTRONAWWW (Agencja Interaktywna & Software House)
+
+## O nas:
+TwojaStronaWWW to nowoczesny zespół technologiczny specjalizujący się w projektowaniu i wdrażaniu ultraszybkich stron internetowych, sklepów e-commerce, aplikacji webowych oraz inteligentnych asystentów AI dla biznesu. Nasze projekty łączą wysoką konwersję sprzedażową, perfekcyjne SEO (wyniki 95-100/100 w Google PageSpeed Insights) oraz bezpieczeństwo klasy ISO 27001.
+
+## Główna oferta usług:
+1. Nowoczesne Strony Firmowe i Landing Page (One-Page / Multi-Page) - indywidualny projekt graficzny UX/UI, pełna responsywność (RWD) i błyskawiczne ładowanie.
+2. Sklepy Internetowe (E-Commerce) - wdrożenia nastawione na automatyzację sprzedaży, integracje z płatnościami (BLIK, Przelewy24, Stripe) oraz kurierami (InPost Paczkomaty, DPD, DHL).
+3. Wdrożenia Agentów i Czatbotów AI (RAG) - inteligentni asystenci klienta trenowani na bazie wiedzy Twojej firmy, działający 24/7 na stronie WWW bez obciążeń abonamentowych.
+4. Opieka Techniczna, Hosting i Bezpieczeństwo (DevOps & Cloudflare Zero Trust) - stały monitoring dostępności 24/7, codzienne szyfrowane kopie zapasowe (backup offsite), ochrona WAF/DDoS i aktualizacje.
+5. Audyty SEO i Optymalizacja Wydajności (Core Web Vitals) - przyspieszanie istniejących stron i poprawa widoczności w Google.
+
+## Orientacyjny cennik i pakiety:
+- Strona typu Landing Page / Wizytówka Start: od 1 500 PLN netto (czas realizacji: ok. 5-7 dni roboczych).
+- Rozbudowana Strona Firmowa (Multi-Page + CMS + SEO): od 2 900 PLN netto (czas realizacji: 2-3 tygodnie).
+- Sklep Internetowy / Dedykowana Aplikacja Webowa: wycena indywidualna (zazwyczaj od 4 500 PLN netto).
+- Wdrożenie Asystenta AI (Czatbot z bazą wiedzy firmy): od 900 PLN netto (jednorazowa konfiguracja z wykorzystaniem darmowych limitów API).
+- Abonament opieki serwisowej i monitoringu 24/7: od 150 PLN netto / miesiąc.
+
+## Jak wygląda proces współpracy (Krok po kroku)?
+1. Bezpłatna konsultacja i analiza potrzeb (dobór technologii i wycena w 24h).
+2. Projekt architektury i makiety wizualnej (UX/UI).
+3. Kodowanie, optymalizacja szybkości, integracja treści oraz wdrożenie certyfikatu SSL i zabezpieczeń.
+4. Testy jakościowe, uruchomienie na domenie klienta oraz szkolenie z obsługi.
+5. Gwarancja i wsparcie powdrożeniowe.
+
+## Dlaczego warto wybrać TwojaStronaWWW?
+- Zero wolnych, przeładowanych szablonów - piszemy czysty, zoptymalizowany kod.
+- Bezpieczeństwo i monitoring 24/7 na własnej infrastrukturze chmurowej.
+- Wsparcie w pozyskiwaniu klientów (SEO, integracja z Google Moja Firma, analityka i czatboty AI).
+
+## Kontakt i bezpłatna wycena:
+- Strona WWW: https://twojastronawww.pl
+- E-mail: kontakt@twojastronawww.pl
+- Aby otrzymać darmową wycenę projektu, zostaw wiadomość w formularzu kontaktowym na stronie lub napisz bezpośrednio na adres e-mail, opisując krótko swoją branżę i cel strony.

@@ -56,6 +56,7 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../config/prometheus/rules:/etc/prometheus/rules:ro
       - ../config/prometheus/kuma_password:/etc/prometheus/kuma_password:ro
       - prometheus_data:/prometheus
     command:
@@ -281,7 +282,11 @@ services:
       - ai_router_storage:/app/storage
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.8-flash}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - MODEL_DAILY_LIMITS=${MODEL_DAILY_LIMITS:-}
+      - PHP_CLI_SERVER_WORKERS=4
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl}
       - TZ=${TZ:-Europe/Warsaw}
     deploy:

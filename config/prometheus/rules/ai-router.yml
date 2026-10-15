@@ -1,0 +1,62 @@
+groups:
+  - name: ai-router
+    interval: 30s
+    rules:
+      - alert: AIRouterDown
+        expr: up{job="ai-router"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI Router nie odpowiada na scrape"
+          description: "Kontener ai-router jest niedostepny od 2 minut - czatboty na stronach nie dzialaja."
+
+      - alert: AIRouterAllModelsFailed
+        expr: increase(ai_router_requests_total{outcome="all_models_failed"}[10m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Zaden model AI nie odpowiedzial (HTTP 502)"
+          description: "W ostatnich 10 minutach {{ $value }} zapytan zakonczylo sie bledem wszystkich modeli kaskady."
+
+      - alert: AIRouterPrimaryModelSuspended
+        expr: ai_router_model_suspended * on(model) group_left() (ai_router_model_info{position="0"}) == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model glowny {{ $labels.model }} zawieszony (cooldown)"
+          description: "Router przelacza ruch na modele zapasowe - sprawdz limity Free Tier (429)."
+
+      - alert: AIRouterFallbackInUse
+        expr: sum(increase(ai_router_answers_by_depth_total{depth!="0"}[15m])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "Router odpowiada modelami zapasowymi"
+          description: "{{ $value }} odpowiedzi w ostatnich 15 min pochodzilo z modelu innego niz pierwszy w kaskadzie."
+
+      - alert: AIRouterModelQuotaNearLimit
+        expr: ai_router_model_requests_today / ai_router_model_daily_limit > 0.8
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model {{ $labels.model }} zuzyl >80% dziennego limitu"
+          description: "Zuzycie dzienne (doba Pacyficzna): {{ $value | humanizePercentage }}."
+
+      - alert: AIRouterNoFallbackProvider
+        expr: sum(ai_router_provider_configured{provider=~"groq|openrouter"}) == 0
+        for: 1h
+        labels:
+          severity: info
+        annotations:
+          summary: "Brak skonfigurowanego zapasowego providera (Groq/OpenRouter)"
+          description: "Kaskada opiera sie wylacznie na modelach Gemini - jedna awaria konta/klucza wylacza czatboty."
+
+      - alert: AIRouterRateLimitSpike
+        expr: increase(ai_router_requests_total{outcome="rate_limited"}[10m]) > 20
+        labels:
+          severity: warning
+        annotations:
+          summary: "Duzo blokad rate-limit (429) na AI Routerze"
+          description: "{{ $value }} zablokowanych zapytan w 10 min - mozliwy abuse lub zbyt niski limit per IP."

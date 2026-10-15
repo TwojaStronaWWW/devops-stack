@@ -20,7 +20,9 @@ const responseBody = document.getElementById('responseBody');
 const responseLatency = document.getElementById('responseLatency');
 const errorAlert = document.getElementById('errorAlert');
 
-// Inicjalizacja domyślnego site_id
+// Pamięć rozmowy per site_id w testerze
+const historyBySite = {};
+
 if (siteSelect) {
   siteSelect.value = SITE_ID;
 }
@@ -63,6 +65,7 @@ chatForm.addEventListener('submit', async (e) => {
   // Pobranie site_id (z selektora lub stałej) oraz URL routera
   const currentSiteId = siteSelect ? siteSelect.value : SITE_ID;
   const routerUrl = routerUrlInput.value.trim() || 'http://localhost:8085/chat-router.php';
+  const siteHistory = historyBySite[currentSiteId] || [];
 
   setLoading(true);
   const startTime = performance.now();
@@ -75,7 +78,8 @@ chatForm.addEventListener('submit', async (e) => {
       },
       body: JSON.stringify({
         site_id: currentSiteId,
-        question: question
+        question: question,
+        history: siteHistory.slice(-8)
       })
     });
 
@@ -99,9 +103,15 @@ chatForm.addEventListener('submit', async (e) => {
       throw new Error(data.error || `Błąd serwera (HTTP ${response.status})`);
     }
 
+    // Zapisanie do historii konwersacji
+    siteHistory.push({ role: 'user', text: question });
+    siteHistory.push({ role: 'model', text: data.answer });
+    historyBySite[currentSiteId] = siteHistory.slice(-8);
+
     // Wyświetlenie sukcesu
+    const modelBadge = data.model ? ` • ${data.model}` : '';
     responseBody.textContent = data.answer;
-    responseLatency.textContent = `Czas: ${latencySec}s • [${data.site_id}]`;
+    responseLatency.textContent = `Czas: ${latencySec}s • [${data.site_id}]${modelBadge}`;
     responseCard.style.display = 'block';
 
   } catch (err) {

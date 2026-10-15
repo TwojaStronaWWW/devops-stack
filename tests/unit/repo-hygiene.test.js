@@ -174,8 +174,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const requiredRouterFiles = [
       path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'katosalsahub-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'fuegolingua-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'storage', 'rate_limits', '.gitkeep'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'),
@@ -188,7 +190,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     }
   });
 
-  it('skrypt chat-router.php powinien realizować wymogi bezpieczeństwa (ISO 27001 / brak twardych kluczy)', () => {
+  it('skrypt chat-router.php powinien realizować wymogi bezpieczeństwa, pamięci konwersacji i kaskadowego fallbacku modeli (ISO 27001)', () => {
     const routerPhp = path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php');
     const content = fs.readFileSync(routerPhp, 'utf-8');
 
@@ -202,6 +204,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /\/health/);
     // Zabezpieczenie Content-Type
     assert.match(content, /application\/json/);
+    // Domyślny model gemini-3.8-flash oraz kaskada fallbacku i pamięć Multi-Turn
+    assert.match(content, /gemini-3\.8-flash/);
+    assert.match(content, /\$sanitizedHistory/);
   });
 
   it('docker-compose.yml powinien zawierać zdefiniowany serwis ai-router oraz wolumen ai_router_storage', () => {
@@ -250,6 +255,54 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.strictEqual(kumaScript.includes('https://dancepuls.pl"'), false, 'Wykryto stary, niedziałający URL https://dancepuls.pl');
     assert.match(kumaScript, /deleteMonitor/);
     assert.match(kumaScript, /monitorList/);
+  });
+
+  it('telemetria AI Routera (ai-stats.php) nie powinna logować treści pytań, IP ani kluczy API (ISO 27001)', () => {
+    const statsPath = path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php');
+    assert.ok(fs.existsSync(statsPath), 'Brak services/ai-router/src/ai-stats.php');
+    const stats = fs.readFileSync(statsPath, 'utf-8');
+    assert.strictEqual(stats.includes('AIzaSy'), false, 'Klucz API w ai-stats.php');
+    assert.strictEqual(/REMOTE_ADDR|CF_CONNECTING_IP|X_FORWARDED_FOR/.test(stats), false, 'ai-stats.php nie może operować na adresach IP');
+    assert.match(stats, /function aiRenderMetrics/);
+    assert.match(stats, /function aiCooldownRemaining/);
+
+    const router = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    assert.match(router, /require_once __DIR__ \. '\/ai-stats\.php'/);
+    assert.match(router, /register_shutdown_function/);
+    // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey
+    assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|openRouterApiKey)/.test(router), false);
+  });
+
+  it('dashboard AI Router w Grafanie powinien być poprawnym JSON-em z unikalnymi ID paneli i metrykami kaskady', () => {
+    const dashPath = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions', 'ai-router-overview.json');
+    const dash = JSON.parse(fs.readFileSync(dashPath, 'utf-8'));
+    const ids = dash.panels.map((p) => p.id);
+    assert.strictEqual(new Set(ids).size, ids.length, 'Zduplikowane ID paneli w dashboardzie ai-router-overview');
+    const exprs = JSON.stringify(dash.panels);
+    for (const metric of ['ai_router_model_suspended', 'ai_router_model_requests_today', 'ai_router_answers_by_depth_total', 'ai_router_model_attempts_total']) {
+      assert.ok(exprs.includes(metric), `Dashboard nie wizualizuje metryki ${metric}`);
+    }
+  });
+
+  it('reguły alertów Prometheusa dla AI Routera powinny być zamontowane i wczytywane', () => {
+    const rules = path.join(ROOT_DIR, 'config', 'prometheus', 'rules', 'ai-router.yml');
+    assert.ok(fs.existsSync(rules), 'Brak config/prometheus/rules/ai-router.yml');
+    const rulesContent = fs.readFileSync(rules, 'utf-8');
+    for (const alertName of ['AIRouterDown', 'AIRouterAllModelsFailed', 'AIRouterPrimaryModelSuspended', 'AIRouterModelQuotaNearLimit']) {
+      assert.match(rulesContent, new RegExp(`alert:\\s*${alertName}`));
+    }
+    assert.match(fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'prometheus.yml'), 'utf-8'), /\/etc\/prometheus\/rules\/\*\.yml/);
+    const compose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'docker-compose.yml'), 'utf-8');
+    assert.match(compose, /config\/prometheus\/rules:\/etc\/prometheus\/rules:ro/);
+    assert.match(compose, /PHP_CLI_SERVER_WORKERS=4/);
+  });
+
+  it('narzędzia raportowe AI Routera (ai-router-report.sh/.ps1) powinny istnieć', () => {
+    const sh = path.join(ROOT_DIR, 'scripts', 'ai-router-report.sh');
+    const ps1 = path.join(ROOT_DIR, 'scripts', 'ai-router-report.ps1');
+    assert.ok(fs.existsSync(sh), 'Brak scripts/ai-router-report.sh');
+    assert.ok(fs.existsSync(ps1), 'Brak scripts/ai-router-report.ps1');
+    assert.match(fs.readFileSync(sh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
   });
 });
 

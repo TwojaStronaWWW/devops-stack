@@ -28,17 +28,13 @@ if ($requestUri === '/widget.js') {
 // -----------------------------------------------------------------------------
 // 1. ENDPOINT METRYK PROMETHEUSA (/metrics) ORAZ HEALTHCHECK (/health)
 // -----------------------------------------------------------------------------
+require_once __DIR__ . '/ai-stats.php';
+
 if ($requestUri === '/metrics' || ($requestUri === '/health' && str_contains($_SERVER['HTTP_USER_AGENT'] ?? '', 'Prometheus'))) {
     header('Content-Type: text/plain; version=0.0.4; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
     http_response_code(200);
-    $hasKey = getenv('GEMINI_API_KEY') ? 1 : 0;
-    echo "# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)\n";
-    echo "# TYPE ai_router_status gauge\n";
-    echo "ai_router_status 1\n";
-    echo "# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)\n";
-    echo "# TYPE ai_router_api_key_configured gauge\n";
-    echo "ai_router_api_key_configured {$hasKey}\n";
+    echo aiRenderMetrics();
     exit;
 }
 
@@ -57,6 +53,33 @@ if ($requestUri === '/health') {
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+// -----------------------------------------------------------------------------
+// 1b. TELEMETRIA ŻĄDAŃ CZATU (jedno miejsce zapisu wyniku niezależnie od ścieżki exit)
+// -----------------------------------------------------------------------------
+$aiStart    = microtime(true);
+$aiSite     = 'unknown';
+$usedModel  = null;
+$aiDepth    = null;
+$aiAttempts = 0;
+register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, $aiStart): void {
+    $code = http_response_code() ?: 200;
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204) {
+        return; // preflight CORS nie jest zapytaniem czatu
+    }
+    $outcome = match (true) {
+        $code === 200 => 'success',
+        $code === 400 => 'bad_request',
+        $code === 403 => 'cors_forbidden',
+        $code === 404 => 'no_knowledge_base',
+        $code === 405 => 'method_not_allowed',
+        $code === 429 => 'rate_limited',
+        $code === 500 => 'config_error',
+        $code === 502 => 'all_models_failed',
+        default       => 'other',
+    };
+    aiRecordRequest($aiSite, $outcome, $code, (microtime(true) - $aiStart) * 1000, $usedModel, $aiDepth, $aiAttempts);
+});
 
 // -----------------------------------------------------------------------------
 // 2. ZABEZPIECZENIE CORS & BIAŁA LISTA DOMEN
@@ -243,6 +266,7 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($payload)) {
 
 $siteId = trim((string)($payload['site_id'] ?? ''));
 $question = trim((string)($payload['question'] ?? $payload['message'] ?? ''));
+$rawHistory = is_array($payload['history'] ?? null) ? $payload['history'] : [];
 
 // Rygorystyczna sanityzacja site_id (anty Path Traversal)
 if (!preg_match('/^[a-z0-9_-]{2,32}$/i', $siteId)) {
@@ -253,6 +277,7 @@ if (!preg_match('/^[a-z0-9_-]{2,32}$/i', $siteId)) {
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
+$aiSite = strtolower($siteId); // etykieta telemetrii - ustawiana wyłącznie po walidacji regexem
 
 if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
     http_response_code(400);
@@ -261,6 +286,24 @@ if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
         'error'   => 'Bad Request: Treść pytania musi zawierać od 2 do 2000 znaków.'
     ], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// Sanityzacja historii rozmowy (Multi-Turn Agent Memory - max 8 ostatnich wiadomości)
+$sanitizedHistory = [];
+foreach (array_slice($rawHistory, -8) as $turn) {
+    if (!is_array($turn)) continue;
+    $role = strtolower(trim((string)($turn['role'] ?? '')));
+    $text = trim((string)($turn['text'] ?? $turn['content'] ?? ''));
+    if ($text === '' || mb_strlen($text) > 1200) {
+        $text = mb_substr($text, 0, 1200);
+    }
+    if ($text === '') continue;
+
+    $normalizedRole = ($role === 'assistant' || $role === 'model' || $role === 'bot') ? 'model' : 'user';
+    $sanitizedHistory[] = [
+        'role' => $normalizedRole,
+        'text' => $text
+    ];
 }
 
 // -----------------------------------------------------------------------------
@@ -301,10 +344,13 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
 }
 
 // -----------------------------------------------------------------------------
-// 6. INTEGRACJA Z GOOGLE GEMINI API (CURL)
+// 6. INTEGRACJA Z SILNIKIEM AI (GEMINI 2.5 FLASH + MULTI-MODEL / GROQ FALLBACK)
 // -----------------------------------------------------------------------------
-$geminiApiKey = getenv('GEMINI_API_KEY');
-if (!$geminiApiKey) {
+$geminiApiKey = getenv('GEMINI_API_KEY') ?: '';
+$groqApiKey = getenv('GROQ_API_KEY') ?: '';
+$openRouterApiKey = getenv('OPENROUTER_API_KEY') ?: '';
+
+if ($geminiApiKey === '' && $groqApiKey === '' && $openRouterApiKey === '') {
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -313,14 +359,80 @@ if (!$geminiApiKey) {
     exit;
 }
 
-$geminiModel = getenv('GEMINI_MODEL') ?: 'gemini-1.5-flash';
+// Automatyczna korekta wycofanych modeli (1.5 / 2.0 / 2.5) na najnowszy darmowy gemini-3.8-flash (patrz aiConfiguredModel)
+$configuredModel = aiConfiguredModel();
 
-// Budowa System Promptu zgodnie z wytycznymi RAG
-$systemInstruction = "Jesteś oficjalnym asystentem na stronie {$siteId}. " .
-                     "Odpowiadaj na pytania użytkowników WYŁĄCZNIE na podstawie poniższego kontekstu. " .
-                     "Nie zmyślaj. Jeśli w kontekście nie ma odpowiedzi, odpowiedz grzecznie: 'Przepraszam, ale nie posiadam takich informacji w mojej bazie wiedzy. Zachęcam do bezpośredniego kontaktu z obsługą strony.' " .
-                     "Odpowiadaj zwięźle, uprzejmie i w tym samym języku, w którym zadano pytanie.\n\n" .
-                     "Kontekst wiedzy:\n" . $knowledgeContent;
+// Budowa System Promptu zgodnie z wytycznymi Agent RAG
+$systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {$siteId}. Rozmawiasz po ludzku, jak pracownik, a nie jak ulotka. " .
+                     "Opierasz się WYŁĄCZNIE na poniższej bazie wiedzy.\n" .
+                     "Zasady:\n" .
+                     "1. Odpowiedz bezpośrednio na to, o co pyta klient, w 1-4 zdaniach. Nie wklejaj całego cennika ani ogólnej prezentacji oferty, jeśli nikt o to nie prosił.\n" .
+                     "2. Nigdy nie powtarzaj odpowiedzi ani zdań z wcześniejszych wiadomości. Jeśli klient dopytuje, dodaj nową informację lub zadaj jedno krótkie pytanie doprecyzowujące.\n" .
+                     "3. Nie zmyślaj faktów, cen ani usług. Gdy baza nie zawiera odpowiedzi, powiedz to wprost własnymi słowami, powiedz co wiesz w temacie i odeślij do kontaktu (e-mail/telefon z bazy). Nie używaj jednej stałej formułki.\n" .
+                     "4. Pamiętaj kontekst rozmowy i odnoś się do tego, co klient już powiedział.\n" .
+                     "5. Odpowiadaj w języku pytania. Pogrubiaj tylko kluczowe kwoty i terminy. Kończ, gdy to naturalne, ewentualnie jednym krótkim pytaniem lub zachętą do bezpłatnej konsultacji (nie w każdej wiadomości).\n\n" .
+                     "Baza wiedzy:\n" . $knowledgeContent;
+
+/**
+ * Pomocnicza funkcja wykonująca żądanie HTTP POST JSON przez cURL
+ */
+function executeJsonPost(string $url, array $payload, array $headers = []): array {
+    $curlOptions = [
+        CURLOPT_URL            => $url,
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => array_merge([
+            'Content-Type: application/json',
+            'User-Agent: TwojaStronaWWW-AIRouter/2.0'
+        ], $headers),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 22,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2
+    ];
+
+    if (PHP_OS_FAMILY === 'Windows' && !ini_get('curl.cainfo')) {
+        $windowsCaCandidates = [
+            'C:/Program Files/Git/usr/ssl/certs/ca-bundle.crt',
+            'C:/Program Files/Git/ucrt64/etc/ssl/certs/ca-bundle.crt',
+            'C:/Program Files/Git/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
+        ];
+        foreach ($windowsCaCandidates as $caCandidate) {
+            if (file_exists($caCandidate)) {
+                $curlOptions[CURLOPT_CAINFO] = $caCandidate;
+                break;
+            }
+        }
+    }
+
+    $ch = curl_init();
+    curl_setopt_array($ch, $curlOptions);
+    $body = curl_exec($ch);
+    $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    return [
+        'httpCode' => $httpCode,
+        'body'     => $body,
+        'error'    => $error,
+        'json'     => is_string($body) ? json_decode($body, true) : null
+    ];
+}
+
+// Budowa wieloturowej zawartości rozmowy dla Gemini API
+$geminiContents = [];
+foreach ($sanitizedHistory as $turn) {
+    $geminiContents[] = [
+        'role'  => $turn['role'],
+        'parts' => [['text' => $turn['text']]]
+    ];
+}
+$geminiContents[] = [
+    'role'  => 'user',
+    'parts' => [['text' => $question]]
+];
 
 $geminiPayload = [
     'system_instruction' => [
@@ -328,89 +440,209 @@ $geminiPayload = [
             ['text' => $systemInstruction]
         ]
     ],
-    'contents' => [
-        [
-            'role'  => 'user',
-            'parts' => [
-                ['text' => $question]
-            ]
-        ]
-    ],
+    'contents' => $geminiContents,
     'generationConfig' => [
-        'temperature'     => 0.2,
-        'maxOutputTokens' => 800
+        'temperature'     => 0.6,
+        'maxOutputTokens' => 2048
     ]
 ];
 
-$apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$geminiModel}:generateContent?key={$geminiApiKey}";
+$answer = null;
+$usedModel = null;
+$lastErrorMsg = 'Nieznany błąd komunikacji z modelem AI.';
 
-$curlOptions = [
-    CURLOPT_URL            => $apiUrl,
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => json_encode($geminiPayload, JSON_UNESCAPED_UNICODE),
-    CURLOPT_HTTPHEADER     => [
-        'Content-Type: application/json',
-        'User-Agent: TwojaStronaWWW-AIRouter/1.0'
-    ],
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 25,
-    CURLOPT_CONNECTTIMEOUT => 5,
-    CURLOPT_SSL_VERIFYPEER => true,
-    CURLOPT_SSL_VERIFYHOST => 2
-];
+// Stan telemetrii kaskady: pozycja w łańcuchu, liczba prób, zawieszone modele (cooldown)
+$aiStats    = aiStatsRead();
+$chainPos   = -1;
+$aiDepth    = null;
+$aiAttempts = 0;
+$allCooling = true;
+foreach (aiFullChain() as $aiChainItem) {
+    if (aiCooldownRemaining($aiStats, $aiChainItem['model']) === 0) {
+        $allCooling = false;
+        break;
+    }
+}
 
-// Automatyczna detekcja certyfikatów CA w środowisku lokalnym Windows
-if (PHP_OS_FAMILY === 'Windows' && !ini_get('curl.cainfo')) {
-    $windowsCaCandidates = [
-        'C:/Program Files/Git/usr/ssl/certs/ca-bundle.crt',
-        'C:/Program Files/Git/ucrt64/etc/ssl/certs/ca-bundle.crt',
-        'C:/Program Files/Git/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'
-    ];
-    foreach ($windowsCaCandidates as $caCandidate) {
-        if (file_exists($caCandidate)) {
-            $curlOptions[CURLOPT_CAINFO] = $caCandidate;
+// Kaskada aktywnych darmowych modeli Gemini 3.x / Gemma 4 (każdy posiada osobną pulę Free Tier RPM/RPD)
+// Model zawieszony po 429/5xx/404 jest pomijany do końca cooldownu (chyba że wszystkie są zawieszone).
+if ($geminiApiKey !== '') {
+    $geminiModelChain = aiGeminiChain($configuredModel);
+
+    foreach ($geminiModelChain as $candidateModel) {
+        $chainPos++;
+        $cdLeft = aiCooldownRemaining($aiStats, $candidateModel);
+        if ($cdLeft > 0 && !$allCooling) {
+            aiRecordSkip('gemini', $candidateModel, $cdLeft);
+            continue;
+        }
+
+        $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$candidateModel}:generateContent?key={$geminiApiKey}";
+        $t0 = microtime(true);
+        $res = executeJsonPost($apiUrl, $geminiPayload);
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        if ($res['error'] !== '' || $res['body'] === false) {
+            $lastErrorMsg = 'Błąd komunikacji z modelem AI: ' . ($res['error'] ?: 'Nieznany błąd cURL.');
+            [$cls, $cd] = aiClassify(0, null, (string)($res['error'] ?: 'curl'));
+            aiRecordAttempt('gemini', $candidateModel, $cls, 0, $ms, $cd);
+            continue;
+        }
+
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $parts = $res['json']['candidates'][0]['content']['parts'] ?? [];
+            $candidateText = null;
+            if (is_array($parts)) {
+                foreach ($parts as $part) {
+                    if (!empty($part['thought'])) continue;
+                    if (isset($part['text']) && trim((string)$part['text']) !== '') {
+                        $candidateText = ($candidateText === null) ? $part['text'] : ($candidateText . "\n" . $part['text']);
+                    }
+                }
+            }
+            if ($candidateText !== null && trim($candidateText) !== '') {
+                $answer = trim($candidateText);
+                $usedModel = $candidateModel;
+                $aiDepth = $chainPos;
+                aiRecordAttempt('gemini', $candidateModel, 'ok', 200, $ms);
+                break;
+            }
+            $finishReason = $res['json']['candidates'][0]['finishReason'] ?? 'UNKNOWN';
+            if ($finishReason === 'SAFETY') {
+                $answer = 'Przepraszam, zapytanie narusza zasady bezpieczeństwa treści.';
+                $usedModel = $candidateModel;
+                $aiDepth = $chainPos;
+                aiRecordAttempt('gemini', $candidateModel, 'safety', 200, $ms);
+                break;
+            }
+            aiRecordAttempt('gemini', $candidateModel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], '', is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('gemini', $candidateModel, $cls, $res['httpCode'], $ms, $cd);
+        }
+
+        $apiErrorMessage = $res['json']['error']['message'] ?? "HTTP {$res['httpCode']}";
+        $lastErrorMsg = "Błąd Gemini API ({$candidateModel}): {$apiErrorMessage}";
+
+        // Jeśli klucz API jest całkowicie nieprawidłowy (400 API_KEY_INVALID / 403), nie ponawiamy kolejnych modeli Gemini
+        if ($res['httpCode'] === 400 && str_contains($apiErrorMessage, 'API_KEY_INVALID')) {
             break;
         }
     }
 }
 
-$ch = curl_init();
-curl_setopt_array($ch, $curlOptions);
+// Darmowy Fallback 2: Groq Cloud API (Llama 3.3 70B Versatile - Free Tier LPU)
+if ($answer === null && $groqApiKey !== '') {
+    $groqModel = getenv('GROQ_MODEL') ?: 'llama-3.3-70b-versatile';
+    $groqLabel = "groq/{$groqModel}";
+    $chainPos++;
+    $cdLeft = aiCooldownRemaining($aiStats, $groqLabel);
+    if ($cdLeft > 0 && !$allCooling) {
+        aiRecordSkip('groq', $groqLabel, $cdLeft);
+    } else {
+        $messages = [['role' => 'system', 'content' => $systemInstruction]];
+        foreach ($sanitizedHistory as $turn) {
+            $messages[] = [
+                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+                'content' => $turn['text']
+            ];
+        }
+        $messages[] = ['role' => 'user', 'content' => $question];
 
-$responseBody = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlError = curl_error($ch);
-curl_close($ch);
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            'https://api.groq.com/openai/v1/chat/completions',
+            [
+                'model'       => $groqModel,
+                'messages'    => $messages,
+                'temperature' => 0.25,
+                'max_tokens'  => 900
+            ],
+            ["Authorization: Bearer {$groqApiKey}"]
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
 
-if ($responseBody === false || $curlError !== '') {
+        $candidateText = null;
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+        }
+        if ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $groqLabel;
+            $aiDepth = $chainPos;
+            aiRecordAttempt('groq', $groqLabel, 'ok', 200, $ms);
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('groq', $groqLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('groq', $groqLabel, $cls, $res['httpCode'], $ms, $cd);
+        }
+    }
+}
+
+// Darmowy Fallback 3: OpenRouter Free Models (np. meta-llama/llama-3.3-70b-instruct:free)
+if ($answer === null && $openRouterApiKey !== '') {
+    $orModel = getenv('OPENROUTER_MODEL') ?: 'meta-llama/llama-3.3-70b-instruct:free';
+    $orLabel = "openrouter/{$orModel}";
+    $chainPos++;
+    $cdLeft = aiCooldownRemaining($aiStats, $orLabel);
+    if ($cdLeft > 0 && !$allCooling) {
+        aiRecordSkip('openrouter', $orLabel, $cdLeft);
+    } else {
+        $messages = [['role' => 'system', 'content' => $systemInstruction]];
+        foreach ($sanitizedHistory as $turn) {
+            $messages[] = [
+                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+                'content' => $turn['text']
+            ];
+        }
+        $messages[] = ['role' => 'user', 'content' => $question];
+
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            'https://openrouter.ai/api/v1/chat/completions',
+            [
+                'model'       => $orModel,
+                'messages'    => $messages,
+                'temperature' => 0.25,
+                'max_tokens'  => 900
+            ],
+            [
+                "Authorization: Bearer {$openRouterApiKey}",
+                'HTTP-Referer: https://twojastronawww.pl',
+                'X-Title: TwojaStronaWWW AI Router'
+            ]
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        $candidateText = null;
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+        }
+        if ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $orLabel;
+            $aiDepth = $chainPos;
+            aiRecordAttempt('openrouter', $orLabel, 'ok', 200, $ms);
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('openrouter', $orLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('openrouter', $orLabel, $cls, $res['httpCode'], $ms, $cd);
+        }
+    }
+}
+
+if ($answer === null) {
     http_response_code(502);
     echo json_encode([
         'success' => false,
-        'error'   => 'Błąd komunikacji z modelem AI: ' . ($curlError ?: 'Nieznany błąd cURL.')
+        'error'   => $lastErrorMsg
     ], JSON_UNESCAPED_UNICODE);
     exit;
-}
-
-$geminiResponse = json_decode($responseBody, true);
-
-if ($httpCode !== 200 || !is_array($geminiResponse)) {
-    http_response_code(502);
-    $apiErrorMessage = $geminiResponse['error']['message'] ?? 'Nieoczekiwana odpowiedź API Gemini.';
-    echo json_encode([
-        'success' => false,
-        'error'   => 'Błąd Gemini API: ' . $apiErrorMessage
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-// Ekstrakcja czystego tekstu odpowiedzi
-$answer = $geminiResponse['candidates'][0]['content']['parts'][0]['text'] ?? null;
-
-if ($answer === null || trim($answer) === '') {
-    $finishReason = $geminiResponse['candidates'][0]['finishReason'] ?? 'UNKNOWN';
-    $answer = ($finishReason === 'SAFETY')
-        ? 'Przepraszam, zapytanie narusza zasady bezpieczeństwa treści.'
-        : 'Przepraszam, nie udało się wygenerować odpowiedzi.';
 }
 
 // -----------------------------------------------------------------------------
@@ -420,5 +652,7 @@ http_response_code(200);
 echo json_encode([
     'success' => true,
     'site_id' => $siteId,
-    'answer'  => trim($answer)
+    'model'   => $usedModel,
+    'answer'  => $answer
 ], JSON_UNESCAPED_UNICODE);
+

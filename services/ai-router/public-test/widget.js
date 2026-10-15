@@ -1,27 +1,110 @@
 /**
- * TwojaStronaWWW - Universal Embeddable AI Chat Widget
+ * TwojaStronaWWW - Universal Embeddable AI Agent Widget v2.0
  * 
- * Samodzielny, bezkonfliktowy widget czatu (Vanilla JS & CSS).
+ * Samodzielny, bezkonfliktowy widget एजenta AI (Vanilla JS & CSS):
+ * - Pamięć rozmowy (Multi-Turn Context + sessionStorage)
+ * - Bezpieczne formatowanie Markdown (pogrubienia, listy, klikalne linki/e-maile)
+ * - Sugerowane szybkie pytania (Quick Replies per site_id)
+ * 
  * Użycie na dowolnej stronie:
  * <script src="https://ai.twojastronawww.pl/widget.js" data-site-id="katosalsahub" defer></script>
  */
 (function() {
   'use strict';
 
-  // Pobranie konfiguracji ze skryptu ładującego
   const currentScript = document.currentScript || (function() {
     const scripts = document.getElementsByTagName('script');
     return scripts[scripts.length - 1];
   })();
 
-  const SITE_ID = currentScript?.getAttribute('data-site-id') || 'katosalsahub';
+  const SITE_ID = (currentScript?.getAttribute('data-site-id') || 'katosalsahub').toLowerCase();
   const ROUTER_URL = currentScript?.getAttribute('data-router-url') || 'https://ai.twojastronawww.pl/chat-router.php';
   const TITLE = currentScript?.getAttribute('data-title') || 'Asystent AI';
+  const STORAGE_KEY = 'tsw_ai_history_' + SITE_ID;
 
-  // Zapobieganie wielokrotnemu wstrzykiwaniu
   if (document.getElementById('tsw-ai-widget-root')) return;
 
-  // Wstrzyknięcie stylów CSS w izolowany sposób
+  // Domyślne podpowiedzi szybkich pytań dopasowane do strony
+  const QUICK_PROMPTS_MAP = {
+    katosalsahub: [
+      'Ile kosztuje karnet?',
+      'Czy akceptujecie Multisport?',
+      'Kursy od podstaw (P0)'
+    ],
+    fuegolingua: [
+      'Bezpłatna lekcja próbna',
+      'Ile kosztuje kurs hiszpańskiego?',
+      'Zajęcia indywidualne czy grupowe?'
+    ],
+    twojastronawww: [
+      'Ile kosztuje strona WWW?',
+      'Wdrożenie czatbota AI',
+      'Jak wygląda współpraca?'
+    ]
+  };
+  const quickPrompts = QUICK_PROMPTS_MAP[SITE_ID] || QUICK_PROMPTS_MAP.twojastronawww;
+
+  /**
+   * Bezpieczny mikro-parser Markdown (100% odporny na XSS)
+   */
+  function formatMarkdown(rawText) {
+    if (!rawText) return '';
+    // 1. Escapowanie HTML
+    let safe = String(rawText)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+    // 2. Pogrubienia **tekst**
+    safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // 3. Klikalne adresy URL (https://...)
+    safe = safe.replace(
+      /(https?:\/\/[^\s<)]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer" class="tsw-ai-link">$1</a>'
+    );
+
+    // 4. Klikalne adresy e-mail
+    safe = safe.replace(
+      /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g,
+      '<a href="mailto:$1" class="tsw-ai-link">$1</a>'
+    );
+
+    // 5. Proste wypunktowania i podział na linie
+    const lines = safe.split(/\r?\n/);
+    let html = '';
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+      if (bulletMatch) {
+        if (!inList) {
+          html += '<ul class="tsw-ai-list">';
+          inList = true;
+        }
+        html += '<li>' + bulletMatch[1] + '</li>';
+      } else {
+        if (inList) {
+          html += '</ul>';
+          inList = false;
+        }
+        if (line !== '') {
+          html += (html && !html.endsWith('</ul>') ? '<br>' : '') + line;
+        } else if (html && !html.endsWith('<br>')) {
+          html += '<br>';
+        }
+      }
+    }
+    if (inList) {
+      html += '</ul>';
+    }
+    return html;
+  }
+
+  // Wstrzyknięcie stylów CSS
   const style = document.createElement('style');
   style.id = 'tsw-ai-widget-styles';
   style.textContent = `
@@ -56,14 +139,14 @@
       position: fixed;
       bottom: 96px;
       right: 24px;
-      width: 380px;
+      width: 390px;
       max-width: calc(100vw - 32px);
-      height: 540px;
+      height: 560px;
       max-height: calc(100vh - 120px);
       background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 18px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
       z-index: 999999;
       display: flex;
       flex-direction: column;
@@ -83,7 +166,7 @@
     }
     .tsw-ai-header {
       background: #1e293b;
-      padding: 16px;
+      padding: 14px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -104,16 +187,26 @@
       background: #10b981;
       box-shadow: 0 0 8px #10b981;
     }
-    .tsw-ai-close {
+    .tsw-ai-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tsw-ai-icon-btn {
       background: transparent;
       border: none;
       color: #94a3b8;
       cursor: pointer;
-      font-size: 20px;
-      padding: 4px;
+      font-size: 16px;
+      padding: 4px 6px;
+      border-radius: 6px;
       line-height: 1;
+      transition: color 0.15s, background 0.15s;
     }
-    .tsw-ai-close:hover { color: #fff; }
+    .tsw-ai-icon-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
     .tsw-ai-messages {
       flex: 1;
       overflow-y: auto;
@@ -123,25 +216,63 @@
       gap: 12px;
     }
     .tsw-ai-msg {
-      max-width: 85%;
+      max-width: 86%;
       padding: 10px 14px;
       border-radius: 14px;
       font-size: 14px;
-      line-height: 1.45;
+      line-height: 1.5;
       word-wrap: break-word;
+    }
+    .tsw-ai-msg strong {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+    .tsw-ai-list {
+      margin: 6px 0 4px 18px;
+      padding: 0;
+    }
+    .tsw-ai-list li {
+      margin-bottom: 4px;
+    }
+    .tsw-ai-link {
+      color: #38bdf8;
+      text-decoration: underline;
+      word-break: break-all;
     }
     .tsw-ai-msg-bot {
       background: #1e293b;
       color: #e2e8f0;
       align-self: flex-start;
       border-bottom-left-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
     .tsw-ai-msg-user {
       background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
       color: #ffffff;
       align-self: flex-end;
       border-bottom-right-radius: 4px;
+    }
+    .tsw-ai-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 0 16px 10px;
+    }
+    .tsw-ai-chip {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #bae6fd;
+      border-radius: 999px;
+      padding: 5px 11px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+    .tsw-ai-chip:hover {
+      background: rgba(56, 189, 248, 0.24);
+      border-color: #38bdf8;
+      color: #fff;
+      transform: translateY(-1px);
     }
     .tsw-ai-input-bar {
       padding: 12px;
@@ -153,7 +284,7 @@
     .tsw-ai-input {
       flex: 1;
       background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 10px;
       padding: 10px 14px;
       color: #fff;
@@ -199,14 +330,14 @@
           <span class="tsw-ai-status-dot"></span>
           <span>${TITLE}</span>
         </div>
-        <button class="tsw-ai-close" id="tswAiCloseBtn">&times;</button>
-      </div>
-
-      <div class="tsw-ai-messages" id="tswAiMessages">
-        <div class="tsw-ai-msg tsw-ai-msg-bot">
-          Cześć! W czym mogę Ci dzisiaj pomóc? Odpowiadam na pytania dotyczące oferty, cennika i grafiku.
+        <div class="tsw-ai-header-actions">
+          <button class="tsw-ai-icon-btn" id="tswAiClearBtn" title="Nowa rozmowa">&#x21bb;</button>
+          <button class="tsw-ai-icon-btn" id="tswAiCloseBtn" title="Zamknij">&times;</button>
         </div>
       </div>
+
+      <div class="tsw-ai-messages" id="tswAiMessages"></div>
+      <div class="tsw-ai-chips" id="tswAiChips"></div>
 
       <form class="tsw-ai-input-bar" id="tswAiForm">
         <input type="text" class="tsw-ai-input" id="tswAiInput" placeholder="Napisz pytanie..." required autocomplete="off" />
@@ -216,14 +347,73 @@
   `;
   document.body.appendChild(root);
 
-  // Logika interakcji
   const toggleBtn = document.getElementById('tswAiToggleBtn');
   const closeBtn = document.getElementById('tswAiCloseBtn');
+  const clearBtn = document.getElementById('tswAiClearBtn');
   const chatWindow = document.getElementById('tswAiWindow');
   const chatForm = document.getElementById('tswAiForm');
   const chatInput = document.getElementById('tswAiInput');
   const messagesContainer = document.getElementById('tswAiMessages');
+  const chipsContainer = document.getElementById('tswAiChips');
   const sendBtn = document.getElementById('tswAiSendBtn');
+
+  let conversationHistory = [];
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) conversationHistory = parsed.slice(-8);
+    }
+  } catch (_) {}
+
+  function saveHistory() {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(conversationHistory.slice(-8)));
+    } catch (_) {}
+  }
+
+  function appendMessageElement(role, text) {
+    const msg = document.createElement('div');
+    msg.className = 'tsw-ai-msg ' + (role === 'user' ? 'tsw-ai-msg-user' : 'tsw-ai-msg-bot');
+    if (role === 'user') {
+      msg.textContent = text;
+    } else {
+      msg.innerHTML = formatMarkdown(text);
+    }
+    messagesContainer.appendChild(msg);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  function renderInitialView() {
+    messagesContainer.innerHTML = '';
+    appendMessageElement(
+      'model',
+      'Cześć! Jestem wirtualnym doradcą. W czym mogę Ci dzisiaj pomóc? Pytaj śmiało o ofertę, cennik i zapisy.'
+    );
+    for (let i = 0; i < conversationHistory.length; i++) {
+      appendMessageElement(conversationHistory[i].role, conversationHistory[i].text);
+    }
+    renderChips();
+  }
+
+  function renderChips() {
+    chipsContainer.innerHTML = '';
+    if (conversationHistory.length > 0) {
+      chipsContainer.style.display = 'none';
+      return;
+    }
+    chipsContainer.style.display = 'flex';
+    quickPrompts.forEach(function(promptText) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'tsw-ai-chip';
+      chip.textContent = promptText;
+      chip.addEventListener('click', function() {
+        sendQuestion(promptText);
+      });
+      chipsContainer.appendChild(chip);
+    });
+  }
 
   function toggleChat() {
     chatWindow.classList.toggle('tsw-open');
@@ -234,23 +424,23 @@
 
   toggleBtn.addEventListener('click', toggleChat);
   closeBtn.addEventListener('click', toggleChat);
+  clearBtn.addEventListener('click', function() {
+    conversationHistory = [];
+    saveHistory();
+    renderInitialView();
+  });
 
-  chatForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const text = chatInput.value.trim();
-    if (!text) return;
+  async function sendQuestion(text) {
+    const trimmed = text.trim();
+    if (!trimmed || sendBtn.disabled) return;
 
-    // Dodanie wiadomości użytkownika
-    const userMsg = document.createElement('div');
-    userMsg.className = 'tsw-ai-msg tsw-ai-msg-user';
-    userMsg.textContent = text;
-    messagesContainer.appendChild(userMsg);
+    chipsContainer.style.display = 'none';
+    appendMessageElement('user', trimmed);
     chatInput.value = '';
 
-    // Wskaźnik pisania
     const typingMsg = document.createElement('div');
     typingMsg.className = 'tsw-ai-msg tsw-ai-msg-bot tsw-ai-typing';
-    typingMsg.textContent = 'Asystent pisze...';
+    typingMsg.textContent = 'Asystent analizuje...';
     messagesContainer.appendChild(typingMsg);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -262,33 +452,39 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           site_id: SITE_ID,
-          question: text
+          question: trimmed,
+          history: conversationHistory.slice(-8)
         })
       });
 
       const data = await res.json();
       typingMsg.remove();
 
-      const botMsg = document.createElement('div');
-      botMsg.className = 'tsw-ai-msg tsw-ai-msg-bot';
-
       if (res.ok && data.success) {
-        botMsg.textContent = data.answer;
+        appendMessageElement('model', data.answer);
+        conversationHistory.push({ role: 'user', text: trimmed });
+        conversationHistory.push({ role: 'model', text: data.answer });
+        conversationHistory = conversationHistory.slice(-8);
+        saveHistory();
       } else {
-        botMsg.textContent = data.error || 'Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie później.';
+        appendMessageElement(
+          'model',
+          data.error || 'Przepraszam, wystąpił problem z połączeniem. Spróbuj ponownie za chwilę.'
+        );
       }
-      messagesContainer.appendChild(botMsg);
-
-    } catch (err) {
+    } catch (_) {
       typingMsg.remove();
-      const errorMsg = document.createElement('div');
-      errorMsg.className = 'tsw-ai-msg tsw-ai-msg-bot';
-      errorMsg.textContent = 'Błąd sieci. Sprawdź połączenie z internetem.';
-      messagesContainer.appendChild(errorMsg);
+      appendMessageElement('model', 'Błąd sieci. Sprawdź połączenie z internetem.');
     } finally {
       sendBtn.disabled = false;
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
+  }
+
+  chatForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    sendQuestion(chatInput.value);
   });
 
+  renderInitialView();
 })();

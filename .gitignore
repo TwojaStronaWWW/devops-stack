@@ -39,6 +39,7 @@ logs/
 *.prom
 services/ai-router/storage/rate_limits/*.json
 !services/ai-router/storage/rate_limits/.gitkeep
+services/ai-router/storage/metrics/
 
 # OS & Editor artifacts
 .DS_Store
