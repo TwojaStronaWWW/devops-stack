@@ -43,7 +43,7 @@ docker inspect "$C" --format 'Limity: RAM={{.HostConfig.Memory}} B, CPU(nano)={{
 docker stats --no-stream --format 'Zuzycie teraz: CPU={{.CPUPerc}} RAM={{.MemUsage}} ({{.MemPerc}}) PID={{.PIDs}}' "$C"
 docker images --format 'Obraz: {{.Repository}}:{{.Tag}} rozmiar={{.Size}}' | grep -i "ai-router" || true
 docker system df -v 2>/dev/null | grep -iE 'VOLUME NAME|ai_router_storage' | head -2 || true
-docker exec "$C" sh -c 'echo "Dane RAG (/app/data): $(du -sh /app/data 2>/dev/null | cut -f1)"; echo "Stan (/app/storage): $(du -sh /app/storage 2>/dev/null | cut -f1) | plikow rate-limit: $(ls /app/storage/rate_limits 2>/dev/null | wc -l)"' 2>/dev/null || true
+docker exec "$C" sh -c 'echo "Dane RAG (/app/data): $(du -sh /app/data 2>/dev/null | cut -f1)"; echo "Stan (/app/storage): $(du -sh /app/storage 2>/dev/null | cut -f1) | plikow rate-limit: $(ls /app/storage/rate_limits 2>/dev/null | wc -l) | wpisow cache RAG: $(ls /app/storage/cache/*.json 2>/dev/null | wc -l)"' 2>/dev/null || true
 df -h / | awk 'NR==2 {print "Dysk hosta: uzyte " $3 " z " $2 " (" $5 ") | wolne " $4}'
 
 # ------------------------------------------------------------------------------
@@ -66,9 +66,15 @@ done
 echo "  (doba kwotowa Gemini resetuje sie o polnocy czasu Pacyficznego = 09:00 w Polsce)"
 
 # ------------------------------------------------------------------------------
-hr "4. WYNIKI ZAPYTAN CZATU (od poczatku statystyk)"
+hr "4. WYNIKI ZAPYTAN CZATU I PAMIEC PODRECZNA RAG (CACHE)"
 met ai_router_requests_total | while read -r line; do
   printf '  %-14s %-22s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl outcome)" "${line##* }"
+done
+echo "  Pamiec podreczna RAG (Cache < 5 ms):"
+cache_ent="$(met ai_router_cache_entries | awk '{print $NF}')"
+printf '    aktywne wpisy w cache: %s\n' "${cache_ent:-0}"
+met ai_router_cache_hits_total | while read -r line; do
+  printf '    trafienia cache (%s): %s\n' "$(printf '%s' "$line" | lbl site)" "${line##* }"
 done
 echo "  Glebokosc kaskady odpowiedzi (0 = pierwszy asystent, >0 = przelaczenie):"
 met ai_router_answers_by_depth_total | while read -r line; do
@@ -78,9 +84,9 @@ sum="$(met ai_router_request_duration_seconds_sum | awk '{print $NF}')"; cnt="$(
 awk -v s="${sum:-0}" -v c="${cnt:-0}" 'BEGIN { if (c > 0) printf "  Sredni czas udanej odpowiedzi: %.2f s (n=%d)\n", s/c, c; else print "  Brak udanych odpowiedzi w statystykach." }'
 
 # ------------------------------------------------------------------------------
-hr "5. PROBY MODELI WG WYNIKU (przelaczenia i przyczyny)"
+hr "5. PROBY MODELI WG WYNIKU (niezerowe przelaczenia i odpowiedzi)"
 printf '  %-34s %-14s %s\n' "MODEL" "WYNIK" "LICZBA"
-met ai_router_model_attempts_total | while read -r line; do
+met ai_router_model_attempts_total | awk '$NF > 0 {print}' | while read -r line; do
   printf '  %-34s %-14s %s\n' "$(printf '%s' "$line" | lbl model)" "$(printf '%s' "$line" | lbl result)" "${line##* }"
 done | sort
 echo "  Legenda: ok | rate_limited/quota_daily=429 | unavailable=5xx | not_found=404 | auth=zly klucz | network=timeout | empty=pusta odpowiedz"

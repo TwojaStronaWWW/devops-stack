@@ -241,12 +241,28 @@ if ($fp) {
     fclose($fp);
 }
 
-// Lekki Garbage Collection starych plików rate-limit (1 na 50 żądań usuwa pliki nieaktywne > 1h)
-if (mt_rand(1, 50) === 1 && is_dir($storageDir)) {
-    $expireBefore = time() - 3600;
-    foreach (glob($storageDir . '/*.json') ?: [] as $oldRateFile) {
-        if (@filemtime($oldRateFile) < $expireBefore) {
-            @unlink($oldRateFile);
+// Lekki Garbage Collection starych plików rate-limit (>1h) oraz cache (>24h)
+$cacheDir = is_dir('/app/storage') ? '/app/storage/cache' : (dirname(__DIR__) . '/storage/cache');
+if (!is_dir($cacheDir)) {
+    @mkdir($cacheDir, 0755, true);
+}
+$cacheTtl = max(60, (int)(getenv('AI_CACHE_TTL') ?: 86400));
+
+if (mt_rand(1, 50) === 1) {
+    if (is_dir($storageDir)) {
+        $expireBefore = time() - 3600;
+        foreach (glob($storageDir . '/*.json') ?: [] as $oldRateFile) {
+            if (@filemtime($oldRateFile) < $expireBefore) {
+                @unlink($oldRateFile);
+            }
+        }
+    }
+    if (is_dir($cacheDir)) {
+        $cacheExpireBefore = time() - $cacheTtl;
+        foreach (glob($cacheDir . '/*.json') ?: [] as $oldCacheFile) {
+            if (@filemtime($oldCacheFile) < $cacheExpireBefore) {
+                @unlink($oldCacheFile);
+            }
         }
     }
 }
@@ -317,7 +333,7 @@ foreach (array_slice($rawHistory, -8) as $turn) {
 }
 
 // -----------------------------------------------------------------------------
-// 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY)
+// 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY + INTELIGENTNY CACHE)
 // -----------------------------------------------------------------------------
 $rawDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
 $normalizedDataDir = $rawDir ? rtrim(str_replace('\\', '/', $rawDir), '/') : '';
@@ -330,6 +346,7 @@ $possibleFiles = [
 
 $knowledgeContent = null;
 $loadedFile = null;
+$loadedFilePath = null;
 
 foreach ($possibleFiles as $filePath) {
     $real = realpath($filePath);
@@ -339,6 +356,7 @@ foreach ($possibleFiles as $filePath) {
         if ($normalizedDataDir !== '' && str_starts_with($normalizedReal, $normalizedDataDir) && is_readable($real)) {
             $knowledgeContent = file_get_contents($real, false, null, 0, 100000); // Max 100 KB
             $loadedFile = basename($real);
+            $loadedFilePath = $real;
             break;
         }
     }
@@ -351,6 +369,32 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
         'error'   => "Nie znaleziono bazy wiedzy dla witryny: '{$siteId}'."
     ], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// Klucz pamięci podręcznej zależny od witryny, mtime pliku wiedzy, kontekstu i znormalizowanego pytania
+$normalizedQ = preg_replace('/\s+/u', ' ', mb_strtolower(trim($question))) ?: '';
+$historySig  = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
+$kbMtime     = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
+$cacheKey    = hash('sha256', "{$aiSite}|{$kbMtime}|{$historySig}|{$normalizedQ}");
+$cacheFile   = $cacheDir . '/' . $cacheKey . '.json';
+
+if (is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < $cacheTtl) {
+    $cachedRaw = @file_get_contents($cacheFile);
+    $cachedJson = $cachedRaw ? json_decode($cachedRaw, true) : null;
+    if (is_array($cachedJson) && !empty($cachedJson['answer'])) {
+        $usedModel = (string)($cachedJson['model'] ?? 'cache');
+        $aiDepth = 0;
+        aiRecordCacheHit($aiSite);
+        http_response_code(200);
+        echo json_encode([
+            'success' => true,
+            'site_id' => $siteId,
+            'model'   => $usedModel,
+            'cached'  => true,
+            'answer'  => (string)$cachedJson['answer']
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -655,6 +699,41 @@ if ($answer === null) {
     exit;
 }
 
+// Zapis odpowiedzi w pamięci podręcznej RAG (atomowo, z pominięciem komunikatów SAFETY)
+if (is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
+    $tmpCache = $cacheFile . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmpCache, json_encode([
+        'answer' => $answer,
+        'model'  => $usedModel,
+        'ts'     => time()
+    ], JSON_UNESCAPED_UNICODE)) !== false) {
+        @rename($tmpCache, $cacheFile);
+    }
+}
+
+// Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
+if (count($sanitizedHistory) === 6) {
+    aiLog(['event' => 'hot_lead_detected', 'site' => $aiSite, 'turns' => 4]);
+    $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
+    if ($ntfyTopic !== '') {
+        $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");
+        curl_setopt_array($chNtfy, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => "Klient prowadzi zaangażowaną rozmowę (4. pytanie w sesji) na stronie: {$aiSite} (model: {$usedModel}).",
+            CURLOPT_HTTPHEADER     => [
+                "Title: Aktywny Klient na Czatbocie ({$aiSite})",
+                'Priority: default',
+                'Tags: speech_balloon,fire'
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 2,
+            CURLOPT_CONNECTTIMEOUT => 1
+        ]);
+        @curl_exec($chNtfy);
+        curl_close($chNtfy);
+    }
+}
+
 // -----------------------------------------------------------------------------
 // 7. CZYSTY ZWROT DANYCH DO FRONTENDU
 // -----------------------------------------------------------------------------
@@ -663,6 +742,7 @@ echo json_encode([
     'success' => true,
     'site_id' => $siteId,
     'model'   => $usedModel,
+    'cached'  => false,
     'answer'  => $answer
 ], JSON_UNESCAPED_UNICODE);
 

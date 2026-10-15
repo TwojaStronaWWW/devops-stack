@@ -87,6 +87,7 @@ function aiStatsDefault(): array
 {
     return [
         'requests'    => [],  // "site|outcome" => n
+        'cache_hits'  => [],  // site => n
         'req_lat_sum' => 0.0,
         'req_lat_cnt' => 0,
         'depth'       => [],  // pozycja modelu, który odpowiedział => n
@@ -259,6 +260,14 @@ function aiRecordSkip(string $provider, string $model, int $remaining): void
     aiLog('skip_cooldown', ['provider' => $provider, 'model' => $model, 'remaining_s' => $remaining]);
 }
 
+function aiRecordCacheHit(string $site): void
+{
+    aiStatsMutate(function (array &$s) use ($site): void {
+        $s['cache_hits'][$site] = (int)($s['cache_hits'][$site] ?? 0) + 1;
+    });
+    aiLog('cache_hit', ['site' => $site]);
+}
+
 /** Rejestruje wynik całego żądania czatu (wywoływane z shutdown function). */
 function aiRecordRequest(string $site, string $outcome, int $httpCode, float $latencyMs, ?string $model, ?int $depth, int $attempts): void
 {
@@ -353,6 +362,19 @@ function aiRenderMetrics(): string
         [$site, $outcome] = array_pad(explode('|', (string)$key, 2), 2, 'unknown');
         $o[] = 'ai_router_requests_total{site="' . aiEsc($site) . '",outcome="' . aiEsc($outcome) . '"} ' . (int)$n;
     }
+
+    $o[] = '# HELP ai_router_cache_hits_total Odpowiedzi zwrocone z pamieci podrecznej RAG (0 tokenow API)';
+    $o[] = '# TYPE ai_router_cache_hits_total counter';
+    $cacheHitsMap = is_array($s['cache_hits'] ?? null) ? $s['cache_hits'] : [];
+    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww'] as $defaultSite) {
+        if (!isset($cacheHitsMap[$defaultSite])) {
+            $cacheHitsMap[$defaultSite] = 0;
+        }
+    }
+    foreach ($cacheHitsMap as $cSite => $cCount) {
+        $o[] = 'ai_router_cache_hits_total{site="' . aiEsc((string)$cSite) . '"} ' . (int)$cCount;
+    }
+
     $o[] = '# HELP ai_router_request_duration_seconds Laczny czas udanych zadan czatu';
     $o[] = '# TYPE ai_router_request_duration_seconds summary';
     $o[] = 'ai_router_request_duration_seconds_sum ' . round((float)$s['req_lat_sum'], 3);
@@ -417,17 +439,25 @@ function aiRenderMetrics(): string
     }
     $dir = dirname(aiStatsFile(), 2) . '/rate_limits';
     $files = is_dir($dir) ? (glob($dir . '/*.json') ?: []) : [];
+    $cacheDir = dirname(aiStatsFile(), 2) . '/cache';
+    $cacheFiles = is_dir($cacheDir) ? (glob($cacheDir . '/*.json') ?: []) : [];
     $bytes = 0;
     foreach ($files as $f) {
         $bytes += (int)@filesize($f);
     }
+    foreach ($cacheFiles as $cf) {
+        $bytes += (int)@filesize($cf);
+    }
     $bytes += (int)@filesize(aiStatsFile());
-    $o[] = '# HELP ai_router_storage_bytes Rozmiar danych stanu routera (rate-limit + statystyki)';
+    $o[] = '# HELP ai_router_storage_bytes Rozmiar danych stanu routera (rate-limit + cache + statystyki)';
     $o[] = '# TYPE ai_router_storage_bytes gauge';
     $o[] = 'ai_router_storage_bytes ' . $bytes;
     $o[] = '# HELP ai_router_rate_limit_clients Liczba plikow rate-limit (unikalni klienci)';
     $o[] = '# TYPE ai_router_rate_limit_clients gauge';
     $o[] = 'ai_router_rate_limit_clients ' . count($files);
+    $o[] = '# HELP ai_router_cache_entries Liczba zapisanych odpowiedzi w pamieci podrecznej RAG';
+    $o[] = '# TYPE ai_router_cache_entries gauge';
+    $o[] = 'ai_router_cache_entries ' . count($cacheFiles);
 
     return implode("\n", $o) . "\n";
 }

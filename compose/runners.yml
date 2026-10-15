@@ -133,8 +133,8 @@ services:
 
 networks:
   internal_network:
-    external: true
-    name: devops_internal_network
+    name: devops_runners_network
+    driver: bridge
 
 volumes:
   runner_zeslownikiem_data:

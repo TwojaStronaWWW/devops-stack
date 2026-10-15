@@ -336,5 +336,28 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
   });
+
+  it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf, timer audytu 24/7) powinny być wdrożone', () => {
+    const statsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'), 'utf-8');
+    assert.match(statsPhp, /ai_router_cache_hits_total/);
+    assert.match(statsPhp, /ai_router_cache_entries/);
+    assert.match(statsPhp, /function aiRecordCacheHit/);
+
+    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    assert.match(routerPhp, /aiRecordCacheHit/);
+    assert.match(routerPhp, /hot_lead_detected/);
+
+    const runnersYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
+    assert.match(runnersYml, /name:\s*devops_runners_network/);
+
+    const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
+    assert.match(offsiteBackup, /devops_backup_verified/);
+
+    const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
+    assert.match(lhBackup, /devops_backup_websites_verified/);
+
+    const setupAuditTimer = path.join(ROOT_DIR, 'scripts', 'setup-audit-timer.sh');
+    assert.ok(fs.existsSync(setupAuditTimer), 'Brak scripts/setup-audit-timer.sh');
+  });
 });
 

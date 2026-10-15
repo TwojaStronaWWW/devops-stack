@@ -49,6 +49,7 @@ BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
 START_TIME="$(date +%s)"
 STATUS=0
 OFFSITE_STATUS=0
+BACKUP_VERIFIED=0
 BUNDLE_SIZE_BYTES=0
 
 mkdir -p "${BACKUP_DIR}"
@@ -85,6 +86,10 @@ devops_backup_websites_last_timestamp_seconds ${end_time}
 # HELP devops_backup_websites_status Status wykonania backupu stron WWW (1 = sukces, 0 = oczekuje/blad)
 # TYPE devops_backup_websites_status gauge
 devops_backup_websites_status ${status}
+
+# HELP devops_backup_websites_verified Status weryfikacji integralnosci archiwum stron WWW tar -tzf (1 = poprawne, 0 = blad)
+# TYPE devops_backup_websites_verified gauge
+devops_backup_websites_verified ${BACKUP_VERIFIED}
 
 # HELP devops_backup_websites_size_bytes Rozmiar archiwum kopii stron WWW w bajtach
 # TYPE devops_backup_websites_size_bytes gauge
@@ -159,6 +164,17 @@ fi
 echo "--> [2/3] Kompresja i archiwizacja kopii stron WWW..."
 tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" .
 sudo rm -rf "${STAGING_DIR}" 2>/dev/null || rm -rf "${STAGING_DIR}"
+
+echo "--> [2a/3] Weryfikacja integralności archiwum (tar -tzf)..."
+if tar -tzf "${ARCHIVE_PATH}" >/dev/null 2>&1; then
+    BACKUP_VERIFIED=1
+    echo "--> [OK] Integralność archiwum stron WWW zweryfikowana pomyślnie."
+else
+    BACKUP_VERIFIED=0
+    echo "--> [BŁĄD] Archiwum ${ARCHIVE_NAME} jest uszkodzone!"
+    write_prometheus_metrics 0 0 0
+    exit 1
+fi
 
 UPLOAD_NAME="${ARCHIVE_NAME}"
 if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; then

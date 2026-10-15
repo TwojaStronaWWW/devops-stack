@@ -59,6 +59,7 @@ send_notification() {
 START_TIME="$(date +%s)"
 OFFSITE_STATUS=0
 BACKUP_STATUS=0
+BACKUP_VERIFIED=0
 
 # Konfiguracja eksportu metryk dla Prometheusa / Grafany
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
@@ -81,6 +82,10 @@ devops_backup_last_timestamp_seconds ${end_time}
 # HELP devops_backup_status Status wykonania lokalnego backupu (1 = sukces, 0 = blad)
 # TYPE devops_backup_status gauge
 devops_backup_status ${status}
+
+# HELP devops_backup_verified Status weryfikacji integralnosci archiwum tar -tzf (1 = poprawne, 0 = blad)
+# TYPE devops_backup_verified gauge
+devops_backup_verified ${BACKUP_VERIFIED}
 
 # HELP devops_backup_size_bytes Rozmiar archiwum zbiorczego kopii zapasowej w bajtach
 # TYPE devops_backup_size_bytes gauge
@@ -134,6 +139,17 @@ BUNDLE_PATH="${BACKUP_DIR}/${BUNDLE_NAME}"
 
 echo "--> [2/3] Pakowanie archiwum zbiorczego: ${BUNDLE_NAME}..."
 tar -czf "${BUNDLE_PATH}" -C "${BACKUP_DIR}" $(for a in "${ARCHIVES_CREATED[@]}"; do basename "$a"; done)
+
+echo "--> [2a/3] Weryfikacja integralności archiwum (tar -tzf)..."
+if tar -tzf "${BUNDLE_PATH}" >/dev/null 2>&1; then
+    BACKUP_VERIFIED=1
+    echo "--> [OK] Integralność archiwum zweryfikowana pomyślnie."
+else
+    BACKUP_VERIFIED=0
+    echo "--> [BŁĄD] Archiwum ${BUNDLE_NAME} jest uszkodzone!"
+    write_prometheus_metrics 0 0 0
+    exit 1
+fi
 
 if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; then
     echo "--> [2b/3] Szyfrowanie spoczynkowe archiwum zbiorczego (AES-256-CBC PBKDF2)..."

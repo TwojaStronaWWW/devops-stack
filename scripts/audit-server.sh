@@ -326,11 +326,18 @@ if ! command -v docker >/dev/null 2>&1; then
     fail "Silnik Docker nie jest zainstalowany!" "sudo bash ${STACK_ROOT}/scripts/02-install-docker.sh"
 else
     if docker network inspect devops_internal_network >/dev/null 2>&1; then
-        pass "Izolowana sieć Docker 'devops_internal_network' istnieje."
+        pass "Izolowana sieć wewnętrzna 'devops_internal_network' istnieje."
     else
         CONTAINERS_HEALTHY=0
         fail "Brak sieci Docker 'devops_internal_network'!" \
              "cd ${STACK_ROOT}/compose && docker compose up -d"
+    fi
+
+    if docker network inspect devops_runners_network >/dev/null 2>&1; then
+        pass "Odseparowana sieć runnerów CI/CD 'devops_runners_network' istnieje (Zero-Trust)."
+    else
+        warn "Brak odseparowanej sieci 'devops_runners_network' dla runnerów CI/CD." \
+             "cd ${STACK_ROOT}/compose && docker compose -f runners.yml up -d"
     fi
 
     EXPECTED_CONTAINERS=(
@@ -477,12 +484,19 @@ for VOL in "${REQUIRED_VOLUMES[@]}"; do
     fi
 done
 
-# 4. Systemd timer dla backupów
+# 4. Systemd timery dla backupów i audytu 24/7
 if systemctl is-active --quiet devops-backup.timer 2>/dev/null; then
     pass "Harmonogram automatycznego backupu (devops-backup.timer) jest AKTYWNY."
 else
     warn "Harmonogram systemd 'devops-backup.timer' NIE JEST AKTYWNY (backup nie uruchamia się automatycznie w nocy)." \
          "Skonfiguruj i włącz devops-backup.timer w /etc/systemd/system/"
+fi
+
+if systemctl is-active --quiet devops-audit.timer 2>/dev/null; then
+    pass "Autonomiczny Strażnik 24/7 (devops-audit.timer co 15 min) jest AKTYWNY."
+else
+    warn "Harmonogram systemd 'devops-audit.timer' NIE JEST AKTYWNY." \
+         "sudo bash ${STACK_ROOT}/scripts/setup-audit-timer.sh"
 fi
 
 # 5. Telemetria backupów (*.prom)
@@ -554,6 +568,19 @@ devops_audit_containers_healthy ${CONTAINERS_HEALTHY}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
+fi
+
+# Jeśli audyt wykrył błędy krytyczne (FAIL_COUNT > 0), wyślij powiadomienie Push na Ntfy.sh
+if [[ "${FAIL_COUNT}" -gt 0 && -f "${ENV_FILE}" ]]; then
+    NTFY_AUDIT_TOPIC="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+    if [[ -n "${NTFY_AUDIT_TOPIC}" ]]; then
+        curl -s --max-time 5 \
+            -H "Title: 🚨 Audyt VPS: Wykryto ${FAIL_COUNT} błędów!" \
+            -H "Priority: high" \
+            -H "Tags: warning,shield" \
+            -d "Audyt automatyczny (${HOST_NAME}) zakończony wynikiem: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL." \
+            "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
+    fi
 fi
 
 # ==============================================================================
