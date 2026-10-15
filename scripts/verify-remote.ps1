@@ -41,7 +41,7 @@ if (-not (Test-Path $LogDir)) {
 Write-Host ">> [DevOps Live Audit] Łączenie z serwerem $User@$HostIp i uruchamianie diagnostyki..." -ForegroundColor Cyan
 
 # Wczytanie skryptu, usunięcie ewentualnego BOM i wymuszenie zakończeń linii LF (Unix)
-$BashContent = ((Get-Content -Raw -Encoding UTF8 $AuditScriptPath) -replace "^\uFEFF", "") -replace "`r`n", "`n"
+$BashContent = ([System.IO.File]::ReadAllText($AuditScriptPath, $Utf8NoBom)).TrimStart([char]0xFEFF) -replace "`r`n", "`n"
 $RemoteArgs = if ($Strict) { "bash -s -- --strict" } else { "bash -s" }
 
 $AuditOutput = $BashContent | & ssh -o BatchMode=yes -o ConnectTimeout=12 -i "$KeyPath" "$User@$HostIp" $RemoteArgs
