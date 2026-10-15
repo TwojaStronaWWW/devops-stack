@@ -58,7 +58,7 @@ hr "3. KASKADA MODELI (kolejnosc prob) I STAN"
 printf '  %-3s %-34s %-10s %-11s %-9s %-8s %-8s %s\n' "#" "MODEL" "PROVIDER" "STAN" "COOLDOWN" "DZIS" "OK DZIS" "LIMIT/DOBA"
 met ai_router_model_info | sort -t'"' -k6 | while read -r line; do
   m="$(printf '%s' "$line" | lbl model)"; p="$(printf '%s' "$line" | lbl provider)"; pos="$(printf '%s' "$line" | lbl position)"
-  val() { met "$1" | grep "model=\"$m\"" | head -1 | awk '{print $NF}'; }
+  val() { met "$1" | grep "model=\"$m\"" | head -1 | awk '{print $NF}' || true; }
   susp="$(val ai_router_model_suspended)"; cd="$(val ai_router_model_cooldown_remaining_seconds)"
   today="$(val ai_router_model_requests_today)"; ok="$(val ai_router_model_ok_today)"; lim="$(val ai_router_model_daily_limit)"
   printf '  %-3s %-34s %-10s %-11s %-9s %-8s %-8s %s\n' "$pos" "$m" "$p" "$([ "${susp:-0}" = "1" ] && echo ZAWIESZONY || echo aktywny)" "${cd:-0}s" "${today:-0}" "${ok:-0}" "${lim:-nie ustawiono}"
@@ -96,13 +96,13 @@ if [ -z "$LOGS" ]; then
   echo "  Brak zdarzen strukturalnych w oknie $SINCE (brak ruchu czatu lub starsza wersja bez telemetrii)."
 else
   echo "  Zapytania wg wyniku:"
-  printf '%s\n' "$LOGS" | grep -F '"event":"request"' | sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p' | sort | uniq -c | sed 's/^/    /'
+  printf '%s\n' "$LOGS" | grep -F '"event":"request"' | sed -n 's/.*"outcome":"\([^"]*\)".*/\1/p' | sort | uniq -c | sed 's/^/    /' || true
   echo "  Proby modeli wg modelu/wyniku:"
-  printf '%s\n' "$LOGS" | grep -F '"event":"attempt"' | sed -n 's/.*"model":"\([^"]*\)","result":"\([^"]*\)".*/\1 \2/p' | sort | uniq -c | sed 's/^/    /'
+  printf '%s\n' "$LOGS" | grep -F '"event":"attempt"' | sed -n 's/.*"model":"\([^"]*\)","result":"\([^"]*\)".*/\1 \2/p' | sort | uniq -c | sed 's/^/    /' || true
   echo "  Ostatnie 10 problemow (proby nieudane / pominiecia):"
-  printf '%s\n' "$LOGS" | grep -E '"event":"(attempt|skip_cooldown)"' | grep -vF '"result":"ok"' | tail -10 | sed 's/^ai-router /    /'
+  printf '%s\n' "$LOGS" | grep -E '"event":"(attempt|skip_cooldown)"' | grep -vF '"result":"ok"' | tail -10 | sed 's/^ai-router /    /' || true
   echo "  Ostatnie 10 zapytan:"
-  printf '%s\n' "$LOGS" | grep -F '"event":"request"' | tail -10 | sed 's/^ai-router /    /'
+  printf '%s\n' "$LOGS" | grep -F '"event":"request"' | tail -10 | sed 's/^ai-router /    /' || true
 fi
 
 hr "KONIEC RAPORTU"
