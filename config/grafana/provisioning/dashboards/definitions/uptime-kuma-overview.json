@@ -19,7 +19,7 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "liveNow": true,
+  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
@@ -379,7 +379,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[30s])) * 100)",
+          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)",
           "instant": true,
           "legendFormat": "Obciążenie CPU",
           "range": false,
@@ -564,7 +564,7 @@
               "type": "symlog"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "none",
               "mode": "none"
@@ -620,7 +620,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[30s])) * 100)",
+          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)",
           "instant": false,
           "legendFormat": "Obciążenie CPU Hosta (%)",
           "range": true,
@@ -758,7 +758,7 @@
               "type": "symlog"
             },
             "showPoints": "never",
-            "spanNulls": false,
+            "spanNulls": true,
             "stacking": {
               "group": "none",
               "mode": "none"
@@ -814,7 +814,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (name) (irate(container_cpu_usage_seconds_total{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}[30s])) * 100",
+          "expr": "sum by (name) (irate(container_cpu_usage_seconds_total{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}[2m])) * 100",
           "instant": false,
           "legendFormat": "{{name}}",
           "range": true,
