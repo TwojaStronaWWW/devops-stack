@@ -19,7 +19,7 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "liveNow": false,
+  "liveNow": true,
   "panels": [
     {
       "collapsed": false,
@@ -379,7 +379,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[30s])) * 100)",
           "instant": true,
           "legendFormat": "Obciążenie CPU",
           "range": false,
@@ -399,7 +399,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 3,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -457,7 +457,7 @@
           "refId": "A"
         }
       ],
-      "title": "Zużycie Pamięci RAM",
+      "title": "Zużycie Pamięci RAM (z 24 GB)",
       "type": "gauge"
     },
     {
@@ -470,7 +470,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 3,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -528,7 +528,7 @@
           "refId": "A"
         }
       ],
-      "title": "Zapełnienie Dysku Systemowego",
+      "title": "Zapełnienie Dysku SSD (z 96 GB)",
       "type": "gauge"
     },
     {
@@ -620,7 +620,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "expr": "100 - (avg(irate(node_cpu_seconds_total{mode=\"idle\"}[30s])) * 100)",
           "instant": false,
           "legendFormat": "Obciążenie CPU Hosta (%)",
           "range": true,
@@ -814,7 +814,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}[1m])) * 100",
+          "expr": "sum by (name) (irate(container_cpu_usage_seconds_total{name!=\"\",name!~\"^[0-9a-f]{12}_.*|.*-ci-.*\"}[30s])) * 100",
           "instant": false,
           "legendFormat": "{{name}}",
           "range": true,
@@ -1599,7 +1599,7 @@
       "type": "stat"
     }
   ],
-  "refresh": "10s",
+  "refresh": "5s",
   "schemaVersion": 39,
   "tags": [
     "devops",
@@ -1625,5 +1625,5 @@
   "timezone": "browser",
   "title": "Centrum Monitoringu Stron WWW & Usług",
   "uid": "uptime-kuma-overview",
-  "version": 6
+  "version": 8
 }

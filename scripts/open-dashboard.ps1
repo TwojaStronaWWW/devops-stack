@@ -52,7 +52,7 @@ if (-not (Test-PortOpen "127.0.0.1" 3000)) {
 }
 
 Write-Host ">> Otwieranie paneli monitoringu w przeglądarce..." -ForegroundColor Green
-Start-Process "http://localhost:3000/d/uptime-kuma-overview"
+Start-Process "http://localhost:3000/d/uptime-kuma-overview?refresh=5s"
 Start-Process "http://localhost:8888"
 Start-Process "https://monitoring.twojastronawww.pl"
 

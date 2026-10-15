@@ -28,13 +28,17 @@ scrape_configs:
     static_configs:
       - targets: ['uptime-kuma:3001']
 
-  # 3. Node Exporter (metryki sprzętowe i systemowe hosta)
+  # 3. Node Exporter (metryki sprzętowe i systemowe hosta - odświeżanie 5s)
   - job_name: 'node-exporter'
+    scrape_interval: 5s
+    scrape_timeout: 4s
     static_configs:
       - targets: ['node-exporter:9100']
 
-  # 4. cAdvisor (metryki zasobów kontenerów Dockera)
+  # 4. cAdvisor (metryki zasobów kontenerów Dockera - odświeżanie 5s)
   - job_name: 'cadvisor'
+    scrape_interval: 5s
+    scrape_timeout: 4s
     static_configs:
       - targets: ['cadvisor:8080']
 
