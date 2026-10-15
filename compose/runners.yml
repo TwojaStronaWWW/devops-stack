@@ -104,18 +104,25 @@ services:
   runner-web:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-gal-anonim-web
-    profiles: ["split"]
+    labels:
+      dev.dozzle.name: "runner-gal-anonim-web • CI/CD GalAnonim Web"
+      org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla repozytorium zeslownikiem/gal-anonim-web"
     restart: unless-stopped
     networks:
       - internal_network
     environment:
+      - RUNNER_SCOPE=repo
       - REPO_URL=https://github.com/zeslownikiem/gal-anonim-web
-      - RUNNER_TOKEN=${RUNNER_WEB_TOKEN}
-      - RUNNER_NAME=vps-runner-web
-      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps
+      - ACCESS_TOKEN=${GITHUB_TOKEN}
+      - RUNNER_NAME=vps-runner-gal-anonim-web
+      - RANDOM_RUNNER_SUFFIX=false
+      - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified
+      - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner-data
+      - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - DOCKER_PRUNE=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - runner_gal_anonim_web_data:/runner-data
     deploy:
       resources:
         limits:
@@ -134,4 +141,7 @@ volumes:
     name: runner_zeslownikiem_data
   runner_twojastronawww_data:
     name: runner_twojastronawww_data
+  runner_gal_anonim_web_data:
+    name: runner_gal_anonim_web_data
+
 
