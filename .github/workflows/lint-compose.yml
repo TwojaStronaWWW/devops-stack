@@ -20,7 +20,7 @@ jobs:
 
       - name: 1.2 Ochrona przed wyciekiem prywatnych kluczy i sekretów (.env, *.pem, *.key)
         run: |
-          if git ls-files | grep -E "(\.env|\.env\.local|scripts/.*\.env|\.pem|\.key|\.pfx|id_ed25519|id_rsa)$"; then
+          if git ls-files | grep -E "(\.env|\.env\.local|\.env\.bak.*|scripts/.*\.env|\.pem|\.key|\.pfx|id_ed25519|id_rsa)$"; then
             echo "❌ Wykryto plik z wrażliwymi danymi lub kluczami prywatnymi w repozytorium!"
             exit 1
           fi

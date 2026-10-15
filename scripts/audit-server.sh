@@ -345,6 +345,7 @@ else
         "cloudflared"
         "runner-zeslownikiem-unified"
         "runner-twojastronawww-unified"
+        "runner-gal-anonim-web"
     )
 
     for CNAME in "${EXPECTED_CONTAINERS[@]}"; do
@@ -418,6 +419,28 @@ else
         elif [[ "${DOWN_TARGETS}" -gt 0 ]]; then
             warn "Prometheus zgłasza ${DOWN_TARGETS} niedostępnych celów (health=down, up=${UP_TARGETS})." \
                  "Sprawdź http://localhost:9090/targets przez tunel SSH"
+        fi
+    fi
+
+    # Sprawdzenie aktywnych alertów Prometheusa (rules/ai-router.yml) + wysyłka Push do Ntfy.sh
+    PROM_ALERTS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/alerts" 2>/dev/null || true)"
+    if [[ -n "${PROM_ALERTS}" ]]; then
+        FIRING_COUNT="$(echo "${PROM_ALERTS}" | grep -o '"state":"firing"' | wc -l | tr -d ' ')"
+        if [[ "${FIRING_COUNT}" -eq 0 ]]; then
+            pass "Reguły Alertów Prometheusa (AI Router): 0 aktywnych alarmów (firing=0)."
+        else
+            FIRING_NAMES="$(echo "${PROM_ALERTS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
+            warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
+                 "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
+            NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo 'kpoczatek-vps-alerty')"
+            if [[ -n "${NTFY_TOPIC_VAL}" ]]; then
+                curl -s --max-time 5 \
+                    -H "Title: 🚨 Prometheus Alert (VPS AI Router)" \
+                    -H "Priority: high" \
+                    -H "Tags: rotating_light,robot" \
+                    -d "Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}" \
+                    "https://ntfy.sh/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
+            fi
         fi
     fi
 fi

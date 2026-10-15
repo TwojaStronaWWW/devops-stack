@@ -28,6 +28,7 @@ S3_ENDPOINT="${S3_ENDPOINT:-}"
 S3_BUCKET="${S3_BUCKET:-twojastronawww-backups}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
 
 VOLUMES_TO_BACKUP=(
     "uptime_kuma_data"
@@ -36,6 +37,7 @@ VOLUMES_TO_BACKUP=(
     "ai_router_storage"
     "runner_zeslownikiem_data"
     "runner_twojastronawww_data"
+    "runner_gal_anonim_web_data"
 )
 
 mkdir -p "${BACKUP_DIR}"
@@ -132,6 +134,18 @@ BUNDLE_PATH="${BACKUP_DIR}/${BUNDLE_NAME}"
 
 echo "--> [2/3] Pakowanie archiwum zbiorczego: ${BUNDLE_NAME}..."
 tar -czf "${BUNDLE_PATH}" -C "${BACKUP_DIR}" $(for a in "${ARCHIVES_CREATED[@]}"; do basename "$a"; done)
+
+if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; then
+    echo "--> [2b/3] Szyfrowanie spoczynkowe archiwum zbiorczego (AES-256-CBC PBKDF2)..."
+    BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}" openssl enc -aes-256-cbc -pbkdf2 -salt \
+        -in "${BUNDLE_PATH}" \
+        -out "${BUNDLE_PATH}.enc" \
+        -pass env:BACKUP_ENCRYPTION_KEY
+    rm -f "${BUNDLE_PATH}"
+    BUNDLE_NAME="${BUNDLE_NAME}.enc"
+    BUNDLE_PATH="${BUNDLE_PATH}.enc"
+fi
+
 BUNDLE_SIZE="$(du -h "${BUNDLE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${BUNDLE_PATH}" | tr -d ' ')"
 BACKUP_STATUS=1
@@ -186,7 +200,7 @@ write_prometheus_metrics "${BACKUP_STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_B
 
 # Rotacja lokalna (usuwanie plików starszych niż RETENTION_DAYS)
 echo "==> Rotacja: usuwanie kopii starszych niż ${RETENTION_DAYS} dni..."
-find "${BACKUP_DIR}" -type f -name "*.tar.gz" -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
+find "${BACKUP_DIR}" -type f \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
 
 echo "=============================================================================="
 echo "==> [ZAKOŃCZONO] Procedura backupu zakończona pomyślnie."

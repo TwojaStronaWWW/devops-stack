@@ -316,5 +316,25 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.ok(fs.existsSync(ps1), 'Brak scripts/ai-router-report.ps1');
     assert.match(fs.readFileSync(sh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
   });
+
+  it('utwardzenia bezpieczeństwa (Grafana PoLP Viewer, FTPS TLS, szyfrowanie AES-256 backupów, GC rate-limit, .env.bak*) powinny być aktywne', () => {
+    const gitignore = fs.readFileSync(path.join(ROOT_DIR, '.gitignore'), 'utf-8');
+    assert.match(gitignore, /\.env\.bak\*/);
+
+    const compose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'docker-compose.yml'), 'utf-8');
+    assert.match(compose, /GF_AUTH_ANONYMOUS_ORG_ROLE=\$\{GF_AUTH_ANONYMOUS_ORG_ROLE:-Viewer\}/);
+
+    const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
+    assert.strictEqual(lhBackup.includes('set ftp:ssl-allow no'), false, 'Skrypt backup-websites-lh.sh nie może wymuszać nieszyfrowanego FTP');
+    assert.match(lhBackup, /set ftp:ssl-protect-data true/);
+    assert.match(lhBackup, /openssl enc -aes-256-cbc -pbkdf2/);
+
+    const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
+    assert.match(offsiteBackup, /openssl enc -aes-256-cbc -pbkdf2/);
+    assert.match(offsiteBackup, /runner_gal_anonim_web_data/);
+
+    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
+  });
 });
 

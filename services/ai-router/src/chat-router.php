@@ -241,6 +241,16 @@ if ($fp) {
     fclose($fp);
 }
 
+// Lekki Garbage Collection starych plików rate-limit (1 na 50 żądań usuwa pliki nieaktywne > 1h)
+if (mt_rand(1, 50) === 1 && is_dir($storageDir)) {
+    $expireBefore = time() - 3600;
+    foreach (glob($storageDir . '/*.json') ?: [] as $oldRateFile) {
+        if (@filemtime($oldRateFile) < $expireBefore) {
+            @unlink($oldRateFile);
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // 4. PARSOWANIE I WALIDACJA WEJŚCIA (PAYLOAD)
 // -----------------------------------------------------------------------------

@@ -31,12 +31,20 @@ LH_FTP_PORT="${LH_FTP_PORT:-21}"
 LH_FTP_USERNAME="${LH_FTP_USERNAME:-}"
 LH_FTP_PASSWORD="${LH_FTP_PASSWORD:-}"
 LH_REMOTE_DIR="${LH_REMOTE_DIR:-/public_html}"
+LH_FTP_SSL="${LH_FTP_SSL:-true}"
 
-# S3 / Cloudflare R2
+# Opcjonalny backup bazy danych MySQL/MariaDB z LH.pl (np. osTicket Helpdesk)
+LH_DB_HOST="${LH_DB_HOST:-}"
+LH_DB_NAME="${LH_DB_NAME:-}"
+LH_DB_USER="${LH_DB_USER:-}"
+LH_DB_PASSWORD="${LH_DB_PASSWORD:-}"
+
+# S3 / Cloudflare R2 + opcjonalne szyfrowanie symetryczne AES-256-CBC (ISO 27001)
 S3_ENDPOINT="${S3_ENDPOINT:-}"
 S3_BUCKET="${S3_BUCKET:-twojastronawww-backups}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
 
 START_TIME="$(date +%s)"
 STATUS=0
@@ -111,17 +119,19 @@ STAGING_DIR="${BACKUP_DIR}/staging_${TIMESTAMP}"
 ARCHIVE_NAME="lh_websites_backup_${TIMESTAMP}.tar.gz"
 ARCHIVE_PATH="${BACKUP_DIR}/${ARCHIVE_NAME}"
 
-echo "--> [1/3] Pobieranie plików stron z hostingu LH (${LH_FTP_SERVER})..."
+echo "--> [1/3] Pobieranie plików stron z hostingu LH (${LH_FTP_SERVER}, FTPS SSL=${LH_FTP_SSL})..."
 mkdir -p "${STAGING_DIR}"
 
-# Pobieranie danych za pomocą dedykowanego, izolowanego kontenera z lftp
+# Pobieranie danych za pomocą dedykowanego, izolowanego kontenera z lftp (z obsługą FTPS TLS)
 LFTP_CMD_FILE="$(mktemp)"
 chmod 600 "${LFTP_CMD_FILE}"
 cat <<EOF > "${LFTP_CMD_FILE}"
-set ftp:ssl-allow no
+set ftp:ssl-allow ${LH_FTP_SSL}
+set ftp:ssl-protect-data true
+set ssl:verify-certificate no
 set net:timeout 15
 set net:max-retries 3
-open -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
+open -p "${LH_FTP_PORT}" -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
 mirror --verbose --delete --parallel=3 "${LH_REMOTE_DIR}" /target
 quit
 EOF
@@ -134,9 +144,34 @@ docker run --rm \
 
 rm -f "${LFTP_CMD_FILE}"
 
+# Opcjonalny zrzut bazy danych MySQL/MariaDB (np. osTicket Helpdesk)
+if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAME}" && -n "${LH_DB_USER}" && -n "${LH_DB_PASSWORD}" ]]; then
+    echo "--> [1b/3] Wykonywanie zrzutu bazy danych MySQL (${LH_DB_NAME}@${LH_DB_HOST})..."
+    docker run --rm \
+        -v "${STAGING_DIR}:/target" \
+        -e MYSQL_PWD="${LH_DB_PASSWORD}" \
+        alpine:latest \
+        sh -c "apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${LH_DB_NAME}' | gzip -9 > '/target/_db_${LH_DB_NAME}.sql.gz'" \
+        && echo "--> [OK] Zrzut bazy danych zapisany w archiwum." \
+        || echo "--> [WARN] Nie udało się wykonać zrzutu bazy danych MySQL (kontynuacja backupu plików)."
+fi
+
 echo "--> [2/3] Kompresja i archiwizacja kopii stron WWW..."
 tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" .
 sudo rm -rf "${STAGING_DIR}" 2>/dev/null || rm -rf "${STAGING_DIR}"
+
+UPLOAD_NAME="${ARCHIVE_NAME}"
+if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; then
+    echo "--> [2b/3] Szyfrowanie spoczynkowe archiwum (AES-256-CBC PBKDF2)..."
+    BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}" openssl enc -aes-256-cbc -pbkdf2 -salt \
+        -in "${ARCHIVE_PATH}" \
+        -out "${ARCHIVE_PATH}.enc" \
+        -pass env:BACKUP_ENCRYPTION_KEY
+    rm -f "${ARCHIVE_PATH}"
+    ARCHIVE_NAME="${ARCHIVE_NAME}.enc"
+    ARCHIVE_PATH="${ARCHIVE_PATH}.enc"
+    UPLOAD_NAME="${ARCHIVE_NAME}"
+fi
 
 ARCHIVE_SIZE="$(du -h "${ARCHIVE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${ARCHIVE_PATH}" | tr -d ' ')"
@@ -156,7 +191,7 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
         -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
         -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
         rclone/rclone:latest \
-        copy "/data/${ARCHIVE_NAME}" "r2:${S3_BUCKET}/websites/"; then
+        copy "/data/${UPLOAD_NAME}" "r2:${S3_BUCKET}/websites/"; then
         
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup stron ${ARCHIVE_NAME} wysłany do ${S3_BUCKET}/websites/."
@@ -191,7 +226,7 @@ write_prometheus_metrics "${STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_BYTES}"
 
 # Rotacja starych kopii
 echo "==> Rotacja: usuwanie kopii stron starszych niż ${RETENTION_DAYS} dni..."
-find "${BACKUP_DIR}" -type f -name "lh_websites_backup_*.tar.gz" -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
+find "${BACKUP_DIR}" -type f \( -name "lh_websites_backup_*.tar.gz" -o -name "lh_websites_backup_*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
 
 echo "=============================================================================="
 echo "==> [ZAKOŃCZONO] Procedura backupu stron LH zakończona pomyślnie."
