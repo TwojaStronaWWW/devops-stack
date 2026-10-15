@@ -534,7 +534,7 @@ if ($geminiApiKey !== '') {
 
 // Darmowy Fallback 2: Groq Cloud API (Llama 3.3 70B Versatile - Free Tier LPU)
 if ($answer === null && $groqApiKey !== '') {
-    $groqModel = getenv('GROQ_MODEL') ?: 'llama-3.3-70b-versatile';
+    $groqModel = getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b';
     $groqLabel = "groq/{$groqModel}";
     $chainPos++;
     $cdLeft = aiCooldownRemaining($aiStats, $groqLabel);

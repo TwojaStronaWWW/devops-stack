@@ -18,7 +18,7 @@ fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
         │ 2 gemini-3.5-flash                                      │  osobna pula Free Tier na model
         │ 3 gemini-3.5-flash-lite                                 │
         │ 4 gemma-4-31b-it                                        │
-        │ 5 groq/llama-3.3-70b-versatile      (jeśli GROQ_API_KEY)│  inny dostawca
+        │ 5 groq/openai/gpt-oss-120b          (jeśli GROQ_API_KEY)│  inny dostawca
         │ 6 openrouter/llama-3.3-70b…:free (jeśli OPENROUTER_API_KEY)│ inny dostawca
         └─────────────────────────────────────────────────────────┘
 ```
@@ -51,7 +51,7 @@ Zasady:
 | Provider | Modele | Stan na VPS |
 |---|---|---|
 | Gemini API | 5 (gemini-3.8-flash, 3.7-flash, 3.5-flash, 3.5-flash-lite, gemma-4-31b-it) | **aktywny** (`GEMINI_API_KEY` ustawiony) |
-| Groq | 1 (llama-3.3-70b-versatile) | **nieaktywny** – `GROQ_API_KEY` pusty |
+| Groq | 1 (`openai/gpt-oss-120b`; llama-3.3 zniknęła z oferty konta) | **aktywny** (`GROQ_API_KEY` ustawiony 2026-10-15) |
 | OpenRouter | 1 (llama-3.3-70b-instruct:free) | **nieaktywny** – `OPENROUTER_API_KEY` pusty |
 
 **Efektywnie działa 5 modeli, wszystkie na jednym koncie/kluczu Google.** Jedna awaria klucza lub konta wyłącza całą kaskadę – dlatego zalecane jest dodanie darmowego klucza Groq (alert `AIRouterNoFallbackProvider` przypomina o tym po 1 h).
