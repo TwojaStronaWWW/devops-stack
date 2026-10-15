@@ -284,10 +284,23 @@ function aiRecordRequest(string $site, string $outcome, int $httpCode, float $la
     ]);
 }
 
-/** Limity dzienne z env: MODEL_DAILY_LIMITS="gemini-3.8-flash=250,gemma-4-31b-it=14400" (opcjonalne). */
+/** Limity dzienne z env: MODEL_DAILY_LIMITS="gemini-3.8-flash=500,gemma-4-31b-it=14400" (z domyślnymi progami Free Tier RPD). */
 function aiDailyLimits(): array
 {
-    $out = [];
+    $out = [
+        'gemini-3.8-flash'                                 => 500,
+        'gemini-3.7-flash'                                 => 500,
+        'gemini-3.5-flash'                                 => 500,
+        'gemini-3.5-flash-lite'                            => 1500,
+        'gemini-2.5-flash'                                 => 500,
+        'gemini-2.5-flash-lite'                            => 1500,
+        'gemini-3-flash-preview'                           => 500,
+        'gemini-2.5-pro'                                   => 100,
+        'gemma-4-31b-it'                                   => 14400,
+        'gemma-3-27b-it'                                   => 14400,
+        'groq/openai/gpt-oss-120b'                         => 1000,
+        'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
+    ];
     foreach (explode(',', (string)(getenv('MODEL_DAILY_LIMITS') ?: '')) as $pair) {
         if (str_contains($pair, '=')) {
             [$k, $v] = explode('=', $pair, 2);
@@ -371,12 +384,14 @@ function aiRenderMetrics(): string
         $providerOf[$c['model']] = $c['provider'];
     }
 
+    $defaultResults = ['ok' => 0, 'rate_limited' => 0, 'quota_daily' => 0, 'unavailable' => 0, 'not_found' => 0, 'auth' => 0, 'network' => 0];
     $names = array_unique(array_merge(array_column($chain, 'model'), array_keys($s['models'])));
     foreach ($names as $name) {
         $name = (string)$name;
         $m = $s['models'][$name] ?? aiModelDefault($providerOf[$name] ?? 'unknown');
         $l = 'model="' . aiEsc($name) . '",provider="' . aiEsc((string)($providerOf[$name] ?? $m['provider'])) . '"';
-        foreach ($m['attempts'] as $res => $n) {
+        $attemptsMap = array_replace($defaultResults, is_array($m['attempts'] ?? null) ? $m['attempts'] : []);
+        foreach ($attemptsMap as $res => $n) {
             $series['ai_router_model_attempts_total'][] = 'ai_router_model_attempts_total{' . $l . ',result="' . aiEsc((string)$res) . '"} ' . (int)$n;
         }
         $series['ai_router_model_skipped_total'][] = 'ai_router_model_skipped_total{' . $l . '} ' . (int)$m['skipped'];
@@ -386,9 +401,8 @@ function aiRenderMetrics(): string
         $sameDay = ($m['today_day'] ?? '') === $day;
         $series['ai_router_model_requests_today'][] = 'ai_router_model_requests_today{' . $l . '} ' . ($sameDay ? (int)$m['today_attempts'] : 0);
         $series['ai_router_model_ok_today'][] = 'ai_router_model_ok_today{' . $l . '} ' . ($sameDay ? (int)$m['today_ok'] : 0);
-        if (isset($limits[$name])) {
-            $series['ai_router_model_daily_limit'][] = 'ai_router_model_daily_limit{' . $l . '} ' . $limits[$name];
-        }
+        $limitVal = $limits[$name] ?? 500;
+        $series['ai_router_model_daily_limit'][] = 'ai_router_model_daily_limit{' . $l . '} ' . (int)$limitVal;
         $series['ai_router_model_ok_latency_seconds'][] = 'ai_router_model_ok_latency_seconds_sum{' . $l . '} ' . round((float)$m['ok_lat_sum'], 3);
         $series['ai_router_model_ok_latency_seconds'][] = 'ai_router_model_ok_latency_seconds_count{' . $l . '} ' . (int)$m['ok_lat_cnt'];
         $series['ai_router_model_last_success_timestamp_seconds'][] = 'ai_router_model_last_success_timestamp_seconds{' . $l . '} ' . (int)$m['last_ok'];
