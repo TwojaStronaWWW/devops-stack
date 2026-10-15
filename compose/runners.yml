@@ -9,6 +9,9 @@ services:
   runner-unified:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-zeslownikiem-unified
+    labels:
+      dev.dozzle.name: "runner-zeslownikiem • CI/CD ZeSłownikiem"
+      org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji zeslownikiem"
     restart: unless-stopped
     networks:
       - internal_network
@@ -41,6 +44,9 @@ services:
   runner-twojastronawww:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-twojastronawww-unified
+    labels:
+      dev.dozzle.name: "runner-twojastronawww • CI/CD TwojaStronaWWW"
+      org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji TwojaStronaWWW"
     restart: unless-stopped
     networks:
       - internal_network

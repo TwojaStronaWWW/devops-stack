@@ -7,6 +7,9 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
+    labels:
+      dev.dozzle.name: "cloudflared • Tunel Zero Trust"
+      org.opencontainers.image.description: "Szyfrowany tunel krawędziowy Cloudflare Zero Trust (dostęp bez otwartych portów WAN)"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

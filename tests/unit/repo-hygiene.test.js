@@ -229,5 +229,27 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(auditContent, /devops_audit_status/);
     assert.match(auditContent, /audit\.prom/);
   });
+
+  it('wszystkie pliki Docker Compose powinny definiować czytelne etykiety dev.dozzle.name dla kontenerów', () => {
+    const composeMain = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'docker-compose.yml'), 'utf-8');
+    const composeExt = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'extensions.yml'), 'utf-8');
+    const composeRunners = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
+
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"uptime-kuma • Monitoring Stron WWW"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"prometheus • Baza Metryk TSDB"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"grafana • Dashboardy i Wykresy"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"ai-router • Czatbot AI & Gemini"/);
+    assert.match(composeExt, /dev\.dozzle\.name:\s*"cloudflared • Tunel Zero Trust"/);
+    assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-twojastronawww • CI\/CD TwojaStronaWWW"/);
+    assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-zeslownikiem • CI\/CD ZeSłownikiem"/);
+  });
+
+  it('skrypt setup-kuma.js powinien być idempotentny (usuwać duplikaty) i posiadać poprawny URL DancePuls', () => {
+    const kumaScript = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'setup-kuma.js'), 'utf-8');
+    assert.match(kumaScript, /https:\/\/dancepuls\.katosalsahub\.pl\//);
+    assert.strictEqual(kumaScript.includes('https://dancepuls.pl"'), false, 'Wykryto stary, niedziałający URL https://dancepuls.pl');
+    assert.match(kumaScript, /deleteMonitor/);
+    assert.match(kumaScript, /monitorList/);
+  });
 });
 

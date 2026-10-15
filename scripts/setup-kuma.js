@@ -15,7 +15,7 @@ if (!ADMIN_USER || !ADMIN_PASS) {
 const SITES = [
     { name: "Raricart.pl", url: "https://raricart.pl" },
     { name: "TwojaStronaWWW.pl", url: "https://twojastronawww.pl" },
-    { name: "DancePuls.pl", url: "https://dancepuls.pl" },
+    { name: "DancePuls.pl", url: "https://dancepuls.katosalsahub.pl/" },
     { name: "KatoSalsaHub.pl", url: "https://katosalsahub.pl" },
     { name: "osTicket Helpdesk", url: "https://hd.twojastronawww.pl" },
     { name: "GalAnonim.pl", url: "https://galanonim.pl" },
@@ -30,6 +30,13 @@ console.log("==> Łączenie z Uptime Kuma pod " + KUMA_URL + "...");
 const socket = io(KUMA_URL, {
     reconnection: false,
     timeout: 10000,
+});
+
+let existingMonitors = {};
+socket.on("monitorList", (data) => {
+    if (data && typeof data === "object") {
+        existingMonitors = { ...existingMonitors, ...data };
+    }
 });
 
 socket.on("connect", () => {
@@ -64,10 +71,78 @@ socket.on("connect", () => {
                 process.exit(1);
             }
 
-            console.log("--> [OK] Zalogowano pomyślnie!");
+            console.log("--> [OK] Zalogowano pomyślnie! Oczekiwanie na listę istniejących monitorów...");
+            await new Promise((r) => setTimeout(r, 800));
 
+            const monitorValues = Object.values(existingMonitors).sort((a, b) => a.id - b.id);
+            console.log(`--> Wykryto ${monitorValues.length} monitorów w bazie Uptime Kuma.`);
+
+            // 1. Usuwanie duplikatów (zostawiamy najstarszy monitor o danej nazwie, z preferencją poprawnego URL)
+            const byName = new Map();
+            for (const m of monitorValues) {
+                if (!byName.has(m.name)) {
+                    byName.set(m.name, []);
+                }
+                byName.get(m.name).push(m);
+            }
+
+            const keptByName = new Map();
+            for (const [name, list] of byName.entries()) {
+                const targetSite = SITES.find((s) => s.name === name);
+                // Wybierz monitor z poprawnym URL (jeśli istnieje), w przeciwnym razie najstarszy (najniższe ID)
+                let primary = list[0];
+                if (targetSite) {
+                    const exactMatch = list.find((m) => m.url === targetSite.url);
+                    if (exactMatch) {
+                        primary = exactMatch;
+                    }
+                }
+                keptByName.set(name, primary);
+
+                for (const m of list) {
+                    if (m.id !== primary.id) {
+                        console.log(`--> [DEDUPLIKACJA] Usuwanie zduplikowanego monitora ID=${m.id}: ${m.name} (${m.url})...`);
+                        await new Promise((resolve) => {
+                            socket.emit("deleteMonitor", m.id, (delRes) => {
+                                if (delRes && delRes.ok) {
+                                    console.log(`    [USUNIĘTO] Duplikat ID=${m.id} (${m.name})`);
+                                } else {
+                                    console.log(`    [INFO] Status usuwania ID=${m.id}: ${delRes ? delRes.msg : "brak"}`);
+                                }
+                                resolve();
+                            });
+                        });
+                    }
+                }
+            }
+
+            // 2. Dodawanie brakujących monitorów lub aktualizacja URL, jeśli się zmienił
             for (const site of SITES) {
-                console.log(`--> Dodawanie monitora: ${site.name} (${site.url})...`);
+                const existing = keptByName.get(site.name);
+                if (existing) {
+                    if (existing.url !== site.url) {
+                        console.log(`--> [AKTUALIZACJA URL] ${site.name} (ID=${existing.id}): ${existing.url} -> ${site.url}`);
+                        const updatedMonitor = {
+                            ...existing,
+                            url: site.url,
+                        };
+                        await new Promise((resolve) => {
+                            socket.emit("editMonitor", updatedMonitor, (editRes) => {
+                                if (editRes && editRes.ok) {
+                                    console.log(`    [OK] Zaktualizowano URL dla: ${site.name}`);
+                                } else {
+                                    console.log(`    [INFO] Informacja: ${editRes ? editRes.msg : "brak"}`);
+                                }
+                                resolve();
+                            });
+                        });
+                    } else {
+                        console.log(`--> [OK / ISTNIEJE] ${site.name} (ID=${existing.id}, ${site.url}) — pomijam duplikowanie.`);
+                    }
+                    continue;
+                }
+
+                console.log(`--> [NOWY] Dodawanie monitora: ${site.name} (${site.url})...`);
 
                 const monitorData = {
                     type: "http",
@@ -100,7 +175,7 @@ socket.on("connect", () => {
                 });
             }
 
-            console.log(`==> [SUKCES] Wszystkie ${SITES.length} serwisy zostały pomyślnie dodane i uruchomione!`);
+            console.log(`==> [SUKCES] Synchronizacja zakończona! Aktywne unikalne serwisy: ${SITES.length}.`);
             socket.close();
             process.exit(0);
         });
