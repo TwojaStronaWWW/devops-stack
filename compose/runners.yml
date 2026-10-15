@@ -14,7 +14,7 @@ services:
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji zeslownikiem"
     restart: unless-stopped
     networks:
-      - internal_network
+      - runners_network
     environment:
       - RUNNER_SCOPE=${RUNNER_ZESLOWNIKIEM_SCOPE:-repo}
       - ORG_NAME=zeslownikiem
@@ -49,7 +49,7 @@ services:
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji TwojaStronaWWW"
     restart: unless-stopped
     networks:
-      - internal_network
+      - runners_network
     environment:
       - RUNNER_SCOPE=${RUNNER_TWOJASTRONAWWW_SCOPE:-repo}
       - ORG_NAME=TwojaStronaWWW
@@ -84,7 +84,7 @@ services:
     profiles: ["split"]
     restart: unless-stopped
     networks:
-      - internal_network
+      - runners_network
     environment:
       - REPO_URL=https://github.com/zeslownikiem/gal-anonym
       - RUNNER_TOKEN=${RUNNER_DESKTOP_TOKEN}
@@ -109,7 +109,7 @@ services:
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla repozytorium zeslownikiem/gal-anonim-web"
     restart: unless-stopped
     networks:
-      - internal_network
+      - runners_network
     environment:
       - RUNNER_SCOPE=repo
       - REPO_URL=https://github.com/zeslownikiem/gal-anonim-web
@@ -132,7 +132,7 @@ services:
           memory: 512M
 
 networks:
-  internal_network:
+  runners_network:
     name: devops_runners_network
     driver: bridge
 
