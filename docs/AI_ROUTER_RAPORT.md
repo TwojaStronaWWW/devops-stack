@@ -19,7 +19,7 @@ fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
         │ 3 gemini-3.5-flash-lite                                 │
         │ 4 gemma-4-31b-it                                        │
         │ 5 groq/openai/gpt-oss-120b          (jeśli GROQ_API_KEY)│  inny dostawca
-        │ 6 openrouter/llama-3.3-70b…:free (jeśli OPENROUTER_API_KEY)│ inny dostawca
+        │ 6 openrouter/nemotron-3-super-120b:free (jeśli OPENROUTER_API_KEY)│ inny dostawca
         └─────────────────────────────────────────────────────────┘
 ```
 
@@ -52,7 +52,7 @@ Zasady:
 |---|---|---|
 | Gemini API | 5 (gemini-3.8-flash, 3.7-flash, 3.5-flash, 3.5-flash-lite, gemma-4-31b-it) | **aktywny** (`GEMINI_API_KEY` ustawiony) |
 | Groq | 1 (`openai/gpt-oss-120b`; llama-3.3 zniknęła z oferty konta) | **aktywny** (`GROQ_API_KEY` ustawiony 2026-10-15) |
-| OpenRouter | 1 (llama-3.3-70b-instruct:free) | **nieaktywny** – `OPENROUTER_API_KEY` pusty |
+| OpenRouter | 1 (`nvidia/nemotron-3-super-120b-a12b:free`; llama-3.3 zniknęła z listy darmowych) | **aktywny** (klucz dodany 2026-10-15) |
 
 **Efektywnie działa 5 modeli, wszystkie na jednym koncie/kluczu Google.** Jedna awaria klucza lub konta wyłącza całą kaskadę – dlatego zalecane jest dodanie darmowego klucza Groq (alert `AIRouterNoFallbackProvider` przypomina o tym po 1 h).
 

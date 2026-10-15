@@ -582,9 +582,9 @@ if ($answer === null && $groqApiKey !== '') {
     }
 }
 
-// Darmowy Fallback 3: OpenRouter Free Models (np. meta-llama/llama-3.3-70b-instruct:free)
+// Darmowy Fallback 3: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
 if ($answer === null && $openRouterApiKey !== '') {
-    $orModel = getenv('OPENROUTER_MODEL') ?: 'meta-llama/llama-3.3-70b-instruct:free';
+    $orModel = getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free';
     $orLabel = "openrouter/{$orModel}";
     $chainPos++;
     $cdLeft = aiCooldownRemaining($aiStats, $orLabel);

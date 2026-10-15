@@ -286,6 +286,7 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-nvidia/nemotron-3-super-120b-a12b:free}
       - MODEL_DAILY_LIMITS=${MODEL_DAILY_LIMITS:-}
       - PHP_CLI_SERVER_WORKERS=4
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl}
