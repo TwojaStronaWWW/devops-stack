@@ -27,12 +27,12 @@ sudo bash scripts/02-install-docker.sh
 ```
 
 ### Krok 3: Odtworzenie zmiennych środowiskowych i poświadczeń (Czas: ~1 min)
-Wszystkie poświadczenia (hasła Grafana, Uptime Kuma, tokeny Cloudflare oraz tokeny runnerów) są bezpiecznie zarchiwizowane w Twojej bazie **KeePass** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`) oraz w **GitHub Actions Secrets**.
+Wszystkie poświadczenia (hasła Grafana, Uptime Kuma, tokeny Cloudflare, tokeny runnerów oraz 3 klucze API dla AI Routera: `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`) są bezpiecznie zarchiwizowane w Twojej bazie **KeePass** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`) oraz w **GitHub Actions Secrets**.
 
 ```bash
 cp .env.example .env
 nano .env
-# Wprowadź poświadczenia z KeePassa / GitHub Secrets
+# Wprowadź poświadczenia z KeePassa / GitHub Secrets (w tym GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY)
 
 # Utworzenie zabezpieczonego pliku poświadczeń dla scrapera Prometheusa (UID 65534 - ISO 27001):
 echo -n "TwojeHasloKumaZKeePassa" > config/prometheus/kuma_password
@@ -93,7 +93,7 @@ docker run --rm -v prometheus_data:/target alpine chown -R 65534:65534 /target
 ### Krok 7: Uruchomienie usług i runnerów CI/CD (Czas: ~2 min)
 ```bash
 cd /opt/devops-stack/compose
-# 1. Uruchomienie monitoringu i tunelu Cloudflare
+# 1. Uruchomienie monitoringu, AI Routera i tunelu Cloudflare
 docker compose up -d
 
 # 2. Uruchomienie runnerów dla obu organizacji (zeslownikiem oraz TwojaStronaWWW)
@@ -110,9 +110,10 @@ sudo systemctl enable --now devops-backup.timer
 
 - [ ] Kontenery mają status `Up (healthy)`.
 - [ ] Runnery `runner-zeslownikiem-unified` i `runner-twojastronawww-unified` mają status `Listening for Jobs`.
-- [ ] Uptime Kuma odzyskuje historię monitorowanych endpointów pod `https://monitoring.twojastronawww.pl` (z auto-logowaniem).
-- [ ] Grafana uruchamia się z zachowanymi dashboardami pod `http://127.0.0.1:3000`.
+- [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health` oraz eksportuje metryki pod `http://127.0.0.1:8085/metrics`.
+- [ ] Uptime Kuma odzyskuje historię monitorowanych endpointów pod `https://monitoring.twojastronawww.pl` (w tym `AI Router Healthcheck` = UP).
+- [ ] Grafana uruchamia się z oboma dashboardami (`Centrum Monitoringu Stron WWW & Usług` oraz `AI Router - Gemini Proxy Monitor`) pod `http://127.0.0.1:3000`.
 - [ ] Sekcja Disaster Recovery w Grafanie poprawnie odczytuje status backupów z node-exporter.
-- [ ] Prometheus zbiera metryki i wszystkie targety mają status `UP` w `http://127.0.0.1:9090/targets`.
+- [ ] Prometheus zbiera metryki i wszystkie targety (w tym `ai-router`) mają status `UP` w `http://127.0.0.1:9090/targets`.
 - [ ] Systemd timer `devops-backup.timer` jest aktywny (`systemctl list-timers devops-backup.timer`).
 

@@ -7,7 +7,7 @@
 ## 1. Architektura Systemu
 
 ```text
-[ Internet / Zewnętrzni Użytkownicy ]
+[ Internet / Zewnętrzni Użytkownicy & Witryny Klienckie (FuegoLingua, KatoSalsaHub, TwojaStronaWWW) ]
               │
               ▼ (Tunel szyfrowany TLS / QUIC - Porty zaporowe pozostają ZAMKNIĘTE)
 [ Cloudflare Zero Trust (Tunnels & Access) ]
@@ -18,12 +18,17 @@
  │                                                                        │
  │  ┌─────────────────┐ ┌───────────────┐ ┌────────────────────────────┐  │
  │  │  Uptime Kuma    │ │  Prometheus   │ │  Grafana                   │  │
- │  │  (Blackbox mon) │ │  (TSDB 15d)   │ │  (Dashboardy & Alerting)   │  │
+ │  │  (Blackbox mon) │ │  (TSDB 15d)   │ │  (2 Dashboardy & Alerting) │  │
  │  │  127.0.0.1:3001 │ │ 127.0.0.1:9090│ │  127.0.0.1:3000           │  │
  │  └────────┬────────┘ └───────▲───────┘ └─────────────┬──────────────┘  │
  │           │                  │                       │                 │
  │           └────── metrics ───┤                       │                 │
  │                              │                       │                 │
+ │  ┌─────────────────┐         │                       │                 │
+ │  │  AI Router RAG  ├─────────┤ (/metrics & /health)  │                 │
+ │  │  (7-Model Casc) │         │                       │                 │
+ │  │  127.0.0.1:8085 │         │                       │                 │
+ │  └─────────────────┘         │                       │                 │
  │  ┌─────────────────┐         │                       │                 │
  │  │  Node Exporter  ├─────────┤                       │                 │
  │  │  (CPU/RAM/Dysk) │         │                       │                 │
@@ -41,14 +46,15 @@
  │                              └──────────────────────────────────────┘  │
  │                                                                        │
  │  ┌────────────────────────────────────────────────────────────────────────┐  │
- │  │  Zunifikowany Runner Organizacji zeslownikiem (zeslownikiem-pc-unified)│  │
- │  │  Obsługuje automatycznie: gal-anonym, gal-anonim-web & nowe projekty   │  │
+ │  │  Zunifikowane Runnery Organizacji (zeslownikiem & TwojaStronaWWW)      │  │
+ │  │  Obsługują automatycznie: gal-anonym, fuegolingua, _site-template itd. │  │
  │  └────────────────────────────────────────────────────────────────────────┘  │
  │                                                                        │
  │  Trwałe wolumeny danych & Kopia Offsite:                               │
  │  ├── uptime_kuma_data                                                  │
  │  ├── prometheus_data                                                   │
  │  ├── grafana_data                                                      │
+ │  ├── ai_router_storage (rate-limit & ai_stats.json)                    │
  │  └── backup-offsite.sh ──> S3 / Cloudflare R2 / Oracle Cloud (Alerty)  │
  └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -113,38 +119,46 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── pre-commit                 # Git hook blokujący wycieki sekretów (.env, *.pem, *.key)
 │   └── commit-msg                 # Git hook wymuszający format Conventional Commits
 ├── compose/
-│   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, GitHub Exporter
+│   ├── docker-compose.yml         # Stos: Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, AI Router, GitHub Exporter
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust (cloudflared)
-│   └── runners.yml                # Zunifikowany runner GitHub Actions (ARM64, organizacja zeslownikiem)
+│   └── runners.yml                # Zunifikowane runnery GitHub Actions (ARM64: zeslownikiem & TwojaStronaWWW)
 ├── config/
 │   ├── prometheus/
-│   │   └── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter (password_file)
+│   │   ├── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter, AI Router (/metrics)
+│   │   └── rules/
+│   │       └── ai-router.yml      # 8 reguł alertów Prometheusa dla kaskady i limitów AI Routera
 │   └── grafana/
 │       └── provisioning/
-│           ├── datasources/       # Automatyczne podpinanie Prometheus API
-│           └── dashboards/        # Automatyczny pulpit: Centrum Monitoringu Stron WWW & Usług
+│           ├── datasources/       # Automatyczne podpinanie Prometheus API (uid: prometheus)
+│           └── dashboards/        # 2 pulpity: Centrum Monitoringu Stron WWW & Usług + AI Router (25 paneli)
 ├── docs/
+│   ├── AI_ROUTER_RAPORT.md        # Dokumentacja telemetrii, metryk i raportowania AI Routera
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
 │   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001) + auto-SWAP
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
+│   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności i kosztów AI Routera
+│   ├── audit-server.sh            # Skrypt audytu bezpieczeństwa i stanu żywego serwera VPS
 │   ├── backup-offsite.sh          # Automatyczny backup do chmury (S3/R2/Oracle) z alertami Ntfy
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
+│   ├── backup-websites-lh.sh      # Automatyczny backup serwisów WWW z hostingu LH.pl z telemetrią Prometheus
 │   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie przeglądarki)
 │   ├── preview-tunnel.ps1/.sh     # Quick Tunnel – natychmiastowy szyfrowany link HTTPS dla stagingu
-│   ├── setup-kuma.js              # Rejestracja monitorowanych witryn w Uptime Kuma
+│   ├── setup-kuma.js              # Idempotentna rejestracja monitorowanych witryn i AI Routera w Uptime Kuma
 │   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
 │   └── runners/                   # Skrypty sterowania runnerami CI/CD
 ├── services/
-│   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, RAG per strona, Zero-Bloat)
-│       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~15 MB RAM)
-│       ├── src/chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, cURL do Gemini API, /health
-│       ├── data/                  # Bazy wiedzy RAG montowane :ro (katosalsahub, fuegolingua)
-│       ├── storage/               # Trwały wolumen na pliki rate-limit per IP
+│   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, Multi-Provider RAG, Zero-Bloat)
+│       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~11-15 MB RAM, 4 workery PHP)
+│       ├── src/
+│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, 7-modelowa kaskada LLM, /health, /metrics
+│       │   └── ai-stats.php       # Moduł telemetrii Prometheus i inteligentnego Cooldownu modeli (LOCK_EX, zero PII)
+│       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua-knowledge.txt, katosalsahub-knowledge.txt, twojastronawww-knowledge.txt)
+│       ├── storage/               # Trwały wolumen na pliki rate-limit per IP oraz ai_stats.json
 │       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
-│       └── repo-hygiene.test.js   # Natywne testy higieny repozytorium (node:test)
+│       └── repo-hygiene.test.js   # 22 natywne testy higieny repozytorium i telemetrii AI (node:test)
 ├── AGENTS.md / GEMINI.md          # Wytyczne architektoniczne dla modeli AI i rygor Always Free
 ├── DISASTER_RECOVERY.md           # Procedura odtworzenia środowiska z kopii w < 15 minut
 ├── README.md                      # Główna dokumentacja architektury i bezpieczeństwa
@@ -357,7 +371,7 @@ W celu zapewnienia bezwzględnej zgodności z normą **ISO 27001** oraz uniknię
 
 1. **Warstwa Główna: Baza KeePass Password Safe (`Databasekpoczatek.kdbx`):**
    - Wszystkie poświadczenia produkcyjne są scentralizowane w zaszyfrowanej bazie KeePass w dedykowanej grupie **`VPS - TwojaStronaWWW`**.
-   - Obejmuje: hasła administracyjne Grafana, Uptime Kuma, dane klucza SSH Ed25519, tokeny Cloudflare Zero Trust oraz tokeny rejestracyjne runnerów CI/CD.
+   - Obejmuje: hasła administracyjne Grafana, Uptime Kuma, dane klucza SSH Ed25519, tokeny Cloudflare Zero Trust, tokeny rejestracyjne runnerów CI/CD oraz **3 klucze API dla AI Routera (`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`)**.
    - Wszystkie hasła generowane są z zachowaniem rygoru kryptograficznego (min. 32 znaki, wysoka entropia, brak słów słownikowych).
 
 2. **Warstwa Automatyzacji: GitHub Actions Secrets:**
@@ -369,5 +383,37 @@ W celu zapewnienia bezwzględnej zgodności z normą **ISO 27001** oraz uniknię
 3. **Warstwa Hosta VPS: Izolowany Plik `.env`:**
    - Na serwerze VPS zmienne środowiskowe znajdują się w pliku `/opt/devops-stack/.env` zabezpieczonym uprawnieniem `chmod 600` (dostępnym wyłącznie dla użytkownika `ubuntu`).
    - Plik ten jest trwale wykluczony z systemu kontroli wersji przez `.gitignore`.
+
+---
+
+## 11. Centralna Bramka AI & Multi-Provider RAG Router (`services/ai-router`)
+
+Serwer VPS udostępnia scentralizowany mikro-router AI ([`services/ai-router/src/chat-router.php`](file:///e:/Projekty/VPS/services/ai-router/src/chat-router.php)) obsługujący asystentów czatowych dla witryn platformy (**Fuego Lingua**, **Kato Salsa Hub**, **TwojaStronaWWW** oraz nowych wdrożeń z szablonu **`_site-template`**) pod adresem `https://ai.twojastronawww.pl/chat-router.php`.
+
+### A. Klasyfikacja Rozwiązania i Zerowy Narzut Zasobów
+- **Obszar 3 (AI z bazą wiedzy firmy RAG) + Enterprise High-Availability:** Dynamiczny dobór bazy wiedzy po parametrze `site_id` (`services/ai-router/data/<site_id>-knowledge.txt` montowane w trybie `:ro`), pamięć konwersacji Multi-Turn (`history` do 10 wiadomości) oraz twarde reguły anty-halucynacyjne (Guardrails).
+- **0 MB wag modeli na serwerze VPS:** Wszystkie 7 modeli LLM działa w chmurze zewnętrznych dostawców (komunikacja przez HTTPS cURL). Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~11–15 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
+
+### B. 3-Dostawczowa Kaskada Odporności na Awarie (7 Modeli LLM) + Cooldown
+Router posiada skonfigurowane **3 niezależne klucze API** i automatycznie przełącza zapytanie do kolejnego modelu w ułamku sekundy w razie błędu `429 Rate Limit`, `503 Overload` lub przekroczenia czasu:
+
+| Pozycja w kaskadzie | Dostawca (Zmienna Klucza) | Model LLM | Rola w architekturze |
+|---|---|---|---|
+| **1 (Primary)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-2.5-flash` | Główny szybki model produkcyjny |
+| **2 (Fallback 1)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-2.5-flash-lite` | Ultralekki model o podwyższonym limicie RPD |
+| **3 (Fallback 2)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3-flash-preview` | Nowa generacja Gemini Flash (osobna pula limitów) |
+| **4 (Fallback 3)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-2.5-pro` | Zaawansowany model rozumowania |
+| **5 (Fallback 4)** | Google AI Studio (`GEMINI_API_KEY`) | `gemma-3-27b-it` | Otwarty model Google (wysoka pula darmowych zapytań) |
+| **6 (Fallback 5)** | Groq Cloud (`GROQ_API_KEY`) | `openai/gpt-oss-120b` | Zewnętrzny ultra-szybki fallback (~1 s na układach LPU) |
+| **7 (Fallback 6)** | OpenRouter (`OPENROUTER_API_KEY`) | `nvidia/nemotron-3-super-120b-a12b:free` | Niezależny zapasowy klaster chmurowy (Free Tier) |
+
+- **Inteligentny Cooldown Modeli ([`ai-stats.php`](file:///e:/Projekty/VPS/services/ai-router/src/ai-stats.php)):** Gdy dowolny model zwróci błąd limitu (`429`), przeciążenia (`503`) lub timeout, otrzymuje tymczasowy cooldown. Kolejne zapytania klientów natychmiast omijają go w `0 ms`, trafiając od razu do sprawnego modelu.
+
+### C. Pełna Obserwowalność, Alerting i Raportowanie CLI (ISO 27001 Zero-PII)
+1. **Endpoint Prometheus (`GET /metrics`):** Eksportuje metryki zapytań, skuteczności kaskady, prób per model, aktywnych cooldownów, zużycia tokenów, estymacji kosztów USD oraz histogramu latencji (`p50`/`p95`). Zgodnie z **ISO 27001** moduł [`ai-stats.php`](file:///e:/Projekty/VPS/services/ai-router/src/ai-stats.php) **nigdy nie loguje treści pytań klientów, adresów IP ani kluczy API**.
+2. **Dashboard Grafany (`uid: ai-router-overview`):** 25-panelowy pulpit **AI Router - Gemini Proxy Monitor** ([`ai-router-overview.json`](file:///e:/Projekty/VPS/config/grafana/provisioning/dashboards/definitions/ai-router-overview.json)) prezentujący ruch i zdrowie wszystkich 7 modeli per strona (`fuegolingua`, `katosalsahub`, `twojastronawww`).
+3. **Reguły Alertów Prometheusa:** Plik [`config/prometheus/rules/ai-router.yml`](file:///e:/Projekty/VPS/config/prometheus/rules/ai-router.yml) monitoruje 8 warunków krytycznych (`AiRouterDown`, `AiRouterHighErrorRate`, `AiRouterNoSuccessfulAnswers`, `AiRouterCascadeFallbackActive`, `AiRouterHighLatencyP95`, `AiRouterRateLimitSpike`, `AiRouterDailyQuotaExhausted`, `AiRouterModelDailyQuotaNearLimit`).
+4. **Raporty CLI na żądanie:** Skrypty [`scripts/ai-router-report.sh`](file:///e:/Projekty/VPS/scripts/ai-router-report.sh) oraz [`scripts/ai-router-report.ps1`](file:///e:/Projekty/VPS/scripts/ai-router-report.ps1) (szczegóły w [`docs/AI_ROUTER_RAPORT.md`](file:///e:/Projekty/VPS/docs/AI_ROUTER_RAPORT.md)).
+
 
 
