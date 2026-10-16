@@ -21,7 +21,7 @@ groups:
 
       - alert: AIRouterPrimaryModelSuspended
         expr: ai_router_model_suspended * on(model) group_left() (ai_router_model_info{position="0"}) == 1
-        for: 5m
+        for: 15m
         labels:
           severity: warning
         annotations:

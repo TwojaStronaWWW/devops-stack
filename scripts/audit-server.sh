@@ -450,18 +450,32 @@ else
         FIRING_COUNT="$(echo "${PROM_ALERTS}" | grep -o '"state":"firing"' | wc -l | tr -d ' ')"
         if [[ "${FIRING_COUNT}" -eq 0 ]]; then
             pass "Reguły Alertów Prometheusa (AI Router): 0 aktywnych alarmów (firing=0)."
+            rm -f /tmp/devops_ntfy_alert_dedup.state 2>/dev/null || true
         else
             FIRING_NAMES="$(echo "${PROM_ALERTS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
             warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
                  "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
             NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo 'kpoczatek-vps-alerty')"
             if [[ -n "${NTFY_TOPIC_VAL}" ]]; then
-                curl -s --max-time 5 \
-                    -H "Title: 🚨 Prometheus Alert (VPS AI Router)" \
-                    -H "Priority: high" \
-                    -H "Tags: rotating_light,robot" \
-                    -d "Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}" \
-                    "https://ntfy.sh/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
+                DEDUP_FILE="/tmp/devops_ntfy_alert_dedup.state"
+                NOW_EPOCH="$(date +%s)"
+                SEND_NTFY=1
+                if [[ -f "${DEDUP_FILE}" ]]; then
+                    LAST_SIG="$(head -n1 "${DEDUP_FILE}" 2>/dev/null || echo '')"
+                    LAST_SENT="$(tail -n1 "${DEDUP_FILE}" 2>/dev/null || echo '0')"
+                    if [[ "${LAST_SIG}" == "${FIRING_NAMES}" && $((NOW_EPOCH - LAST_SENT)) -lt 7200 ]]; then
+                        SEND_NTFY=0
+                    fi
+                fi
+                if [[ "${SEND_NTFY}" -eq 1 ]]; then
+                    printf "%s\n%s\n" "${FIRING_NAMES}" "${NOW_EPOCH}" > "${DEDUP_FILE}" 2>/dev/null || true
+                    curl -s --max-time 5 \
+                        -H "Title: 🚨 Prometheus Alert (VPS AI Router)" \
+                        -H "Priority: high" \
+                        -H "Tags: rotating_light,robot" \
+                        -d "Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}" \
+                        "https://ntfy.sh/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
+                fi
             fi
         fi
     fi

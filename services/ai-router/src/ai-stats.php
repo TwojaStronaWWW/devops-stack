@@ -170,20 +170,19 @@ function aiLog(string $event, array $ctx = []): void
 function aiClassify(int $httpCode, ?array $json, string $curlError, string $body = ''): array
 {
     if ($curlError !== '' || $httpCode === 0) {
-        return ['network', 600];
+        return ['network', 120];
     }
     $blob = is_array($json) ? json_encode($json) : $body;
     $blob = is_string($blob) ? $blob : '';
 
     if ($httpCode === 429) {
-        if (stripos($blob, 'PerDay') !== false || stripos($blob, 'per day') !== false) {
-            return ['quota_daily', min(aiSecondsToQuotaReset(), 86400)];
+        $hasRetryDelay = (bool)preg_match('/"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/', $blob, $m);
+        $isPerMinute = stripos($blob, 'PerMinute') !== false || stripos($blob, 'per minute') !== false;
+        if (!$hasRetryDelay && !$isPerMinute && (stripos($blob, 'PerDay') !== false || stripos($blob, 'RequestsPerDay') !== false)) {
+            return ['quota_daily', min(aiSecondsToQuotaReset(), 900)];
         }
-        $cd = 60;
-        if (preg_match('/"retryDelay"\s*:\s*"(\d+)(?:\.\d+)?s"/', $blob, $m)) {
-            $cd = (int)$m[1];
-        }
-        return ['rate_limited', max(AI_STATS_COOLDOWN_MIN, min(AI_STATS_COOLDOWN_MAX, $cd))];
+        $cd = $hasRetryDelay ? (int)$m[1] : 60;
+        return ['rate_limited', max(AI_STATS_COOLDOWN_MIN, min(120, $cd))];
     }
     if ($httpCode === 404) {
         return ['not_found', 3600];
@@ -192,7 +191,7 @@ function aiClassify(int $httpCode, ?array $json, string $curlError, string $body
         return ['auth', 300];
     }
     if ($httpCode >= 500) {
-        return ['unavailable', 180];
+        return ['unavailable', 120];
     }
     return ['other', 0];
 }
