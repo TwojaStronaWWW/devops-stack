@@ -706,13 +706,15 @@ if ($answer === null && $openRouterApiKey !== '') {
                 'model'       => $orModel,
                 'messages'    => $messages,
                 'temperature' => 0.25,
-                'max_tokens'  => 900
+                'max_tokens'  => 900,
+                'reasoning'   => ['effort' => 'none']
             ],
             [
                 "Authorization: Bearer {$openRouterApiKey}",
                 'HTTP-Referer: https://twojastronawww.pl',
                 'X-Title: TwojaStronaWWW AI Router'
-            ]
+            ],
+            6
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
