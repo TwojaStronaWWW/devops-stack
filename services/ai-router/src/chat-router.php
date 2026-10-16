@@ -437,7 +437,7 @@ $systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {
 /**
  * Pomocnicza funkcja wykonująca żądanie HTTP POST JSON przez cURL
  */
-function executeJsonPost(string $url, array $payload, array $headers = [], int $timeoutSec = 6): array {
+function executeJsonPost(string $url, array $payload, array $headers = [], int $timeoutSec = 4): array {
     $curlOptions = [
         CURLOPT_URL            => $url,
         CURLOPT_POST           => true,
@@ -448,7 +448,7 @@ function executeJsonPost(string $url, array $payload, array $headers = [], int $
         ], $headers),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeoutSec,
-        CURLOPT_CONNECTTIMEOUT => 3,
+        CURLOPT_CONNECTTIMEOUT => 2,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2
     ];
@@ -504,7 +504,7 @@ $geminiPayload = [
     'contents' => $geminiContents,
     'generationConfig' => [
         'temperature'     => 0.4,
-        'maxOutputTokens' => 550
+        'maxOutputTokens' => 2048
     ]
 ];
 
@@ -530,18 +530,31 @@ foreach (aiFullChain() as $aiChainItem) {
 if ($geminiApiKey !== '') {
     $geminiModelChain = aiGeminiChain($configuredModel);
     $geminiTransientFailures = 0;
+    $geminiSkipped = 0;
 
     foreach ($geminiModelChain as $candidateModel) {
         $chainPos++;
         $cdLeft = aiCooldownRemaining($aiStats, $candidateModel);
         if ($cdLeft > 0 && !$allCooling) {
             aiRecordSkip('gemini', $candidateModel, $cdLeft);
+            $geminiSkipped++;
+            if ($geminiSkipped >= 2 && $groqApiKey !== '') {
+                break; // Jeśli 2 główne modele Gemini są na cooldownie, przejdź w 0 ms do Groq LPU (~0.6s)
+            }
             continue;
+        }
+
+        // Dopasowanie thinkingLevel per model (redukcja ukrytych thoughtsTokenCount z ~530 do 0 i czasu z ~4.5s do ~1.5s)
+        $modelPayload = $geminiPayload;
+        if (str_starts_with($candidateModel, 'gemini-3.5-')) {
+            $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
+        } elseif (str_starts_with($candidateModel, 'gemini-3.')) {
+            $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'LOW'];
         }
 
         $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$candidateModel}:generateContent?key={$geminiApiKey}";
         $t0 = microtime(true);
-        $res = executeJsonPost($apiUrl, $geminiPayload, [], 6);
+        $res = executeJsonPost($apiUrl, $modelPayload, [], 4);
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
 
@@ -550,13 +563,22 @@ if ($geminiApiKey !== '') {
             [$cls, $cd] = aiClassify(0, null, (string)($res['error'] ?: 'curl'));
             aiRecordAttempt('gemini', $candidateModel, $cls, 0, $ms, $cd);
             $geminiTransientFailures++;
-            if ($geminiTransientFailures >= 2 && $groqApiKey !== '') {
-                break; // Fast-Fail do ultraszybkiego Groq LPU (~0.5s) przy globalnym przeciążeniu Google API
+            if ($groqApiKey !== '') {
+                break; // Natychmiastowy Fast-Fail do Groq LPU po timeoucie sieciowym Google API
             }
             continue;
         }
 
         if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $finishReason = $res['json']['candidates'][0]['finishReason'] ?? 'STOP';
+            if ($finishReason === 'SAFETY') {
+                $answer = 'Przepraszam, zapytanie narusza zasady bezpieczeństwa treści.';
+                $usedModel = $candidateModel;
+                $aiDepth = $chainPos;
+                aiRecordAttempt('gemini', $candidateModel, 'safety', 200, $ms);
+                break;
+            }
+
             $parts = $res['json']['candidates'][0]['content']['parts'] ?? [];
             $candidateText = null;
             if (is_array($parts)) {
@@ -567,19 +589,22 @@ if ($geminiApiKey !== '') {
                     }
                 }
             }
+
+            // Ochrona przed uciętymi w pół zdania odpowiedziami (finishReason === MAX_TOKENS)
+            if ($finishReason === 'MAX_TOKENS') {
+                aiRecordAttempt('gemini', $candidateModel, 'empty', 200, $ms, 120);
+                $geminiTransientFailures++;
+                if (($geminiTransientFailures + $geminiSkipped) >= 2 && $groqApiKey !== '') {
+                    break;
+                }
+                continue;
+            }
+
             if ($candidateText !== null && trim($candidateText) !== '') {
                 $answer = trim($candidateText);
                 $usedModel = $candidateModel;
                 $aiDepth = $chainPos;
                 aiRecordAttempt('gemini', $candidateModel, 'ok', 200, $ms);
-                break;
-            }
-            $finishReason = $res['json']['candidates'][0]['finishReason'] ?? 'UNKNOWN';
-            if ($finishReason === 'SAFETY') {
-                $answer = 'Przepraszam, zapytanie narusza zasady bezpieczeństwa treści.';
-                $usedModel = $candidateModel;
-                $aiDepth = $chainPos;
-                aiRecordAttempt('gemini', $candidateModel, 'safety', 200, $ms);
                 break;
             }
             aiRecordAttempt('gemini', $candidateModel, 'empty', 200, $ms);
@@ -599,8 +624,8 @@ if ($geminiApiKey !== '') {
             break;
         }
 
-        // Fast-Fail: jeśli 2 modele Gemini z rzędu zwróciły 503/429/timeout, przełącz natychmiast na Groq LPU zamiast czekać na resztę łańcucha Google
-        if ($geminiTransientFailures >= 2 && $groqApiKey !== '') {
+        // Fast-Fail: jeśli suma błędów i pominiętych modeli >= 2, przełącz natychmiast na Groq LPU
+        if (($geminiTransientFailures + $geminiSkipped) >= 2 && $groqApiKey !== '') {
             break;
         }
     }
