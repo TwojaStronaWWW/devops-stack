@@ -437,18 +437,18 @@ $systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {
 /**
  * Pomocnicza funkcja wykonująca żądanie HTTP POST JSON przez cURL
  */
-function executeJsonPost(string $url, array $payload, array $headers = []): array {
+function executeJsonPost(string $url, array $payload, array $headers = [], int $timeoutSec = 6): array {
     $curlOptions = [
         CURLOPT_URL            => $url,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
         CURLOPT_HTTPHEADER     => array_merge([
             'Content-Type: application/json',
-            'User-Agent: TwojaStronaWWW-AIRouter/2.0'
+            'User-Agent: TwojaStronaWWW-AIRouter/2.1'
         ], $headers),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 22,
-        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT        => $timeoutSec,
+        CURLOPT_CONNECTTIMEOUT => 3,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2
     ];
@@ -503,8 +503,8 @@ $geminiPayload = [
     ],
     'contents' => $geminiContents,
     'generationConfig' => [
-        'temperature'     => 0.6,
-        'maxOutputTokens' => 2048
+        'temperature'     => 0.4,
+        'maxOutputTokens' => 550
     ]
 ];
 
@@ -529,6 +529,7 @@ foreach (aiFullChain() as $aiChainItem) {
 // Model zawieszony po 429/5xx/404 jest pomijany do końca cooldownu (chyba że wszystkie są zawieszone).
 if ($geminiApiKey !== '') {
     $geminiModelChain = aiGeminiChain($configuredModel);
+    $geminiTransientFailures = 0;
 
     foreach ($geminiModelChain as $candidateModel) {
         $chainPos++;
@@ -540,7 +541,7 @@ if ($geminiApiKey !== '') {
 
         $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$candidateModel}:generateContent?key={$geminiApiKey}";
         $t0 = microtime(true);
-        $res = executeJsonPost($apiUrl, $geminiPayload);
+        $res = executeJsonPost($apiUrl, $geminiPayload, [], 6);
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
 
@@ -548,6 +549,10 @@ if ($geminiApiKey !== '') {
             $lastErrorMsg = 'Błąd komunikacji z modelem AI: ' . ($res['error'] ?: 'Nieznany błąd cURL.');
             [$cls, $cd] = aiClassify(0, null, (string)($res['error'] ?: 'curl'));
             aiRecordAttempt('gemini', $candidateModel, $cls, 0, $ms, $cd);
+            $geminiTransientFailures++;
+            if ($geminiTransientFailures >= 2 && $groqApiKey !== '') {
+                break; // Fast-Fail do ultraszybkiego Groq LPU (~0.5s) przy globalnym przeciążeniu Google API
+            }
             continue;
         }
 
@@ -581,6 +586,9 @@ if ($geminiApiKey !== '') {
         } else {
             [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], '', is_string($res['body']) ? $res['body'] : '');
             aiRecordAttempt('gemini', $candidateModel, $cls, $res['httpCode'], $ms, $cd);
+            if ($res['httpCode'] >= 500 || $res['httpCode'] === 429) {
+                $geminiTransientFailures++;
+            }
         }
 
         $apiErrorMessage = $res['json']['error']['message'] ?? "HTTP {$res['httpCode']}";
@@ -588,6 +596,11 @@ if ($geminiApiKey !== '') {
 
         // Jeśli klucz API jest całkowicie nieprawidłowy (400 API_KEY_INVALID / 403), nie ponawiamy kolejnych modeli Gemini
         if ($res['httpCode'] === 400 && str_contains($apiErrorMessage, 'API_KEY_INVALID')) {
+            break;
+        }
+
+        // Fast-Fail: jeśli 2 modele Gemini z rzędu zwróciły 503/429/timeout, przełącz natychmiast na Groq LPU zamiast czekać na resztę łańcucha Google
+        if ($geminiTransientFailures >= 2 && $groqApiKey !== '') {
             break;
         }
     }

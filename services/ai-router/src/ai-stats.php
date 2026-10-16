@@ -170,7 +170,7 @@ function aiLog(string $event, array $ctx = []): void
 function aiClassify(int $httpCode, ?array $json, string $curlError, string $body = ''): array
 {
     if ($curlError !== '' || $httpCode === 0) {
-        return ['network', 30];
+        return ['network', 600];
     }
     $blob = is_array($json) ? json_encode($json) : $body;
     $blob = is_string($blob) ? $blob : '';
@@ -192,7 +192,7 @@ function aiClassify(int $httpCode, ?array $json, string $curlError, string $body
         return ['auth', 300];
     }
     if ($httpCode >= 500) {
-        return ['unavailable', 30];
+        return ['unavailable', 180];
     }
     return ['other', 0];
 }
