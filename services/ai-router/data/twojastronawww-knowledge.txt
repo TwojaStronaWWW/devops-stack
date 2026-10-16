@@ -1,35 +1,60 @@
-# BAZA WIEDZY: TWOJASTRONAWWW (Agencja Interaktywna & Software House)
+# BAZA WIEDZY: TWOJASTRONAWWW.PL (Inżynieria Stron WWW & Automatyzacja Procesów)
 
-## O nas:
-TwojaStronaWWW to nowoczesny zespół technologiczny specjalizujący się w projektowaniu i wdrażaniu ultraszybkich stron internetowych, sklepów e-commerce, aplikacji webowych oraz inteligentnych asystentów AI dla biznesu. Nasze projekty łączą wysoką konwersję sprzedażową, perfekcyjne SEO (wyniki 95-100/100 w Google PageSpeed Insights) oraz bezpieczeństwo klasy ISO 27001.
+## O mnie i model współpracy:
+TwojaStronaWWW.pl to autorska praktyka inżynieryjna specjalizująca się w projektowaniu ultra-szybkich stron internetowych, systemów pozyskiwania leadów (CRM Flat-File) oraz automatyzacji procesów biznesowych i wdrożeniach asystentów AI.
+- Pracujesz bezpośrednio z inżynierem, który osobiście projektuje architekturę, pisze czysty kod HTML5/CSS3/JS/PHP i wdraża automatyzacje – bez pośredników, account managerów, podwykonawców i bez narzutu anonimowej agencji.
+- 100% kodu na własność: po wdrożeniu otrzymujesz pełne repozytorium Git. Brak uzależnienia (vendor lock-in) i brak ukrytych abonamentów za motywy czy wtyczki.
+- 30 dni bezpłatnej gwarancji i opieki powdrożeniowej w cenie każdego projektu.
 
-## Główna oferta usług:
-1. Nowoczesne Strony Firmowe i Landing Page (One-Page / Multi-Page) - indywidualny projekt graficzny UX/UI, pełna responsywność (RWD) i błyskawiczne ładowanie.
-2. Sklepy Internetowe (E-Commerce) - wdrożenia nastawione na automatyzację sprzedaży, integracje z płatnościami (BLIK, Przelewy24, Stripe) oraz kurierami (InPost Paczkomaty, DPD, DHL).
-3. Wdrożenia Agentów i Czatbotów AI (RAG) - inteligentni asystenci klienta trenowani na bazie wiedzy Twojej firmy, działający 24/7 na stronie WWW bez obciążeń abonamentowych.
-4. Opieka Techniczna, Hosting i Bezpieczeństwo (DevOps & Cloudflare Zero Trust) - stały monitoring dostępności 24/7, codzienne szyfrowane kopie zapasowe (backup offsite), ochrona WAF/DDoS i aktualizacje.
-5. Audyty SEO i Optymalizacja Wydajności (Core Web Vitals) - przyspieszanie istniejących stron i poprawa widoczności w Google.
+## Dlaczego czysty kod (Flat-File) zamiast WordPressa z wtyczkami?
+- Ekstremalna szybkość: waga strony poniżej 100 KB, czas ładowania poniżej 0.6s (wyniki 95–100/100 w Google PageSpeed Insights), natychmiastowe działanie na smartfonach.
+- Brak bazy danych SQL: architektura Flat-File całkowicie eliminuje ryzyko ataków SQL Injection oraz awarii bazy danych.
+- Zero zbędnych wtyczek: brak ryzyka, że automatyczna aktualizacja wtyczki zepsuje stronę (błąd 500).
+- Ochrona konwersji i anty-spam: formularze z filtracją Honeypot, jednorazowymi tokenami CSRF, limitami zapytań (rate-limiting) oraz zapisem wersji roboczej w przeglądarce (Lead Recovery / RODO Local Draft), dzięki czemu klient nie traci wpisanego tekstu po przypadkowym zamknięciu karty.
+- Niskie koszty utrzymania: strona działa błyskawicznie na lekkim hostingu za kilkadziesiąt złotych rocznie.
 
-## Orientacyjny cennik i pakiety:
-- Strona typu Landing Page / Wizytówka Start: od 1 500 PLN netto (czas realizacji: ok. 5-7 dni roboczych).
-- Rozbudowana Strona Firmowa (Multi-Page + CMS + SEO): od 2 900 PLN netto (czas realizacji: 2-3 tygodnie).
-- Sklep Internetowy / Dedykowana Aplikacja Webowa: wycena indywidualna (zazwyczaj od 4 500 PLN netto).
-- Wdrożenie Asystenta AI (Czatbot z bazą wiedzy firmy): od 900 PLN netto (jednorazowa konfiguracja z wykorzystaniem darmowych limitów API).
-- Abonament opieki serwisowej i monitoringu 24/7: od 150 PLN netto / miesiąc.
+## Pakiety startowe i cennik (kwoty netto):
+1. Wizytówka / Landing Page – **2 499 PLN netto**:
+   - Indywidualny projekt graficzny (bez gotowych szablonów)
+   - Czysty, lekki kod HTML5/CSS3/JS
+   - Pełna responsywność (RWD Mobile First)
+   - Podstawowa techniczna optymalizacja SEO i dane strukturalne Schema.org
+   - Formularz kontaktowy gotowy pod automatyzację
+   - Konfiguracja domeny i certyfikatu SSL
+2. Strona Firmowa (Bestseller) – **5 499 PLN netto**:
+   - Do 10 podstron oraz sekcja blogowa / aktualności
+   - Autorski CMS (Flat-File) – szybka i prosta edycja treści bez bazy SQL
+   - Zaawansowane SEO techniczne i konfiguracja Google Search Console
+   - Integracja Social Media i Google Maps
+   - Maksymalna optymalizacja szybkości (Google PageSpeed 90–100)
+   - Wsparcie wdrożeniowe przez 30 dni
+3. E-commerce / Dedykowana Aplikacja Webowa – **od 10 000+ PLN netto** (wycena indywidualna):
+   - Projekty szyte na miarę, w których automatyzacja jest kluczową częścią rozwiązania
+   - Dedykowana aplikacja webowa i automatyzacja procesów biznesowych
+   - Integracje API (płatności BLIK/Stripe/Przelewy24, systemy CRM, asystenci AI)
+   - Zaawansowany panel administracyjny i skalowalna architektura
+4. Wdrożenie Asystenta AI (Czatbot RAG z bazą wiedzy firmy) – **od 900 PLN netto**:
+   - Inteligentny doradca klienta działający 24/7 na stronie WWW, odpowiadający wyłącznie na podstawie bazy wiedzy firmy, z powiadomieniami o leadach na telefon i wykorzystaniem darmowych pul API.
+5. Opieka powdrożeniowa i automatyzacje cykliczne:
+   - Przez pierwsze 30 dni po uruchomieniu wsparcie jest bezpłatne.
+   - Opcjonalna obsługa abonamentowa (od **150 PLN netto / mies.**): aktualizacje, monitoring dostępności 24/7, szyfrowane kopie zapasowe (backup offsite) i rozwój automatyzacji.
 
-## Jak wygląda proces współpracy (Krok po kroku)?
-1. Bezpłatna konsultacja i analiza potrzeb (dobór technologii i wycena w 24h).
-2. Projekt architektury i makiety wizualnej (UX/UI).
-3. Kodowanie, optymalizacja szybkości, integracja treści oraz wdrożenie certyfikatu SSL i zabezpieczeń.
-4. Testy jakościowe, uruchomienie na domenie klienta oraz szkolenie z obsługi.
-5. Gwarancja i wsparcie powdrożeniowe.
+## Jak wygląda proces współpracy (5 etapów, średnio 7–14 dni roboczych)?
+- Etap 1 (Dzień 1–2): Rozmowa i analiza potrzeb – identyfikacja procesów pochłaniających czas, spójny brief techniczny, plan automatyzacji i stała wycena bez gwiazdek.
+- Etap 2 (Dzień 3–5): Projekt graficzny i ścieżka klienta – indywidualna makieta UX/UI nastawiona na konwersję.
+- Etap 3 (Dzień 6–9): Programowanie i czysty kod – kodowanie w HTML5, CSS3, Vanilla JS i PHP Flat-File z wersjonowaniem w Git.
+- Etap 4 (Dzień 10–11): Optymalizacja i testy jakości – testy automatyczne, ochrona anty-bot (CSRF, Honeypot, rate-limiting), audyt Google Lighthouse (95+) oraz zgodność z ISO 27001 i RODO.
+- Etap 5 (Dzień 12–14): Uruchomienie i wsparcie – konfiguracja domeny, SSL Cloudflare, wdrożenie produkcyjne, instrukcja obsługi i 30 dni asysty.
+- Rozliczenie: przejrzysta umowa z harmonogramem i klauzulą poufności (NDA), płatność etapowa (zaliczka na start + płatność końcowa po odbiorze).
 
-## Dlaczego warto wybrać TwojaStronaWWW?
-- Zero wolnych, przeładowanych szablonów - piszemy czysty, zoptymalizowany kod.
-- Bezpieczeństwo i monitoring 24/7 na własnej infrastrukturze chmurowej.
-- Wsparcie w pozyskiwaniu klientów (SEO, integracja z Google Moja Firma, analityka i czatboty AI).
+## Przykładowe realizacje (Portfolio):
+- **Raricart.pl** (Zabrze, branża eventowa) – Google PageSpeed 99/100, czas ładowania skrócony z 4.2s do 0.6s, automatyczna rezerwacja terminów imprez.
+- **KatoSalsaHub.pl** (Katowice, społeczność i edukacja) – Google PageSpeed 98/100, zautomatyzowany feed wydarzeń oszczędzający 6 godzin ręcznej pracy tygodniowo.
+- **DancePuls** (Katowice, generator wydarzeń) – Google PageSpeed 100/100, publikacja warsztatów w 30 sekund.
+- **FuegoLingua.pl** (Katowice, edukacja językowa) – Google PageSpeed 100/100, ultra-lekka strona (45 KB) bez bazy SQL z inteligentnym asystentem AI.
 
-## Kontakt i bezpłatna wycena:
-- Strona WWW: https://twojastronawww.pl
+## Kontakt i bezpłatna wycena (w 24h):
+- Strona WWW: https://twojastronawww.pl (proces pracy: https://twojastronawww.pl/jak-pracuje.html)
 - E-mail: kontakt@twojastronawww.pl
-- Aby otrzymać darmową wycenę projektu, zostaw wiadomość w formularzu kontaktowym na stronie lub napisz bezpośrednio na adres e-mail, opisując krótko swoją branżę i cel strony.
+- Formularz kontaktowy na dole strony głównej (wystarczy podać imię i sam numer telefonu lub e-mail – oddzwonię lub odpiszę w ciągu 24h).
+- Klient może również zostawić swój numer telefonu lub adres e-mail bezpośrednio tutaj na czacie – system natychmiast przekaże namiar do właściciela.

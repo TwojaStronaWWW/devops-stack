@@ -38,6 +38,7 @@
     ],
     twojastronawww: [
       'Ile kosztuje strona WWW?',
+      'Dlaczego kod zamiast WordPressa?',
       'Wdrożenie czatbota AI',
       'Jak wygląda współpraca?'
     ]
