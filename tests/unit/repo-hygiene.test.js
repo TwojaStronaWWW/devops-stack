@@ -363,6 +363,13 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(routerPhp, /aiRecordCacheHit/);
     assert.match(routerPhp, /hot_lead_detected/);
     assert.match(routerPhp, /contact_lead_captured/);
+    assert.match(routerPhp, /thinkingLevel/);
+    assert.match(routerPhp, /MAX_TOKENS/);
+    assert.match(routerPhp, /'reasoning'\s*=>\s*\['effort'\s*=>\s*'none'\]/);
+
+    const warmCacheSh = path.join(ROOT_DIR, 'scripts', 'warm-ai-cache.sh');
+    assert.ok(fs.existsSync(warmCacheSh), 'Brak scripts/warm-ai-cache.sh');
+    assert.match(fs.readFileSync(warmCacheSh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
 
     const runnersYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
     assert.match(runnersYml, /name:\s*devops_runners_network/);

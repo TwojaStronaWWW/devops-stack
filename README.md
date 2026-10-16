@@ -275,10 +275,11 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
    sudo chmod 640 config/prometheus/kuma_password
    ```
 
-5. **Uruchomienie pełnego stosu produkcyjnego oraz autonomicznego strażnika 24/7**:
+5. **Uruchomienie pełnego stosu produkcyjnego, pre-warming Cache RAG oraz aktywacja strażnika 24/7**:
    ```bash
    cd /opt/devops-stack/compose
    docker compose --env-file /opt/devops-stack/.env -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build
+   bash /opt/devops-stack/scripts/warm-ai-cache.sh
    sudo bash /opt/devops-stack/scripts/setup-audit-timer.sh
    ```
 
@@ -370,30 +371,41 @@ W celu zapewnienia bezwzględnej zgodności z normą **ISO 27001** oraz uniknię
 
 Serwer VPS udostępnia scentralizowany mikro-router AI ([`services/ai-router/src/chat-router.php`](file:///e:/Projekty/VPS/services/ai-router/src/chat-router.php)) obsługujący asystentów czatowych dla witryn platformy (**Fuego Lingua**, **Kato Salsa Hub**, **TwojaStronaWWW**) pod adresem `https://ai.twojastronawww.pl/chat-router.php`.
 
-### A. Klasyfikacja Rozwiązania, Cache RAG (`< 5 ms`) i Detektor Leadów
+### A. Klasyfikacja Rozwiązania, Cache RAG (`< 5 ms`), Pre-warming i Detektor Leadów
 - **Obszar 3 (AI z bazą wiedzy firmy RAG) + Enterprise High-Availability:** Dynamiczny dobór bazy wiedzy po parametrze `site_id` (`services/ai-router/data/<site_id>-knowledge.txt` montowane w trybie `:ro`), pamięć konwersacji Multi-Turn (`history` do 8 wiadomości) oraz twarde reguły anty-halucynacyjne (Guardrails).
-- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache uwzględnia `filemtime` pliku wiedzy, więc edycja pliku `*-knowledge.txt` natychmiast unieważnia stary cache.
+- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
+- **Ochrona przed ucinaniem zdań i ukrytymi tokenami myślenia (`thoughtsTokenCount` / `reasoning_tokens`):** Router wymusza `maxOutputTokens: 2048`, przekazuje `'thinkingLevel' => 'MINIMAL'` dla `gemini-3.5-*` (lub `'LOW'` dla `gemini-3.7/3.8`), `'reasoning' => ['effort' => 'none']` dla OpenRoutera oraz odrzuca odpowiedzi z `finishReason === 'MAX_TOKENS'`.
 - **Detektor „Gorącego Leada” (Zero-PII):** Przy 4. pytaniu klienta w jednej sesji rozmowy (`count($sanitizedHistory) === 6`) router wysyła ciche powiadomienie Push do aplikacji **Ntfy.sh** na telefon właściciela (`event=hot_lead_detected`), sygnalizując zaangażowanego klienta bez ujawniania danych osobowych ani treści rozmowy.
-- **0 MB wag modeli na serwerze VPS:** Wszystkie 7 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~12 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
+- **0 MB wag modeli na serwerze VPS:** Wszystkie 7 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~14 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
 
-### B. 3-Dostawczowa Kaskada Odporności na Awarie (7 Modeli LLM) + Cooldown
-Router posiada skonfigurowane **3 niezależne klucze API** i automatycznie przełącza zapytanie do kolejnego modelu w razie błędu `429 Rate Limit`, `503 Overload` lub przekroczenia czasu:
+### B. 3-Dostawczowa Kaskada Odporności na Awarie (7 Modeli LLM) + Smart Fast-Fail
+Router posiada skonfigurowane **3 niezależne klucze API**, nakłada wydłużony cooldown na przeciążone modele (`600 s` po timeoucie 4s, `180 s` po HTTP `503`) i wykonuje **natychmiastowy Fast-Fail do Groq LPU (`~0.6 s`)** po pierwszym timeoucie sieciowym lub gdy $\ge 2$ modele Gemini są zawieszone:
 
 | Pozycja w kaskadzie | Dostawca (Zmienna Klucza) | Model LLM | Domyślny Limit RPD (Free Tier) | Rola w architekturze |
 |---|---|---|---|---|
-| **0 (Primary)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.5-flash-lite` | `1 500` / doba | Ultralekki, najszybszy model główny o najwyższym limicie RPD |
-| **1 (Fallback 1)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.8-flash` | `500` / doba | Najnowsza generacja Gemini Flash |
-| **2 (Fallback 2)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.7-flash` | `500` / doba | Druga pula modelu Gemini Flash |
-| **3 (Fallback 3)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.5-flash` | `500` / doba | Trzecia pula modelu Gemini Flash |
+| **0 (Primary)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.5-flash` (`MINIMAL`) | `500` / doba | Najszybszy i najstabilniejszy model główny (`~1.5 s`, 0 ukrytych myśli) |
+| **1 (Fallback 1)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.5-flash-lite` (`MINIMAL`) | `1 500` / doba | Ultralekki model o najwyższym limicie RPD |
+| **2 (Fallback 2)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.7-flash` (`LOW`) | `500` / doba | Druga pula modelu Gemini Flash |
+| **3 (Fallback 3)** | Google AI Studio (`GEMINI_API_KEY`) | `gemini-3.8-flash` (`LOW`) | `500` / doba | Najnowsza generacja Gemini Flash |
 | **4 (Fallback 4)** | Google AI Studio (`GEMINI_API_KEY`) | `gemma-4-31b-it` | `14 400` / doba | Otwarty model Google o ogromnej puli dziennej |
-| **5 (Fallback 5)** | Groq Cloud (`GROQ_API_KEY`) | `openai/gpt-oss-120b` | `1 000` / doba | Zewnętrzny ultra-szybki fallback na układach LPU |
-| **6 (Fallback 6)** | OpenRouter (`OPENROUTER_API_KEY`) | `nvidia/nemotron-3-super-120b-a12b:free` | `200` / doba | Niezależny zapasowy klaster chmurowy (Free Tier) |
+| **5 (Fallback 5)** | Groq Cloud (`GROQ_API_KEY`) | `openai/gpt-oss-120b` | `1 000` / doba | Zewnętrzny ultra-szybki fallback na układach LPU (`~0.6 s`, Fast-Fail) |
+| **6 (Fallback 6)** | OpenRouter (`OPENROUTER_API_KEY`) | `nvidia/nemotron-3-super-120b-a12b:free` | `200` / doba | Niezależny zapasowy klaster chmurowy (`:free`, `reasoning: none`) |
 
 ### C. Pełna Obserwowalność, Alerting i Raportowanie CLI (ISO 27001 Zero-PII)
 1. **Endpoint Prometheus (`GET /metrics`):** Eksportuje metryki zapytań, trafień cache (`ai_router_cache_hits_total`, `ai_router_cache_entries`), skuteczności kaskady, prób per model, aktywnych cooldownów, limitów dziennych RPD oraz wyzerowanych serii błędów. Zgodnie z **ISO 27001** moduł [`ai-stats.php`](file:///e:/Projekty/VPS/services/ai-router/src/ai-stats.php) **nigdy nie loguje treści pytań klientów, adresów IP ani kluczy API**.
 2. **Dashboard Grafany (`uid: ai-router-overview`):** Pulpit **AI Router - Gemini Proxy Monitor** ([`ai-router-overview.json`](file:///e:/Projekty/VPS/config/grafana/provisioning/dashboards/definitions/ai-router-overview.json)) prezentujący ruch, paski dziennego limitu RPD, błędy i zdrowie wszystkich 7 modeli per strona (`fuegolingua`, `katosalsahub`, `twojastronawww`).
 3. **Reguły Alertów Prometheusa + Push Ntfy.sh:** Plik [`config/prometheus/rules/ai-router.yml`](file:///e:/Projekty/VPS/config/prometheus/rules/ai-router.yml) monitoruje warunki krytyczne, a `devops-audit.timer` co 15 minut weryfikuje stan alarmów `firing` w Prometheusie i natychmiast wysyła powiadomienia Push na telefon.
 4. **Raporty CLI na żądanie:** Skrypty [`scripts/ai-router-report.sh`](file:///e:/Projekty/VPS/scripts/ai-router-report.sh) oraz [`scripts/ai-router-report.ps1`](file:///e:/Projekty/VPS/scripts/ai-router-report.ps1) (szczegóły w [`docs/AI_ROUTER_RAPORT.md`](file:///e:/Projekty/VPS/docs/AI_ROUTER_RAPORT.md)).
+
+### D. Checklista Podpięcia Czatu AI pod Kolejną Stronę WWW (Standard `_site-template` v2.2)
+1. **Baza wiedzy na VPS:** Utwórz plik `services/ai-router/data/<site_id>-knowledge.txt` i dopisz jego ścieżkę w `tests/unit/repo-hygiene.test.js`.
+2. **CORS na VPS:** Dopisz domenę (`https://domena.pl,https://www.domena.pl`) do `ALLOWED_ORIGINS` w `/opt/devops-stack/.env` (oraz `.env.example`).
+3. **Pre-warming Cache RAG:** Dopisz 4 pytania startowe (Quick Prompts) witryny do tablicy `PROMPTS` w [`scripts/warm-ai-cache.sh`](file:///e:/Projekty/VPS/scripts/warm-ai-cache.sh).
+4. **Frontend na stronie docelowej (wg wzorca `_site-template`):**
+   - Skopiuj `assets/js/ai-widget.js` (zawierający `AbortController` 9s timeout oraz lokalny fallback `getLocalFallbackAnswer(question, siteId)`),
+   - W `<head>` każdego pliku HTML dodaj `<link rel="preconnect" href="https://ai.twojastronawww.pl" crossorigin>`,
+   - Przed `</body>` dodaj `<script type="module" src="assets/js/ai-widget.js" data-site-id="<site_id>" data-title="Asystent ..."></script>`,
+   - Jeśli strona posiada pływający przycisk telefonu (`.sticky-call-btn`), przesuń go na mobile na `bottom: 96px; right: 28px`, aby nie kolidował z przyciskiem czatu (`.tsw-ai-btn` na `bottom: 24px; right: 24px`).
 
 
 

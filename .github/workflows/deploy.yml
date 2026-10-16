@@ -64,6 +64,9 @@ jobs:
             # Odświeżenie pamięci podręcznej DNS (nscd) w Uptime Kuma po przebudowie kontenera ai-router
             docker exec uptime-kuma nscd -i hosts >/dev/null 2>&1 || true
 
+            # Idempotentne rozgrzanie pamięci podręcznej RAG (Quick Prompts) po aktualizacji bazy wiedzy
+            bash "${DEPLOY_PATH}/scripts/warm-ai-cache.sh" || true
+
             echo "==> Wdrozenie zakonczone pomyslnie. Uruchamianie audytu powykonawczego..."
             sleep 5
             NO_COLOR=1 bash "${DEPLOY_PATH}/scripts/audit-server.sh"

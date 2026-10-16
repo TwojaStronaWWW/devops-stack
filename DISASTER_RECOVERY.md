@@ -100,8 +100,9 @@ cd /opt/devops-stack/compose
 # 1. Uruchomienie pełnego stacku (monitoring, AI Router, tunel Cloudflare oraz 3 runnery CI/CD)
 docker compose --env-file /opt/devops-stack/.env -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build
 
-# 2. Odświeżenie pamięci podręcznej DNS (nscd) w Uptime Kuma
+# 2. Odświeżenie pamięci podręcznej DNS (nscd) w Uptime Kuma oraz pre-warming Cache RAG (Quick Prompts)
 docker exec uptime-kuma nscd -i hosts 2>/dev/null || true
+bash /opt/devops-stack/scripts/warm-ai-cache.sh
 
 # 3. Aktywacja harmonogramu nocnych backupów oraz autonomicznego strażnika 24/7 (co 15 min)
 sudo bash /opt/devops-stack/scripts/setup-audit-timer.sh
@@ -114,7 +115,7 @@ sudo systemctl enable --now devops-backup.timer
 
 - [ ] Wszystkie 12 kontenerów ma status `Up (healthy)` / `running`.
 - [ ] Runnery `runner-zeslownikiem-unified`, `runner-twojastronawww-unified` oraz `runner-gal-anonim-web` działają w odseparowanej sieci `devops_runners_network`.
-- [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health` oraz eksportuje metryki (w tym cache RAG) pod `http://127.0.0.1:8085/metrics`.
+- [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health`, ma rozgrzane wpisy Quick Prompts w `/app/storage/cache` (`warm-ai-cache.sh`) oraz eksportuje metryki pod `http://127.0.0.1:8085/metrics`.
 - [ ] Uptime Kuma prezentuje wszystkie 10 monitorowanych witryn i usług (w tym `AI Router Healthcheck` = UP).
 - [ ] Grafana uruchamia się w trybie PoLP `Viewer` z oboma dashboardami (`Centrum Monitoringu Stron WWW & Usług` oraz `AI Router - Gemini Proxy Monitor`) pod `http://127.0.0.1:3000`.
 - [ ] Pełny audyt 5 warstw (`bash /opt/devops-stack/scripts/audit-server.sh` lub `npm run audit`) zwraca **`0 OSTRZEŻEŃ | 0 BŁĘDÓW`**.
