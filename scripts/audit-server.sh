@@ -514,24 +514,44 @@ else
          "sudo bash ${STACK_ROOT}/scripts/setup-audit-timer.sh"
 fi
 
-# 5. Telemetria backupów (*.prom)
+# 5. Telemetria backupów (*.prom: wolumeny VPS oraz strony WWW z LH.pl)
 PROM_DIR="${STACK_ROOT}/config/node-exporter"
 BACKUP_PROM="${PROM_DIR}/backup.prom"
 if [[ -f "${BACKUP_PROM}" ]]; then
     LAST_TS="$(awk '/^devops_backup_last_timestamp_seconds/ {print $2}' "${BACKUP_PROM}" 2>/dev/null || echo '0')"
+    B_STATUS="$(awk '/^devops_backup_status/ {print $2}' "${BACKUP_PROM}" 2>/dev/null || echo '0')"
     NOW_TS="$(date +%s)"
     if [[ "${LAST_TS}" -gt 0 ]]; then
         AGE_HOURS=$(( (NOW_TS - LAST_TS) / 3600 ))
-        if [[ "${AGE_HOURS}" -le 26 ]]; then
-            pass "Ostatni backup wolumenów wykonano ${AGE_HOURS}h temu (świeży < 26h)."
+        if [[ "${B_STATUS}" == "1" && "${AGE_HOURS}" -le 26 ]]; then
+            pass "Ostatni backup wolumenów VPS wykonano ${AGE_HOURS}h temu (status=OK, świeży < 26h)."
         else
-            warn "Ostatni backup wolumenów jest przestarzały (wykonany ${AGE_HOURS}h temu)." \
-                 "sudo bash ${STACK_ROOT}/scripts/backup-offsite.sh"
+            warn "Backup wolumenów VPS wymaga uwagi (status=${B_STATUS}, wiek=${AGE_HOURS}h)." \
+                 "bash ${STACK_ROOT}/scripts/backup-offsite.sh"
         fi
     fi
 else
     warn "Brak pliku telemetrii ${BACKUP_PROM} (skrypt backup-offsite.sh nie był jeszcze uruchamiany)." \
-         "sudo bash ${STACK_ROOT}/scripts/backup-offsite.sh"
+         "bash ${STACK_ROOT}/scripts/backup-offsite.sh"
+fi
+
+WEBSITES_PROM="${PROM_DIR}/backup_websites.prom"
+if [[ -f "${WEBSITES_PROM}" ]]; then
+    W_LAST_TS="$(awk '/^devops_backup_websites_last_timestamp_seconds/ {print $2}' "${WEBSITES_PROM}" 2>/dev/null || echo '0')"
+    W_STATUS="$(awk '/^devops_backup_websites_status/ {print $2}' "${WEBSITES_PROM}" 2>/dev/null || echo '0')"
+    NOW_TS="$(date +%s)"
+    if [[ "${W_LAST_TS}" -gt 0 ]]; then
+        W_AGE_HOURS=$(( (NOW_TS - W_LAST_TS) / 3600 ))
+        if [[ "${W_STATUS}" == "1" && "${W_AGE_HOURS}" -le 26 ]]; then
+            pass "Ostatni backup stron WWW (LH.pl) wykonano ${W_AGE_HOURS}h temu (status=OK, świeży < 26h)."
+        else
+            warn "Backup stron WWW (LH.pl) wymaga uwagi lub nie wykonał się w nocy (status=${W_STATUS}, wiek=${W_AGE_HOURS}h)." \
+                 "bash ${STACK_ROOT}/scripts/backup-websites-lh.sh"
+        fi
+    fi
+else
+    warn "Brak pliku telemetrii ${WEBSITES_PROM} (skrypt backup-websites-lh.sh nie był jeszcze uruchamiany)." \
+         "bash ${STACK_ROOT}/scripts/backup-websites-lh.sh"
 fi
 
 # ==============================================================================

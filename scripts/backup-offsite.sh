@@ -19,9 +19,11 @@ fi
 
 BACKUP_DIR="${BACKUP_DIR:-/opt/devops-stack/backups}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
-RETENTION_DAYS="${RETENTION_DAYS:-14}"
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 NTFY_TOPIC="${NTFY_TOPIC:-kpoczatek-vps-alerty}"
 NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 # S3 / Object Storage Configuration (zmienne z .env)
 S3_ENDPOINT="${S3_ENDPOINT:-}"
@@ -110,6 +112,20 @@ EOF
     fi
 }
 
+on_error() {
+    local exit_code=$?
+    local line_no="${1:-unknown}"
+    echo "==> [BŁĄD KRYTYCZNY] Procedura backupu wolumenów VPS przerwana na linii ${line_no} (kod: ${exit_code})!"
+    write_prometheus_metrics 0 0 0
+    send_notification \
+        "🚨 Błąd: Backup Wolumenów VPS Przerwany!" \
+        "Nocny backup wolumenów VPS zakończył się błędem na linii ${line_no} (kod wyjścia: ${exit_code}). Sprawdź logi: journalctl -u devops-backup.service" \
+        "high" \
+        "rotating_light,warning"
+    exit "${exit_code}"
+}
+trap 'on_error $LINENO' ERR
+
 echo "=============================================================================="
 echo "==> Rozpoczynanie procedury backupu offsite: ${TIMESTAMP}"
 echo "=============================================================================="
@@ -128,7 +144,7 @@ for VOLUME in "${VOLUMES_TO_BACKUP[@]}"; do
             -v "${VOLUME}:/source:ro" \
             -v "${BACKUP_DIR}:/target" \
             alpine:latest \
-            tar -czf "/target/${ARCHIVE_NAME}" -C /source .
+            sh -c "tar -czf '/target/${ARCHIVE_NAME}' -C /source . && chown ${HOST_UID}:${HOST_GID} '/target/${ARCHIVE_NAME}'"
 
         # Weryfikacja spójności transakcyjnej baz SQLite (kuma.db / grafana.db) wewnątrz utworzonego archiwum
         if command -v sqlite3 >/dev/null 2>&1 && [[ "${VOLUME}" == "uptime_kuma_data" || "${VOLUME}" == "grafana_data" ]]; then
@@ -188,7 +204,7 @@ BUNDLE_SIZE="$(du -h "${BUNDLE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${BUNDLE_PATH}" | tr -d ' ')"
 BACKUP_STATUS=1
 
-# Wysyłka offsite do chmury, jeśli skonfigurowano klucze S3 / R2 / Oracle
+# Wysyłka offsite do chmury + rotacja chmurowa (RETENTION_DAYS), jeśli skonfigurowano klucze S3 / R2 / Oracle
 if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; then
     echo "--> [3/3] Wysyłka archiwum offsite do chmury: ${S3_BUCKET} (${S3_ENDPOINT})..."
 
@@ -206,10 +222,21 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
         
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup ${BUNDLE_NAME} wysłany do ${S3_BUCKET}."
+
+        echo "--> [3a/3] Rotacja chmurowa R2: usuwanie kopii VPS starszych niż ${RETENTION_DAYS} dni..."
+        docker run --rm \
+            -e RCLONE_CONFIG_R2_TYPE=s3 \
+            -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+            -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+            -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+            -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+            -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+            rclone/rclone:latest \
+            delete --min-age "${RETENTION_DAYS}d" "r2:${S3_BUCKET}/backups/" >/dev/null 2>&1 || true
         
         send_notification \
             "✅ Sukces: Backup VPS w Chmurze" \
-            "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury." \
+            "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury (retencja: ${RETENTION_DAYS} dni)." \
             "low" \
             "white_check_mark,cloud"
     else
@@ -236,10 +263,13 @@ fi
 # Zapisanie metryk dla Prometheusa / Grafany
 write_prometheus_metrics "${BACKUP_STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_BYTES}"
 
-# Rotacja lokalna (usuwanie plików starszych niż RETENTION_DAYS)
-echo "==> Rotacja: usuwanie kopii starszych niż ${RETENTION_DAYS} dni..."
-find "${BACKUP_DIR}" -type f \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
+# Rotacja lokalna:
+# 1. Archiwa zbiorcze vps_full_backup_* trzymane przez pełne RETENTION_DAYS (30 dni)
+# 2. Pojedyncze archiwa cząstkowe wolumenów (zawarte już wewnątrz vps_full_backup_*) starsze niż 1 dzień są czyszczone, aby nie duplikować miejsca
+echo "==> Rotacja lokalna: usuwanie kopii zbiorczych starszych niż ${RETENTION_DAYS} dni..."
+find "${BACKUP_DIR}" -maxdepth 1 -type f \( -name "vps_full_backup_*.tar.gz" -o -name "vps_full_backup_*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
+find "${BACKUP_DIR}" -maxdepth 1 -type f ! -name "vps_full_backup_*" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -mtime +1 -exec rm -f {} +
 
 echo "=============================================================================="
-echo "==> [ZAKOŃCZONO] Procedura backupu zakończona pomyślnie."
+echo "==> [ZAKOŃCZONO] Procedura backupu zakończona pomyślnie (retencja: ${RETENTION_DAYS} dni)."
 echo "=============================================================================="

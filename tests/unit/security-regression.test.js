@@ -103,19 +103,28 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       createdRateFiles.add(path.join(ROUTER_STORAGE_DIR, 'rate_limits', `${hash}.json`));
     }
 
-    before(async () => {
-      const rateDir = path.join(ROUTER_STORAGE_DIR, 'rate_limits');
-      if (fs.existsSync(rateDir)) {
-        for (const f of fs.readdirSync(rateDir)) {
-          if (f.endsWith('.json')) {
-            try {
-              fs.unlinkSync(path.join(rateDir, f));
-            } catch {
-              // ignoruj
+    function cleanAllRateLimitFiles() {
+      const dirs = [
+        path.join(ROUTER_STORAGE_DIR, 'rate_limits'),
+        path.resolve('/app/storage/rate_limits'),
+      ];
+      for (const dir of dirs) {
+        if (fs.existsSync(dir)) {
+          for (const f of fs.readdirSync(dir)) {
+            if (f.endsWith('.json')) {
+              try {
+                fs.unlinkSync(path.join(dir, f));
+              } catch {
+                // ignoruj
+              }
             }
           }
         }
       }
+    }
+
+    before(async () => {
+      cleanAllRateLimitFiles();
       if (fs.existsSync(statsFilePath)) {
         statsExistedBefore = true;
         statsBackup = fs.readFileSync(statsFilePath);
@@ -137,10 +146,12 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       await waitForServer(baseUrl);
     });
 
-    after(() => {
+    after(async () => {
       if (phpProc) {
         phpProc.kill();
+        await new Promise((r) => setTimeout(r, 150));
       }
+      cleanAllRateLimitFiles();
       for (const f of createdRateFiles) {
         if (fs.existsSync(f)) {
           try {

@@ -371,9 +371,14 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(offsiteBackup, /devops_backup_verified/);
     assert.match(offsiteBackup, /devops_backup_sqlite_verified/);
     assert.match(offsiteBackup, /PRAGMA quick_check/);
+    assert.match(offsiteBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
+    assert.match(offsiteBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);
+    assert.match(lhBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
+    assert.match(lhBackup, /mirror --verbose --delete --no-perms/);
+    assert.match(lhBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
 
     const setupAuditTimer = path.join(ROOT_DIR, 'scripts', 'setup-audit-timer.sh');
     assert.ok(fs.existsSync(setupAuditTimer), 'Brak scripts/setup-audit-timer.sh');

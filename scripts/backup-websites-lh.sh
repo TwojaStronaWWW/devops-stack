@@ -20,10 +20,12 @@ fi
 
 BACKUP_DIR="${LH_BACKUP_DIR:-/opt/devops-stack/backups/websites}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
-RETENTION_DAYS="${RETENTION_DAYS:-14}"
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 NTFY_TOPIC="${NTFY_TOPIC:-kpoczatek-vps-alerty}"
 NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
 
 # Konfiguracja hostingu LH.pl (wartości pobierane z GitHub Secrets / .env)
 LH_FTP_SERVER="${LH_FTP_SERVER:-}"
@@ -51,6 +53,7 @@ STATUS=0
 OFFSITE_STATUS=0
 BACKUP_VERIFIED=0
 BUNDLE_SIZE_BYTES=0
+STAGING_DIR=""
 
 mkdir -p "${BACKUP_DIR}"
 
@@ -109,6 +112,27 @@ EOF
     fi
 }
 
+cleanup_staging() {
+    docker run --rm -v "${BACKUP_DIR}:/backups" alpine:latest \
+        sh -c "rm -rf /backups/staging_*" >/dev/null 2>&1 || true
+    rm -rf "${BACKUP_DIR}"/staging_* 2>/dev/null || true
+}
+
+on_error() {
+    local exit_code=$?
+    local line_no="${1:-unknown}"
+    echo "==> [BŁĄD KRYTYCZNY] Procedura backupu stron LH przerwana na linii ${line_no} (kod: ${exit_code})!"
+    cleanup_staging
+    write_prometheus_metrics 0 0 0
+    send_notification \
+        "🚨 Błąd: Backup Stron LH.pl Przerwany!" \
+        "Nocny backup stron WWW zakończył się błędem na linii ${line_no} (kod wyjścia: ${exit_code}). Sprawdź logi: journalctl -u devops-backup.service" \
+        "high" \
+        "rotating_light,warning"
+    exit "${exit_code}"
+}
+trap 'on_error $LINENO' ERR
+
 echo "=============================================================================="
 echo "==> Rozpoczynanie procedury backupu stron WWW z hostingu LH: ${TIMESTAMP}"
 echo "=============================================================================="
@@ -120,6 +144,9 @@ if [[ -z "${LH_FTP_SERVER}" || -z "${LH_FTP_USERNAME}" || -z "${LH_FTP_PASSWORD}
     exit 0
 fi
 
+# Czyszczenie ewentualnych pozostałości po wcześniejszych przerwanych przebiegach
+cleanup_staging
+
 STAGING_DIR="${BACKUP_DIR}/staging_${TIMESTAMP}"
 ARCHIVE_NAME="lh_websites_backup_${TIMESTAMP}.tar.gz"
 ARCHIVE_PATH="${BACKUP_DIR}/${ARCHIVE_NAME}"
@@ -128,6 +155,8 @@ echo "--> [1/3] Pobieranie plików stron z hostingu LH (${LH_FTP_SERVER}, FTPS S
 mkdir -p "${STAGING_DIR}"
 
 # Pobieranie danych za pomocą dedykowanego, izolowanego kontenera z lftp (z obsługą FTPS TLS)
+# Flaga --no-perms oraz normalizacja właściciela (HOST_UID:HOST_GID) i uprawnień (u+rwX) zapobiegają
+# błędom "tar: ./.env: Permission denied" dla plików z restrykcyjnym chmod 0600 na serwerze FTP.
 LFTP_CMD_FILE="$(mktemp)"
 chmod 600 "${LFTP_CMD_FILE}"
 cat <<EOF > "${LFTP_CMD_FILE}"
@@ -137,7 +166,7 @@ set ssl:verify-certificate no
 set net:timeout 15
 set net:max-retries 3
 open -p "${LH_FTP_PORT}" -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
-mirror --verbose --delete --parallel=3 "${LH_REMOTE_DIR}" /target
+mirror --verbose --delete --no-perms --parallel=3 "${LH_REMOTE_DIR}" /target
 quit
 EOF
 
@@ -145,7 +174,7 @@ docker run --rm \
     -v "${STAGING_DIR}:/target" \
     -v "${LFTP_CMD_FILE}:/cmd:ro" \
     alpine:latest \
-    sh -c "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd"
+    sh -c "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd && chown -R ${HOST_UID}:${HOST_GID} /target && chmod -R u+rwX /target"
 
 rm -f "${LFTP_CMD_FILE}"
 
@@ -156,14 +185,14 @@ if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAME}" && -n "${LH_DB_USER}" && -n "${LH
         -v "${STAGING_DIR}:/target" \
         -e MYSQL_PWD="${LH_DB_PASSWORD}" \
         alpine:latest \
-        sh -c "apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${LH_DB_NAME}' | gzip -9 > '/target/_db_${LH_DB_NAME}.sql.gz'" \
+        sh -c "apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${LH_DB_NAME}' | gzip -9 > '/target/_db_${LH_DB_NAME}.sql.gz' && chown ${HOST_UID}:${HOST_GID} '/target/_db_${LH_DB_NAME}.sql.gz'" \
         && echo "--> [OK] Zrzut bazy danych zapisany w archiwum." \
         || echo "--> [WARN] Nie udało się wykonać zrzutu bazy danych MySQL (kontynuacja backupu plików)."
 fi
 
 echo "--> [2/3] Kompresja i archiwizacja kopii stron WWW..."
 tar -czf "${ARCHIVE_PATH}" -C "${STAGING_DIR}" .
-sudo rm -rf "${STAGING_DIR}" 2>/dev/null || rm -rf "${STAGING_DIR}"
+cleanup_staging
 
 echo "--> [2a/3] Weryfikacja integralności archiwum (tar -tzf)..."
 if tar -tzf "${ARCHIVE_PATH}" >/dev/null 2>&1; then
@@ -194,7 +223,7 @@ BUNDLE_SIZE_BYTES="$(wc -c < "${ARCHIVE_PATH}" | tr -d ' ')"
 STATUS=1
 echo "--> [OK] Utworzono archiwum: ${ARCHIVE_NAME} (${ARCHIVE_SIZE})"
 
-# Wysyłka offsite do chmury (R2 / S3)
+# Wysyłka offsite do chmury (R2 / S3) + rotacja chmurowa (RETENTION_DAYS)
 if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; then
     echo "--> [3/3] Wysyłka archiwum stron offsite do chmury: ${S3_BUCKET}..."
 
@@ -211,10 +240,21 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
         
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup stron ${ARCHIVE_NAME} wysłany do ${S3_BUCKET}/websites/."
+
+        echo "--> [3a/3] Rotacja chmurowa R2: usuwanie kopii stron starszych niż ${RETENTION_DAYS} dni..."
+        docker run --rm \
+            -e RCLONE_CONFIG_R2_TYPE=s3 \
+            -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+            -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+            -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+            -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+            -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+            rclone/rclone:latest \
+            delete --min-age "${RETENTION_DAYS}d" "r2:${S3_BUCKET}/websites/" >/dev/null 2>&1 || true
         
         send_notification \
             "✅ Sukces: Backup Stron LH w Chmurze" \
-            "Kopia ${ARCHIVE_NAME} (${ARCHIVE_SIZE}) została zsynchronizowana z LH i przesłana offsite do chmury." \
+            "Kopia ${ARCHIVE_NAME} (${ARCHIVE_SIZE}) została zsynchronizowana z LH i przesłana offsite do chmury (retencja: ${RETENTION_DAYS} dni)." \
             "low" \
             "globe,cloud"
     else
@@ -240,10 +280,10 @@ fi
 # Zapisanie metryk Prometheusa
 write_prometheus_metrics "${STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_BYTES}"
 
-# Rotacja starych kopii
-echo "==> Rotacja: usuwanie kopii stron starszych niż ${RETENTION_DAYS} dni..."
+# Rotacja starych kopii lokalnych (usuwanie kopii starszych niż RETENTION_DAYS dni)
+echo "==> Rotacja lokalna: usuwanie kopii stron starszych niż ${RETENTION_DAYS} dni..."
 find "${BACKUP_DIR}" -type f \( -name "lh_websites_backup_*.tar.gz" -o -name "lh_websites_backup_*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
 
 echo "=============================================================================="
-echo "==> [ZAKOŃCZONO] Procedura backupu stron LH zakończona pomyślnie."
+echo "==> [ZAKOŃCZONO] Procedura backupu stron LH zakończona pomyślnie (retencja: ${RETENTION_DAYS} dni)."
 echo "=============================================================================="

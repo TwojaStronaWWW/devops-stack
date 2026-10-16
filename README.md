@@ -337,14 +337,14 @@ Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-D
 Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla całej infrastruktury TwojaStronaWWW:
 
 ### A. Backup Wolumenów Monitoringu i AI (`scripts/backup-offsite.sh`):
-- Tworzy spójne snapshoty wszystkich 7 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`).
+- Tworzy spójne snapshoty wszystkich 7 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`) wraz z weryfikacją baz SQLite (`PRAGMA quick_check`).
 - Automatycznie weryfikuje integralność wygenerowanego archiwum (`tar -tzf`) przed dalszym przetwarzaniem i eksportuje metrykę `devops_backup_verified`.
-- Opcjonalnie szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z retencją lokalną **14 dni**.
+- Opcjonalnie szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z kroczącą retencją **30 dni** (zarówno lokalnie na VPS, jak i w chmurze R2 przez `rclone delete --min-age 30d`).
 
 ### B. Backup Stron WWW z Hostingu LH.pl (`scripts/backup-websites-lh.sh`):
 - Łączy się ze zdalnym hostingiem LH.pl przez szyfrowany kanał **FTPS TLS** (`ftp:ssl-allow true`, `ftp:ssl-protect-data true`).
-- Pobiera strukturę plików witryn (`public_html`) oraz opcjonalnie wykonuje zrzut bazy MySQL (`mysqldump --single-transaction`).
-- Weryfikuje integralność archiwum (`tar -tzf`, metryka `devops_backup_websites_verified`), opcjonalnie szyfruje **AES-256-CBC** i przesyła do Cloudflare R2 (`${S3_BUCKET}/websites/`).
+- Pobiera strukturę plików witryn (`public_html`) z normalizacją uprawnień (`--no-perms` + `chown`), oraz opcjonalnie wykonuje zrzut bazy MySQL (`mysqldump --single-transaction`).
+- Weryfikuje integralność archiwum (`tar -tzf`, metryka `devops_backup_websites_verified`), opcjonalnie szyfruje **AES-256-CBC** i przesyła do Cloudflare R2 (`${S3_BUCKET}/websites/`) z automatyczną rotacją **30 dni** lokalnie oraz w R2.
 
 ### C. Automatyzacja Harmonogramów Systemd (Backup & Strażnik 24/7):
 - **`devops-backup.timer`**: Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów i stron LH.pl.

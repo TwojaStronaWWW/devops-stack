@@ -7,7 +7,7 @@ set -euo pipefail
 
 BACKUP_DIR="${BACKUP_DIR:-/opt/devops-stack/backups}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
-RETENTION_DAYS=7
+RETENTION_DAYS="${RETENTION_DAYS:-30}"
 
 VOLUMES_TO_BACKUP=(
     "uptime_kuma_data"
