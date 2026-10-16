@@ -32,8 +32,8 @@ function aiConfiguredModel(): string
 function aiGeminiChain(string $configured): array
 {
     return array_values(array_unique([
-        $configured,
         'gemini-3.5-flash',
+        $configured,
         'gemini-3.5-flash-lite',
         'gemini-3.7-flash',
         'gemini-3.8-flash',
