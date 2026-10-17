@@ -187,7 +187,8 @@ tar -czf "${BUNDLE_PATH}" -C "${BACKUP_DIR}" $(for a in "${ARCHIVES_CREATED[@]}"
 echo "--> [2a/3] Weryfikacja integralności archiwum (tar -tzf)..."
 if tar -tzf "${BUNDLE_PATH}" >/dev/null 2>&1; then
     BACKUP_VERIFIED=1
-    echo "--> [OK] Integralność archiwum zweryfikowana pomyślnie."
+    rm -f "${ARCHIVES_CREATED[@]}"
+    echo "--> [OK] Integralność archiwum zweryfikowana pomyślnie (usunięto tymczasowe pliki cząstkowe)."
 else
     BACKUP_VERIFIED=0
     echo "--> [BŁĄD] Archiwum ${BUNDLE_NAME} jest uszkodzone!"
