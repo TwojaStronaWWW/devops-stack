@@ -12,12 +12,15 @@ body:
     attributes:
       label: Komponent dotknięty awarią
       options:
-        - Cloudflare Zero Trust Tunnel (cloudflared)
-        - GitHub Actions Runner (runner-zeslownikiem-unified)
-        - Monitoring Uptime Kuma
-        - Prometheus / Grafana
-        - cAdvisor / Node Exporter / Dozzle
-        - Oracle Cloud Compute / System operacyjny Ubuntu
+        - AI Router (Multi-Provider RAG Proxy, Cache <5ms, Lead Extractor Ntfy)
+        - Cloudflare Zero Trust Tunnel (cloudflared:2000)
+        - GitHub Actions Runners (devops_runners_network: zeslownikiem / twojastronawww / gal-anonim-web)
+        - Kopie zapasowe i Disaster Recovery (backup-offsite.sh / backup-websites-lh.sh / restore-backup.sh)
+        - Strażnik i Harmonogramy Systemd (devops-audit.timer / devops-backup.timer)
+        - Monitoring Uptime Kuma & Powiadomienia Push Ntfy.sh
+        - Prometheus / Grafana / Reguły Alertów (ai-router.yml)
+        - cAdvisor / Node Exporter / Dozzle / GitHub Exporter
+        - Oracle Cloud Compute (ARM64 Always Free) / System operacyjny Ubuntu
         - Sieć Docker / Skrypty pomocnicze
     validations:
       required: true

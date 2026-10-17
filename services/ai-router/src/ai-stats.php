@@ -110,6 +110,7 @@ function aiStatsDefault(): array
     return [
         'requests'    => [],  // "site|outcome" => n
         'cache_hits'  => [],  // site => n
+        'leads'       => [],  // "site|type" => n (contact | hot_lead)
         'req_lat_sum' => 0.0,
         'req_lat_cnt' => 0,
         'depth'       => [],  // pozycja modelu, który odpowiedział => n
@@ -292,6 +293,17 @@ function aiRecordCacheHit(string $site): void
     aiLog('cache_hit', ['site' => $site]);
 }
 
+function aiRecordLead(string $site, string $type): void
+{
+    aiStatsMutate(function (array &$s) use ($site, $type): void {
+        if (!isset($s['leads']) || !is_array($s['leads'])) {
+            $s['leads'] = [];
+        }
+        $key = $site . '|' . $type;
+        $s['leads'][$key] = (int)($s['leads'][$key] ?? 0) + 1;
+    });
+}
+
 /** Rejestruje wynik całego żądania czatu (wywoływane z shutdown function). */
 function aiRecordRequest(string $site, string $outcome, int $httpCode, float $latencyMs, ?string $model, ?int $depth, int $attempts): void
 {
@@ -401,6 +413,22 @@ function aiRenderMetrics(): string
     }
     foreach ($cacheHitsMap as $cSite => $cCount) {
         $o[] = 'ai_router_cache_hits_total{site="' . aiEsc((string)$cSite) . '"} ' . (int)$cCount;
+    }
+
+    $o[] = '# HELP ai_router_leads_total Pozyskane leady kontaktowe i zaangazowane sesje czatu (Zero-PII)';
+    $o[] = '# TYPE ai_router_leads_total counter';
+    $leadsMap = is_array($s['leads'] ?? null) ? $s['leads'] : [];
+    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww'] as $defaultSite) {
+        foreach (['contact', 'hot_lead'] as $lType) {
+            $lKey = $defaultSite . '|' . $lType;
+            if (!isset($leadsMap[$lKey])) {
+                $leadsMap[$lKey] = 0;
+            }
+        }
+    }
+    foreach ($leadsMap as $lKey => $lCount) {
+        [$lSite, $lType] = array_pad(explode('|', (string)$lKey, 2), 2, 'contact');
+        $o[] = 'ai_router_leads_total{site="' . aiEsc($lSite) . '",type="' . aiEsc($lType) . '"} ' . (int)$lCount;
     }
 
     $o[] = '# HELP ai_router_request_duration_seconds Laczny czas udanych zadan czatu';

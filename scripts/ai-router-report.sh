@@ -76,6 +76,10 @@ printf '    aktywne wpisy w cache: %s\n' "${cache_ent:-0}"
 met ai_router_cache_hits_total | while read -r line; do
   printf '    trafienia cache (%s): %s\n' "$(printf '%s' "$line" | lbl site)" "${line##* }"
 done
+echo "  Pozyskane Leady i zaangazowane sesje (Zero-PII):"
+met ai_router_leads_total | while read -r line; do
+  printf '    %-14s %-12s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl type)" "${line##* }"
+done
 echo "  Glebokosc kaskady odpowiedzi (0 = pierwszy asystent, >0 = przelaczenie):"
 met ai_router_answers_by_depth_total | while read -r line; do
   printf '    pozycja %-3s odpowiedzi: %s\n' "$(printf '%s' "$line" | lbl depth)" "${line##* }"

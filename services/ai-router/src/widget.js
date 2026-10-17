@@ -24,23 +24,25 @@
 
   if (document.getElementById('tsw-ai-widget-root')) return;
 
-  // Domyślne podpowiedzi szybkich pytań dopasowane do strony
+  // Domyślne podpowiedzi szybkich pytań dopasowane do strony (zgodne z _site-template/assets/js/ai-widget.js i warm-ai-cache.sh)
   const QUICK_PROMPTS_MAP = {
-    katosalsahub: [
-      'Ile kosztuje karnet?',
-      'Czy akceptujecie Multisport?',
-      'Kursy od podstaw (P0)'
+    twojastronawww: [
+      'Ile kosztuje strona WWW?',
+      'Dlaczego kod zamiast WordPressa?',
+      'Wdrożenie czatbota AI (RAG)',
+      'Jak wygląda współpraca?'
     ],
     fuegolingua: [
       'Bezpłatna lekcja próbna',
       'Ile kosztuje kurs hiszpańskiego?',
-      'Zajęcia indywidualne czy grupowe?'
+      'Zajęcia indywidualne czy grupowe?',
+      'Hiszpański w biznesie / branżowy'
     ],
-    twojastronawww: [
-      'Ile kosztuje strona WWW?',
-      'Dlaczego kod zamiast WordPressa?',
-      'Wdrożenie czatbota AI',
-      'Jak wygląda współpraca?'
+    katosalsahub: [
+      'Czym jest Salsopedia i jak z niej korzystać?',
+      'Co to jest Enchufla i Dile Que No?',
+      'Gdzie tańczymy i jak działa Radio?',
+      'Jak dodać lub poprawić hasło w Salsopedii?'
     ]
   };
   const quickPrompts = QUICK_PROMPTS_MAP[SITE_ID] || QUICK_PROMPTS_MAP.twojastronawww;
@@ -447,10 +449,14 @@
 
     sendBtn.disabled = true;
 
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(function() { controller.abort(); }, 9000) : null;
+
     try {
       const res = await fetch(ROUTER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller ? controller.signal : undefined,
         body: JSON.stringify({
           site_id: SITE_ID,
           question: trimmed,
@@ -477,6 +483,7 @@
       typingMsg.remove();
       appendMessageElement('model', 'Błąd sieci. Sprawdź połączenie z internetem.');
     } finally {
+      if (timeoutId) clearTimeout(timeoutId);
       sendBtn.disabled = false;
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }

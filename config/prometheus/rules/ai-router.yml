@@ -101,20 +101,30 @@ groups:
           description: "Dostepna pamiec RAM spadla do {{ $value | printf \"%.1f\" }}% calkowitej puli 24 GB."
 
       - alert: VPSBackupFailedOrStale
-        expr: devops_backup_status == 0 or (time() - devops_backup_last_timestamp_seconds) > 93600
+        expr: devops_backup_status == 0 or devops_backup_verified == 0 or devops_backup_sqlite_verified == 0 or (time() - devops_backup_last_timestamp_seconds) > 93600
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Backup wolumenow VPS nie powiodl sie lub jest przestarzaly (>26h)"
+          summary: "Backup wolumenow VPS nie powiodl sie, ma blad integralnosci lub jest przestarzaly (>26h)"
           description: "Sprawdz status devops-backup.service oraz plik backup.prom na serwerze VPS."
 
       - alert: WebsitesBackupFailedOrStale
-        expr: devops_backup_websites_status == 0 or (time() - devops_backup_websites_last_timestamp_seconds) > 93600
+        expr: devops_backup_websites_status == 0 or devops_backup_websites_verified == 0 or devops_backup_websites_db_verified == 0 or (time() - devops_backup_websites_last_timestamp_seconds) > 93600
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Backup stron WWW (LH.pl) nie powiodl sie lub jest przestarzaly (>26h)"
+          summary: "Backup stron WWW lub bazy MySQL (LH.pl) nie powiodl sie lub jest przestarzaly (>26h)"
           description: "Sprawdz logi backup-websites-lh.sh (journalctl -u devops-backup.service) oraz plik backup_websites.prom."
+
+      - alert: CloudflareTunnelDown
+        expr: up{job="cloudflared"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tunel krawedziowy Cloudflare Zero Trust (cloudflared) nie odpowiada"
+          description: "Kontener cloudflared nie eksportuje telemetrii na porcie 2000 od ponad 2 minut - ruch z WAN do ai.twojastronawww.pl moze byc przerwany."
+
 

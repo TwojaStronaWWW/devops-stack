@@ -230,6 +230,12 @@ services:
           memory: 64M
         reservations:
           memory: 16M
+    healthcheck:
+      test: ["CMD", "/dozzle", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================================================
   # GitHub Exporter: Telemetria zadań GitHub Actions & repozytoriów dla Prometheusa
@@ -297,6 +303,7 @@ services:
       - MODEL_DAILY_LIMITS=${MODEL_DAILY_LIMITS:-}
       - AI_CACHE_TTL=${AI_CACHE_TTL:-86400}
       - NTFY_TOPIC=${NTFY_TOPIC:-}
+      - LEAD_WEBHOOK_URL=${LEAD_WEBHOOK_URL:-}
       - PHP_CLI_SERVER_WORKERS=4
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl}
       - TZ=${TZ:-Europe/Warsaw}

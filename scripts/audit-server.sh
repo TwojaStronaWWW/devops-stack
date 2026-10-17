@@ -326,6 +326,14 @@ else
          "sudo mount -o remount,noexec,nosuid,nodev /dev/shm"
 fi
 
+if [[ -f /var/run/reboot-required ]]; then
+    warn "System oczekuje na restart po aktualizacji jądra/pakietów (/var/run/reboot-required)." \
+         "Zaplanuj okno serwisowe i wykonaj: sudo reboot"
+else
+    pass "Jądro systemu jest aktualne (brak oczekującego restartu /var/run/reboot-required)."
+fi
+
+
 # ==============================================================================
 # WARSTWA 4: KONTENERY DOCKER, HEALTHCHECKI I SMOKE TESTY ENDPOINTÓW
 # ==============================================================================
@@ -426,6 +434,14 @@ else
     check_http "Dozzle Logs" "http://127.0.0.1:8888"
     check_http "AI Router"   "http://127.0.0.1:8085/health"
 
+    # Weryfikacja gotowości tunelu krawędziowego Cloudflare Zero Trust wewnątrz sieci Dockera
+    if docker exec prometheus wget -q -T 4 --spider "http://cloudflared:2000/ready" >/dev/null 2>&1; then
+        pass "Smoke Test Tunelu [cloudflared]: http://cloudflared:2000/ready -> Połączenie QUIC aktywne (READY)"
+    else
+        warn "Endpoint gotowości tunelu cloudflared (http://cloudflared:2000/ready) nie odpowiedział (sprawdź logi cloudflared)." \
+             "docker logs --tail 30 cloudflared"
+    fi
+
     # Sprawdzenie czy w Prometheusie wszystkie targety mają stan UP
     PROM_TARGETS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/targets" 2>/dev/null || true)"
     if [[ -n "${PROM_TARGETS}" ]]; then
@@ -459,10 +475,11 @@ else
     if [[ -n "${PROM_ALERTS}" ]]; then
         FIRING_COUNT="$(echo "${PROM_ALERTS}" | grep -o '"state":"firing"' | wc -l | tr -d ' ')"
         if [[ "${FIRING_COUNT}" -eq 0 ]]; then
-            pass "Reguły Alertów Prometheusa (AI Router): 0 aktywnych alarmów (firing=0)."
+            pass "Reguły Alertów Prometheusa (AI Router & Infrastruktura): 0 aktywnych alarmów (firing=0)."
             rm -f /tmp/devops_ntfy_alert_dedup.state 2>/dev/null || true
         else
             FIRING_NAMES="$(echo "${PROM_ALERTS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
+            FIRING_SUMMARIES="$(echo "${PROM_ALERTS}" | grep -oE '"summary":"[^"]+"' | cut -d'"' -f4 | sort -u | sed 's/^/• /' || echo '')"
             warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
                  "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
             NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
@@ -479,11 +496,15 @@ else
                 fi
                 if [[ "${SEND_NTFY}" -eq 1 ]]; then
                     printf "%s\n%s\n" "${FIRING_NAMES}" "${NOW_EPOCH}" > "${DEDUP_FILE}" 2>/dev/null || true
+                    ALERT_MSG="Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}"
+                    if [[ -n "${FIRING_SUMMARIES}" ]]; then
+                        ALERT_MSG="${ALERT_MSG}"$'\n\n'"Szczegóły:"$'\n'"${FIRING_SUMMARIES}"
+                    fi
                     curl -s --max-time 5 \
-                        -H "Title: 🚨 Prometheus Alert (VPS AI Router)" \
+                        -H "Title: 🚨 Prometheus Alert (VPS Stack)" \
                         -H "Priority: high" \
                         -H "Tags: rotating_light,robot" \
-                        -d "Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}" \
+                        -d "${ALERT_MSG}" \
                         "https://ntfy.sh/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
                 fi
             fi
@@ -528,7 +549,7 @@ if systemctl is-active --quiet devops-backup.timer 2>/dev/null; then
     pass "Harmonogram automatycznego backupu (devops-backup.timer) jest AKTYWNY."
 else
     warn "Harmonogram systemd 'devops-backup.timer' NIE JEST AKTYWNY (backup nie uruchamia się automatycznie w nocy)." \
-         "Skonfiguruj i włącz devops-backup.timer w /etc/systemd/system/"
+         "sudo bash ${STACK_ROOT}/scripts/setup-backup-timer.sh"
 fi
 
 if systemctl is-active --quiet devops-audit.timer 2>/dev/null; then

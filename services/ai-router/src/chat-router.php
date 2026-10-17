@@ -392,14 +392,65 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
     exit;
 }
 
-// Detekcja namiarów kontaktowych (e-mail / telefon) podanych przez klienta — Zero-PII na dysku (pomijamy zapis w cache)
-$hasEmail = (bool)preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/u', $question);
-$hasPhone = (bool)preg_match('/(?:\+?48[\s\-]?)?(?:\d[\s\-]?){8}\d/u', $question);
+// Detekcja i bezpośrednia ekstrakcja namiarów kontaktowych (telefon / e-mail) — Zero-PII na dysku (pomijamy zapis w cache)
+$emailRegex = '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/u';
+$phoneRegex = '/(?:\+?48[\s.\-()]*)?(?:\d[\s.\-()]*){8}\d/u';
+
+$hasEmail = (bool)preg_match_all($emailRegex, $question, $emailMatchesQ);
+$hasPhone = (bool)preg_match_all($phoneRegex, $question, $phoneMatchesQ);
 $hasContactLead = $hasEmail || $hasPhone;
+
+$extractedEmails = $hasEmail ? array_values(array_unique(array_map('strtolower', $emailMatchesQ[0]))) : [];
+$rawPhones       = $hasPhone ? $phoneMatchesQ[0] : [];
+
+// Jeśli klient podał namiar w bieżącej wiadomości, sprawdź czy we wcześniejszych wiadomościach tej rozmowy podał też drugi kanał (np. wcześniej e-mail, a teraz telefon)
+if ($hasContactLead && !empty($sanitizedHistory)) {
+    foreach ($sanitizedHistory as $hTurn) {
+        if (($hTurn['role'] ?? '') !== 'user') continue;
+        if (preg_match_all($emailRegex, $hTurn['text'], $hEm)) {
+            foreach ($hEm[0] as $em) {
+                $extractedEmails[] = strtolower($em);
+            }
+        }
+        if (preg_match_all($phoneRegex, $hTurn['text'], $hPh)) {
+            foreach ($hPh[0] as $ph) {
+                $rawPhones[] = $ph;
+            }
+        }
+    }
+    $extractedEmails = array_values(array_unique($extractedEmails));
+}
+
+$extractedPhones = [];
+$dialPhones      = [];
+foreach ($rawPhones as $rawPh) {
+    $digits = preg_replace('/\D+/', '', (string)$rawPh) ?: '';
+    if (strlen($digits) === 9) {
+        $formatted = '+48 ' . substr($digits, 0, 3) . ' ' . substr($digits, 3, 3) . ' ' . substr($digits, 6, 3);
+        $dial      = '+48' . $digits;
+    } elseif (strlen($digits) === 11 && str_starts_with($digits, '48')) {
+        $sub       = substr($digits, 2);
+        $formatted = '+48 ' . substr($sub, 0, 3) . ' ' . substr($sub, 3, 3) . ' ' . substr($sub, 6, 3);
+        $dial      = '+' . $digits;
+    } else {
+        $formatted = trim((string)$rawPh);
+        $dial      = '+' . $digits;
+    }
+    if (!in_array($formatted, $extractedPhones, true)) {
+        $extractedPhones[] = $formatted;
+        $dialPhones[]      = $dial;
+    }
+}
+
+$hasEmail = !empty($extractedEmails);
+$hasPhone = !empty($extractedPhones);
 $contactChannel = $hasEmail && $hasPhone ? 'email+phone' : ($hasEmail ? 'email' : ($hasPhone ? 'phone' : 'none'));
 
-// Klucz pamięci podręcznej zależny od witryny, mtime pliku wiedzy, wersji dynamicznej bazy (np. Salsopedii), kontekstu i znormalizowanego pytania
-$normalizedQ = preg_replace('/\s+/u', ' ', mb_strtolower(trim($question))) ?: '';
+// Klucz pamięci podręcznej zależny od witryny, mtime pliku wiedzy, wersji dynamicznej bazy, kontekstu i znormalizowanego pytania (Fuzzy Punctuation Normalization)
+$normalizedQ = trim((string)preg_replace('/[\p{P}\p{S}\s]+/u', ' ', mb_strtolower(trim($question))));
+if ($normalizedQ === '') {
+    $normalizedQ = preg_replace('/\s+/u', ' ', mb_strtolower(trim($question))) ?: '';
+}
 $historySig  = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
 $kbMtime     = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
 $dynSig      = ($kbVersion !== 'v0' || $dynamicContext !== '') ? hash('sha256', "{$kbVersion}|{$dynamicContext}") : 'static';
@@ -999,29 +1050,105 @@ if (!$hasContactLead && is_dir($cacheDir) && !str_starts_with($answer, 'Przepras
 }
 
 $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
+$leadWebhookUrl = trim((string)(getenv('LEAD_WEBHOOK_URL') ?: ''));
 
 // Przekazanie namiarów kontaktowych (e-mail / telefon) od klienta prosto na telefon właściciela (Zero-PII w logach i Prometheusie)
 if ($hasContactLead) {
+    aiRecordLead($aiSite, 'contact');
     aiLog('contact_lead_captured', ['site' => $aiSite, 'channel' => $contactChannel]);
+
+    $priorUserQuestions = [];
+    foreach ($sanitizedHistory as $hTurn) {
+        if (($hTurn['role'] ?? '') === 'user' && trim((string)($hTurn['text'] ?? '')) !== '') {
+            $priorUserQuestions[] = '• ' . trim((string)$hTurn['text']);
+        }
+    }
+
     if ($ntfyTopic !== '') {
-        $chLead = curl_init("https://ntfy.sh/{$ntfyTopic}");
-        curl_setopt_array($chLead, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => "Klient zostawił namiar kontaktowy ({$contactChannel}) na stronie {$aiSite}:\n\n\"{$question}\"",
-            CURLOPT_HTTPHEADER     => [
-                "Title: Nowy Kontakt z Czatbota ({$aiSite})",
-                'Priority: high',
-                'Tags: telephone_receiver,sparkles'
-            ],
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 2,
-            CURLOPT_CONNECTTIMEOUT => 1
-        ]);
-        @curl_exec($chLead);
-        curl_close($chLead);
+        $leadLines = [];
+        $titleParts = [];
+        $ntfyActions = [];
+
+        if (!empty($extractedPhones)) {
+            $phoneListStr = implode(', ', $extractedPhones);
+            $leadLines[]  = "📞 TELEFON: {$phoneListStr}";
+            $titleParts[] = "TEL: {$extractedPhones[0]}";
+            $ntfyActions[] = "view, Zadzwon ({$extractedPhones[0]}), tel:{$dialPhones[0]}";
+        }
+        if (!empty($extractedEmails)) {
+            $emailListStr = implode(', ', $extractedEmails);
+            $leadLines[]  = "✉️ E-MAIL: {$emailListStr}";
+            $titleParts[] = "EMAIL: {$extractedEmails[0]}";
+            $ntfyActions[] = "view, Napisz e-mail ({$extractedEmails[0]}), mailto:{$extractedEmails[0]}";
+        }
+
+        $leadLines[] = "🌐 STRONA: {$aiSite}";
+        $leadLines[] = "────────────────────────";
+        $leadLines[] = "💬 Wiadomość klienta:";
+        $leadLines[] = "\"{$question}\"";
+
+        if (!empty($priorUserQuestions)) {
+            $leadLines[] = "";
+            $leadLines[] = "📋 Wcześniejsze pytania w rozmowie:";
+            foreach (array_slice($priorUserQuestions, -3) as $pq) {
+                $leadLines[] = $pq;
+            }
+        }
+
+        $ntfyTitle = 'Lead (' . $aiSite . ') - ' . implode(' | ', $titleParts);
+        $ntfyHeaders = [
+            "Title: {$ntfyTitle}",
+            'Priority: high',
+            'Tags: telephone_receiver,sparkles'
+        ];
+        if (!empty($ntfyActions)) {
+            $ntfyHeaders[] = 'Actions: ' . implode('; ', $ntfyActions);
+        }
+
+        $ntfyBody = implode("\n", $leadLines);
+        $ntfyDelivered = false;
+        $leadHttpCode = 0;
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $chLead = curl_init("https://ntfy.sh/{$ntfyTopic}");
+            curl_setopt_array($chLead, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $ntfyBody,
+                CURLOPT_HTTPHEADER     => $ntfyHeaders,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 3,
+                CURLOPT_CONNECTTIMEOUT => 2
+            ]);
+            @curl_exec($chLead);
+            $leadHttpCode = (int)curl_getinfo($chLead, CURLINFO_HTTP_CODE);
+            curl_close($chLead);
+            if ($leadHttpCode >= 200 && $leadHttpCode < 300) {
+                $ntfyDelivered = true;
+                break;
+            }
+            if ($attempt === 1) {
+                usleep(200000);
+            }
+        }
+        if (!$ntfyDelivered) {
+            aiLog('contact_lead_ntfy_failed', ['site' => $aiSite, 'http' => $leadHttpCode]);
+        }
+    }
+
+    if ($leadWebhookUrl !== '' && filter_var($leadWebhookUrl, FILTER_VALIDATE_URL)) {
+        executeJsonPost($leadWebhookUrl, [
+            'event'           => 'contact_lead_captured',
+            'site_id'         => $aiSite,
+            'channel'         => $contactChannel,
+            'phones'          => $extractedPhones,
+            'emails'          => $extractedEmails,
+            'message'         => $question,
+            'prior_questions' => array_slice($priorUserQuestions, -3),
+            'timestamp'       => gmdate('c')
+        ], [], 3);
     }
 } elseif (count($sanitizedHistory) === 6) {
     // Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
+    aiRecordLead($aiSite, 'hot_lead');
     aiLog('hot_lead_detected', ['site' => $aiSite, 'turns' => 4]);
     if ($ntfyTopic !== '') {
         $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");

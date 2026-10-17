@@ -56,35 +56,29 @@ mkdir -p /opt/devops-stack/config/node-exporter
 mkdir -p /opt/devops-stack/backups/websites
 ```
 
-### Krok 5: Odtworzenie danych z archiwów (Restore) (Czas: ~3 min)
-Prześlij pliki kopii zapasowej (z lokalnego dysku lub pobrane z Cloudflare R2 / S3; jeśli zaszyfrowane `.enc`, odszyfruj za pomocą `openssl enc -d -aes-256-cbc -pbkdf2`) do `/tmp` na serwerze i przywróć ich zawartość:
+### Krok 5: Odtworzenie danych z archiwów (Restore) (Czas: ~2 min)
+Możesz przeprowadzić automatyczne pobranie z chmury Cloudflare R2, odszyfrowanie AES-256-CBC, weryfikację spójności SQLite oraz przywrócenie wszystkich wolumenów i uprawnień jednym poleceniem:
 
 ```bash
-# 1. Przywrócenie bazy Uptime Kuma
+# Opcja A (Zalecana — pełny automat pobierający najświeższy backup z Cloudflare R2):
+bash /opt/devops-stack/scripts/restore-backup.sh --from-r2 --yes
+
+# Opcja B (Nieinwazyjny test odtworzeniowy / Restore Drill bez nadpisywania wolumenów):
+bash /opt/devops-stack/scripts/restore-backup.sh --verify-only
+
+# Opcja C (Ręczne przywrócenie pojedynczego wolumenu z lokalnego pliku w /tmp):
 docker run --rm \
   -v uptime_kuma_data:/target \
   -v /tmp:/backup:ro \
   alpine tar -xzf /backup/uptime_kuma_data_*.tar.gz -C /target
 
-# 2. Przywrócenie konfiguracji i dashboardów Grafana
-docker run --rm \
-  -v grafana_data:/target \
-  -v /tmp:/backup:ro \
-  alpine tar -xzf /backup/grafana_data_*.tar.gz -C /target
-
-# 3. Przywrócenie bazy TSDB Prometheus (jeśli wymagana historia)
-docker run --rm \
-  -v prometheus_data:/target \
-  -v /tmp:/backup:ro \
-  alpine tar -xzf /backup/prometheus_data_*.tar.gz -C /target
-
-# 4. Przywrócenie kopii stron WWW z hostingu LH.pl (w przypadku awarii hostingu LH):
+# Przywrócenie kopii stron WWW z hostingu LH.pl (w przypadku awarii hostingu LH):
 mkdir -p /opt/devops-stack/backups/websites/restored
 tar -xzf /tmp/lh_websites_backup_*.tar.gz -C /opt/devops-stack/backups/websites/restored/
 ```
 
 ### Krok 6: Poprawność uprawnień (Fix Permissions) (Czas: ~1 min)
-Prometheus i Grafana uruchamiają się jako użytkownicy nie-root (UID `65534` oraz `472`). Weryfikacja uprawnień:
+Skrypt `restore-backup.sh` ustawia uprawnienia automatycznie. Przy odtwarzaniu ręcznym (Opcja C) zweryfikuj właścicieli non-root (UID `65534` oraz `472`):
 
 ```bash
 # Uprawnienia Grafana (UID 472)
@@ -104,9 +98,9 @@ docker compose --env-file /opt/devops-stack/.env -f docker-compose.yml -f extens
 docker exec uptime-kuma nscd -i hosts 2>/dev/null || true
 bash /opt/devops-stack/scripts/warm-ai-cache.sh
 
-# 3. Aktywacja harmonogramu nocnych backupów oraz autonomicznego strażnika 24/7 (co 15 min)
+# 3. Idempotentna instalacja i aktywacja harmonogramu nocnych backupów (03:00 UTC) oraz strażnika 24/7 (co 15 min)
 sudo bash /opt/devops-stack/scripts/setup-audit-timer.sh
-sudo systemctl enable --now devops-backup.timer
+sudo bash /opt/devops-stack/scripts/setup-backup-timer.sh
 ```
 
 ---

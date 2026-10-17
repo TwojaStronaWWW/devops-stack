@@ -57,6 +57,7 @@ jobs:
             git reset --hard origin/main
             chmod +x scripts/*.sh
             bash "${DEPLOY_PATH}/scripts/setup-audit-timer.sh" >/dev/null 2>&1 || true
+            bash "${DEPLOY_PATH}/scripts/setup-backup-timer.sh" >/dev/null 2>&1 || true
 
             cd compose
             docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans

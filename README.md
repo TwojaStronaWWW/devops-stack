@@ -143,9 +143,11 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + AES-256) do chmury R2/S3 z alertami Ntfy
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z hostingu LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256)
+│   ├── restore-backup.sh          # Automatyczne odtwarzanie (Disaster Recovery) i test Restore Drill (--verify-only)
 │   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie przeglądarki)
 │   ├── preview-tunnel.ps1/.sh     # Quick Tunnel – natychmiastowy szyfrowany link HTTPS dla stagingu
 │   ├── setup-audit-timer.sh       # Idempotentna instalacja strażnika systemd 24/7 (devops-audit.timer co 15 min)
+│   ├── setup-backup-timer.sh      # Idempotentna instalacja harmonogramu backupów systemd (devops-backup.timer 03:00 UTC)
 │   ├── setup-kuma.js              # Idempotentna rejestracja 10 monitorowanych witryn i AI Routera w Uptime Kuma
 │   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
 │   ├── verify-remote.ps1/.cmd     # Zdalny wyzwalacz audytu VPS z poziomu Windows (npm run audit)
@@ -154,7 +156,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, Multi-Provider RAG, Cache <5ms, Zero-Bloat)
 │       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
 │       ├── src/
-│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, Cache RAG (<5ms), Detektor Leadów, 7-modelowa kaskada LLM
+│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, Cache RAG (<5ms), Ekstraktor Leadów (Tel/E-mail 1-Klik), 11-modelowa kaskada LLM
 │       │   └── ai-stats.php       # Moduł telemetrii Prometheus, Cooldownu modeli, domyślnych limitów RPD i wyzerowanych serii błędów
 │       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua-knowledge.txt, katosalsahub-knowledge.txt, twojastronawww-knowledge.txt)
 │       ├── storage/               # Trwały wolumen na pliki rate-limit, cache RAG (/app/storage/cache) oraz ai_stats.json
@@ -275,12 +277,13 @@ Do automatycznego „upolowania” maszyny służy skrypt [`scripts/oracle-arm-h
    sudo chmod 640 config/prometheus/kuma_password
    ```
 
-5. **Uruchomienie pełnego stosu produkcyjnego, pre-warming Cache RAG oraz aktywacja strażnika 24/7**:
+5. **Uruchomienie pełnego stosu produkcyjnego, pre-warming Cache RAG oraz aktywacja strażnika 24/7 i nocnych backupów**:
    ```bash
    cd /opt/devops-stack/compose
    docker compose --env-file /opt/devops-stack/.env -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build
    bash /opt/devops-stack/scripts/warm-ai-cache.sh
    sudo bash /opt/devops-stack/scripts/setup-audit-timer.sh
+   sudo bash /opt/devops-stack/scripts/setup-backup-timer.sh
    ```
 
 6. **Weryfikacja stanu usług (5-warstwowy audyt)**:
@@ -341,6 +344,7 @@ Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla
 - Tworzy spójne snapshoty wszystkich 7 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`) wraz z weryfikacją baz SQLite (`PRAGMA quick_check`).
 - Automatycznie weryfikuje integralność wygenerowanego archiwum (`tar -tzf`) przed dalszym przetwarzaniem i eksportuje metrykę `devops_backup_verified`.
 - Opcjonalnie szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z kroczącą retencją **30 dni** (zarówno lokalnie na VPS, jak i w chmurze R2 przez `rclone delete --min-age 30d`).
+- Odtwarzanie i testowanie spójności (*Restore Drill*) realizowane jest automatycznie przez skrypt [`scripts/restore-backup.sh`](file:///e:/Projekty/VPS/scripts/restore-backup.sh) (`--verify-only` lub `--from-r2 --yes`).
 
 ### B. Backup Stron WWW z Hostingu LH.pl (`scripts/backup-websites-lh.sh`):
 - Łączy się ze zdalnym hostingiem LH.pl przez szyfrowany kanał **FTPS TLS** (`ftp:ssl-allow true`, `ftp:ssl-protect-data true`).
@@ -348,7 +352,7 @@ Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla
 - Weryfikuje integralność archiwum (`tar -tzf`, metryka `devops_backup_websites_verified`), opcjonalnie szyfruje **AES-256-CBC** i przesyła do Cloudflare R2 (`${S3_BUCKET}/websites/`) z automatyczną rotacją **30 dni** lokalnie oraz w R2.
 
 ### C. Automatyzacja Harmonogramów Systemd (Backup & Strażnik 24/7):
-- **`devops-backup.timer`**: Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów i stron LH.pl.
+- **`devops-backup.timer`** ([`scripts/setup-backup-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-backup-timer.sh)): Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów i stron LH.pl.
 - **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa.
 
 ---
@@ -373,9 +377,9 @@ Serwer VPS udostępnia scentralizowany mikro-router AI ([`services/ai-router/src
 
 ### A. Klasyfikacja Rozwiązania, Cache RAG (`< 5 ms`), Pre-warming i Detektor Leadów
 - **Obszar 3 (AI z bazą wiedzy firmy RAG) + Enterprise High-Availability:** Dynamiczny dobór bazy wiedzy po parametrze `site_id` (`services/ai-router/data/<site_id>-knowledge.txt` montowane w trybie `:ro`), pamięć konwersacji Multi-Turn (`history` do 8 wiadomości) oraz twarde reguły anty-halucynacyjne (Guardrails).
-- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
+- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache normalizuje interpunkcję i wielkość liter oraz uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
 - **Ochrona przed ucinaniem zdań i ukrytymi tokenami myślenia (`thoughtsTokenCount` / `reasoning_tokens`):** Router wymusza `maxOutputTokens: 2048`, przekazuje `'thinkingLevel' => 'MINIMAL'` dla `gemini-3.5-*` (lub `'LOW'` dla `gemini-3.7/3.8`), `'reasoning_effort' => 'low'` / `'disable_reasoning' => true` dla Cerebras WSE, `'reasoning' => ['effort' => 'none']` dla OpenRoutera, wykorzystuje domyślnie wyłączone *Extended Thinking* + *Prompt Caching* (`ephemeral` `-90%`) w Claude Haiku 4.5 oraz odrzuca odpowiedzi z `finishReason === 'MAX_TOKENS'` (`length` / `max_tokens`).
-- **Detektor „Gorącego Leada” (Zero-PII):** Przy 4. pytaniu klienta w jednej sesji rozmowy (`count($sanitizedHistory) === 6`) router wysyła ciche powiadomienie Push do aplikacji **Ntfy.sh** na telefon właściciela (`event=hot_lead_detected`), sygnalizując zaangażowanego klienta bez ujawniania danych osobowych ani treści rozmowy.
+- **Detektor „Gorącego Leada” i Natychmiastowa Ekstrakcja Telefonu / E-maila (Zero-PII na dysku):** Gdy klient poda w rozmowie numer telefonu lub adres e-mail (`event=contact_lead_captured`), router automatycznie wyciąga i formatuje numer (`📞 TELEFON: +48 ...`) oraz adres (`✉️ E-MAIL: ...`), umieszcza je bezpośrednio w tytule powiadomienia i w pierwszych linijkach wiadomości Ntfy.sh (wraz z wcześniejszymi pytaniami z sesji) oraz dodaje natywne przyciski akcji 1-Klik (`Zadzwoń tel:...` / `Napisz e-mail mailto:...`). Przy 4. pytaniu klienta w jednej sesji (`count($sanitizedHistory) === 6`) wysyła ponadto sygnał `event=hot_lead_detected`.
 - **0 MB wag modeli na serwerze VPS:** Wszystkie 11 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~14 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
 
 ### B. 6-Dostawczowa Kaskada Odporności na Awarie (11 Modeli LLM) + Smart Fast-Fail

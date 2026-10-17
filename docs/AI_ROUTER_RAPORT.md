@@ -90,10 +90,13 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
    - `anthropic/claude-haiku-4-5`: `1 000` zapytań/doba (bufor Pre-paid 5 USD z Prompt Cachingiem `-90%`)
    - Łączna dzienna pula wynosi **ponad 670 000 darmowych zapytań na dobę + bufor awaryjny Claude Haiku 4.5** (można ją nadpisać zmienną `MODEL_DAILY_LIMITS` w `.env`).
 2. **Pamięć podręczna RAG (`/app/storage/cache`):**
-   - Identyczne pytania (po normalizacji białych znaków i wielkości liter) są zwracane z dysku w **`~1.8 ms`** (`"cached": true`), nie zużywając ani jednego zapytania z puli RPD.
-   - Klucz SHA-256 uwzględnia `filemtime` pliku wiedzy `<site_id>-knowledge.txt` — każda aktualizacja bazy wiedzy natychmiast unieważnia stare wpisy cache.
-3. **Detektor „Gorącego Leada” (Zero-PII):**
-   - Gdy klient zadaje **4. pytanie w jednej sesji rozmowy** (`count($sanitizedHistory) === 6`), router rejestruje zdarzenie `hot_lead_detected` i wysyła ciche powiadomienie Push do aplikacji **Ntfy.sh** na telefon właściciela.
+   - Identyczne pytania (po rozmytej normalizacji interpunkcji, symboli, białych znaków i wielkości liter — `/[\p{P}\p{S}\s]+/u`) są zwracane z dysku w **`~1.8 ms`** (`"cached": true`), nie zużywając ani jednego zapytania z puli RPD.
+   - Klucz SHA-256 uwzględnia `filemtime` pliku wiedzy `<site_id>-knowledge.txt`, `kb_version` oraz `dynamic_context` — każda aktualizacja bazy wiedzy natychmiast unieważnia stare wpisy cache.
+3. **Detektor „Gorącego Leada” i Natychmiastowy Ekstraktor Namiarów Kontaktowych 1-Klik (Zero-PII na dysku):**
+   - **Przechwycenie namiaru (`event=contact_lead_captured`):** Gdy klient wpisze na czacie numer telefonu lub adres e-mail, router automatycznie wyciąga i formatuje numer (`📞 TELEFON: +48 XXX XXX XXX`) oraz e-mail (`✉️ E-MAIL: ...`) z bieżącej wiadomości oraz wcześniejszych tur rozmowy.
+   - **Priorytetowa ekspozycja na samej górze powiadomienia:** Wyekstrahowany telefon i e-mail trafiają bezpośrednio do nagłówka `Title:` oraz **dwóch pierwszych linii wiadomości Push w Ntfy.sh** (dzięki czemu właściciel nigdy nie musi szukać numeru w treści rozmowy), wraz z przyciskami akcji 1-Klik (`Zadzwoń` $\rightarrow$ `tel:+48...`, `Napisz e-mail` $\rightarrow$ `mailto:...`), historią wcześniejszych pytań klienta oraz opcjonalną wysyłką JSON do `LEAD_WEBHOOK_URL`.
+   - **Gorący Lead (`event=hot_lead_detected`):** Gdy klient zadaje **4. pytanie w jednej sesji rozmowy** (`count($sanitizedHistory) === 6`), router wysyła sygnał o zaangażowanym kliencie na stronie.
+   - **Telemetria konwersji Zero-PII:** Licznik `ai_router_leads_total{site="...",type="contact|hot_lead"}` zlicza pozyskane leady per strona bez zapisywania jakichkolwiek danych osobowych na dysku.
 
 ## 5. Zasoby (pomiar na żywym VPS `89.168.62.31`)
 
@@ -111,21 +114,29 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 
 | Narzędzie | Do czego | Jak |
 |---|---|---|
-| **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada, błędy wg przyczyny (zainicjalizowane seriami `0`), zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch per strona | `scripts\open-dashboard.cmd` |
-| **Raport CLI** | Pełny raport tekstowy (zasoby, providerzy, kaskada, statystyki cache RAG, próby modeli, logi) | `.\scripts\ai-router-report.ps1` albo na VPS `scripts/ai-router-report.sh` |
-| **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
-| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 7 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` z wysyłką Push do **Ntfy.sh** | `npm run audit` |
+| **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada, błędy wg przyczyny (zainicjalizowane seriami `0`), zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch i leady per strona | `scripts\open-dashboard.cmd` |
+| **Raport CLI** | Pełny raport tekstowy (zasoby, providerzy, kaskada, statystyki cache RAG, pozyskane leady `ai_router_leads_total`, próby modeli, logi) | `.\scripts\ai-router-report.ps1` albo na VPS `scripts/ai-router-report.sh` |
+| **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `contact_lead_captured`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
+| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 13 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` z wysyłką pełnych opisów `summary` do **Ntfy.sh** | `npm run audit` |
 | **Uptime Kuma** | Dostępność `http://ai-router:8080/health` (z automatycznym odświeżaniem cache DNS `nscd -i hosts` po wdrożeniu) | `open-dashboard.cmd` → Uptime Kuma |
 
 ### Reguły Alertów Prometheusa (`config/prometheus/rules/ai-router.yml`)
 
 | Alert | Warunek | Poziom |
 |---|---|---|
-| `AIRouterDown` | brak scrape 2 min | critical |
-| `AIRouterAllModelsFailed` | ≥1 zapytanie HTTP 502 w 10 min | critical |
+| `AIRouterDown` | brak scrape `ai-router:8080` przez 2 min | critical |
+| `AIRouterAllModelsFailed` | ≥1 zapytanie HTTP 502 (wszystkie 11 modeli zawiodły) w 10 min | critical |
 | `AIRouterPrimaryModelSuspended` | model pozycji 0 zawieszony >5 min | warning |
 | `AIRouterModelQuotaNearLimit` | >80 % dziennego limitu RPD | warning |
 | `AIRouterRateLimitSpike` | >20 blokad 429 / 10 min | warning |
 | `AIRouterFallbackInUse` | odpowiedzi z pozycji >0 w 15 min | info |
-| `AIRouterNoFallbackProvider` | brak Groq/OpenRouter >1 h | info |
+| `AIRouterNoFallbackProvider` | brak skonfigurowanego Groq i OpenRouter >1 h | info |
+| `WebsiteOrServiceDown` | `monitor_status == 0` w Uptime Kuma przez 2 min | critical |
+| `SSLCertificateExpiringSoon` | `monitor_cert_days_remaining < 14` | warning |
+| `VPSHostDiskSpaceLow` | <20 % wolnego miejsca na `/` przez 5 min | warning |
+| `VPSHostMemoryLow` | <15 % dostępnej pamięci RAM na hoście przez 5 min | warning |
+| `VPSBackupFailedOrStale` | błąd backupu wolumenów, błąd `tar -tzf` / `PRAGMA quick_check` lub brak backupu >26 h | warning |
+| `WebsitesBackupFailedOrStale` | błąd backupu stron LH.pl, błąd `tar -tzf` / `mysqldump` lub brak backupu >26 h | warning |
+| `CloudflareTunnelDown` | brak telemetrii `cloudflared:2000` przez 2 min | critical |
+
 

@@ -288,6 +288,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'ai_router_model_attempts_total',
       'ai_router_cache_hits_total',
       'ai_router_cache_entries',
+      'ai_router_leads_total',
     ]) {
       assert.ok(exprs.includes(metric), `Dashboard nie wizualizuje metryki ${metric}`);
     }
@@ -355,19 +356,30 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
   });
 
-  it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów i Kontaktów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf + SQLite, timer audytu 24/7) powinny być wdrożone', () => {
+  it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów i Kontaktów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf + SQLite + MySQL, timer audytu i backupów 24/7) powinny być wdrożone', () => {
     const statsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'), 'utf-8');
     assert.match(statsPhp, /ai_router_cache_hits_total/);
     assert.match(statsPhp, /ai_router_cache_entries/);
+    assert.match(statsPhp, /ai_router_leads_total/);
     assert.match(statsPhp, /function aiRecordCacheHit/);
+    assert.match(statsPhp, /function aiRecordLead/);
 
     const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
     assert.match(routerPhp, /aiRecordCacheHit/);
+    assert.match(routerPhp, /aiRecordLead/);
     assert.match(routerPhp, /hot_lead_detected/);
     assert.match(routerPhp, /contact_lead_captured/);
+    assert.match(routerPhp, /LEAD_WEBHOOK_URL/);
+    assert.match(routerPhp, /TELEFON:/);
+    assert.match(routerPhp, /E-MAIL:/);
+    assert.match(routerPhp, /Actions:/);
     assert.match(routerPhp, /thinkingLevel/);
     assert.match(routerPhp, /MAX_TOKENS/);
     assert.match(routerPhp, /'reasoning'\s*=>\s*\['effort'\s*=>\s*'none'\]/);
+
+    const ntfyScript = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'setup-ntfy.js'), 'utf-8');
+    assert.match(ntfyScript, /import\s+\{\s*io\s*\}\s+from\s+"socket\.io-client"/);
+    assert.match(ntfyScript, /deleteNotification/);
 
     const warmCacheSh = path.join(ROOT_DIR, 'scripts', 'warm-ai-cache.sh');
     assert.ok(fs.existsSync(warmCacheSh), 'Brak scripts/warm-ai-cache.sh');
@@ -375,6 +387,15 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const runnersYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
     assert.match(runnersYml, /name:\s*devops_runners_network/);
+
+    const extensionsYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'extensions.yml'), 'utf-8');
+    assert.match(extensionsYml, /--metrics\s+0\.0\.0\.0:2000/);
+
+    const promYml = fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'prometheus.yml'), 'utf-8');
+    assert.match(promYml, /cloudflared:2000/);
+
+    const rulesYml = fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'rules', 'ai-router.yml'), 'utf-8');
+    assert.match(rulesYml, /alert:\s*CloudflareTunnelDown/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /devops_backup_verified/);
@@ -385,12 +406,66 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);
+    assert.match(lhBackup, /devops_backup_websites_db_verified/);
+    assert.match(lhBackup, /LH_DB_NAMES/);
     assert.match(lhBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
     assert.match(lhBackup, /mirror --verbose --delete --no-perms/);
     assert.match(lhBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
 
     const setupAuditTimer = path.join(ROOT_DIR, 'scripts', 'setup-audit-timer.sh');
     assert.ok(fs.existsSync(setupAuditTimer), 'Brak scripts/setup-audit-timer.sh');
+
+    const setupBackupTimer = path.join(ROOT_DIR, 'scripts', 'setup-backup-timer.sh');
+    assert.ok(fs.existsSync(setupBackupTimer), 'Brak scripts/setup-backup-timer.sh');
+    assert.match(fs.readFileSync(setupBackupTimer, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+
+    const restoreBackup = path.join(ROOT_DIR, 'scripts', 'restore-backup.sh');
+    assert.ok(fs.existsSync(restoreBackup), 'Brak scripts/restore-backup.sh');
+    assert.match(fs.readFileSync(restoreBackup, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+  });
+
+  it('weryfikacja krzyżowa (Cross-Template Contract): VPS AI Router, warm-ai-cache.sh oraz _site-template powinny zachowywać 100% spójność kontraktu', () => {
+    const warmCache = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'warm-ai-cache.sh'), 'utf-8');
+    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const vpsWidget = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'), 'utf-8');
+
+    // Kontrakt pól JSON obsługiwanych przez chat-router.php
+    for (const field of ['site_id', 'question', 'kb_version', 'dynamic_context', 'history']) {
+      assert.match(routerPhp, new RegExp(`\\$payload\\['${field}'\\]`));
+    }
+
+    // Sprawdzenie, czy wszystkie szybkie pytania z widgetu są rozgrzewane w warm-ai-cache.sh
+    for (const prompt of [
+      'Ile kosztuje strona WWW?',
+      'Dlaczego kod zamiast WordPressa?',
+      'Wdrożenie czatbota AI (RAG)',
+      'Jak wygląda współpraca?',
+      'Bezpłatna lekcja próbna',
+      'Ile kosztuje kurs hiszpańskiego?',
+      'Zajęcia indywidualne czy grupowe?',
+      'Hiszpański w biznesie / branżowy',
+      'Czym jest Salsopedia i jak z niej korzystać?',
+      'Co to jest Enchufla i Dile Que No?',
+      'Gdzie tańczymy i jak działa Radio?',
+      'Jak dodać lub poprawić hasło w Salsopedii?',
+    ]) {
+      assert.ok(warmCache.includes(prompt), `Brak pytania '${prompt}' w scripts/warm-ai-cache.sh`);
+      assert.ok(vpsWidget.includes(prompt), `Brak pytania '${prompt}' w services/ai-router/src/widget.js`);
+    }
+
+    // Jeśli w workspace istnieje bliźniaczy szablon _site-template, zweryfikuj krzyżowo jego pliki
+    const siteTemplateDir = path.join(ROOT_DIR, '..', '_site-template');
+    if (fs.existsSync(siteTemplateDir)) {
+      const siteWidget = fs.readFileSync(path.join(siteTemplateDir, 'assets', 'js', 'ai-widget.js'), 'utf-8');
+      const siteAgents = fs.readFileSync(path.join(siteTemplateDir, 'AGENTS.md'), 'utf-8');
+      const siteBlueprint = fs.readFileSync(path.join(siteTemplateDir, 'BLUEPRINT.md'), 'utf-8');
+
+      assert.match(siteWidget, /11-modelowej kaskady/);
+      assert.match(siteWidget, /hasContactPii/);
+      assert.match(siteAgents, /11-modelową kaskadę/);
+      assert.match(siteBlueprint, /11-Modelowa Kaskada/);
+    }
   });
 });
+
 

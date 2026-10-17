@@ -17,17 +17,22 @@ if ! docker ps --format '{{.Names}}' | grep -q '^ai-router$'; then
     exit 0
 fi
 
-# Lista par: site_id|pytanie (zgodna z QUICK_PROMPTS_MAP w ai-widget.js)
+# Lista par: site_id|pytanie (zgodna z QUICK_PROMPTS_MAP w _site-template/assets/js/ai-widget.js oraz widget.js)
 PROMPTS=(
     "twojastronawww|Ile kosztuje strona WWW?"
-    "twojastronawww|Jak wygląda proces współpracy?"
     "twojastronawww|Dlaczego kod zamiast WordPressa?"
+    "twojastronawww|Wdrożenie czatbota AI (RAG)"
+    "twojastronawww|Jak wygląda współpraca?"
+    "twojastronawww|Jak wygląda proces współpracy?"
     "twojastronawww|Jak działa asystent AI na stronie?"
     "fuegolingua|Bezpłatna lekcja próbna"
     "fuegolingua|Ile kosztuje kurs hiszpańskiego?"
     "fuegolingua|Zajęcia indywidualne czy grupowe?"
     "fuegolingua|Hiszpański w biznesie / branżowy"
     "katosalsahub|Czym jest Salsopedia i jak z niej korzystać?"
+    "katosalsahub|Co to jest Enchufla i Dile Que No?"
+    "katosalsahub|Gdzie tańczymy i jak działa Radio?"
+    "katosalsahub|Jak dodać lub poprawić hasło w Salsopedii?"
     "katosalsahub|Wyjaśnij figury: Dile Que No, Enchufla i Setenta"
     "katosalsahub|Gdzie tańczymy w Katowicach i na Trzech Stawach?"
     "katosalsahub|Jak zacząć od zera (P0) i czy działa Multisport?"

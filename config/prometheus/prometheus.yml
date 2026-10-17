@@ -57,3 +57,15 @@ scrape_configs:
         labels:
           service: 'ai-router'
           component: 'gemini-proxy'
+
+  # 7. Cloudflare Tunnel (telemetria tunelu krawędziowego Zero Trust i połączeń QUIC)
+  - job_name: 'cloudflared'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['cloudflared:2000']
+        labels:
+          service: 'cloudflared'
+          component: 'zero-trust-tunnel'
+

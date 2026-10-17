@@ -37,9 +37,10 @@ LH_REMOTE_DIR="${LH_REMOTE_DIR:-/public_html}"
 LH_FTP_SSL="${LH_FTP_SSL:-true}"
 LH_FTP_VERIFY_CERT="${LH_FTP_VERIFY_CERT:-no}"
 
-# Opcjonalny backup bazy danych MySQL/MariaDB z LH.pl (np. osTicket Helpdesk)
+# Opcjonalny backup baz danych MySQL/MariaDB z LH.pl (np. osTicket Helpdesk, WordPress - lista po przecinku LH_DB_NAMES lub pojedyncza LH_DB_NAME)
 LH_DB_HOST="${LH_DB_HOST:-}"
 LH_DB_NAME="${LH_DB_NAME:-}"
+LH_DB_NAMES="${LH_DB_NAMES:-${LH_DB_NAME}}"
 LH_DB_USER="${LH_DB_USER:-}"
 LH_DB_PASSWORD="${LH_DB_PASSWORD:-${LH_DB_PASS:-}}"
 
@@ -54,6 +55,7 @@ START_TIME="$(date +%s)"
 STATUS=0
 OFFSITE_STATUS=0
 BACKUP_VERIFIED=0
+DB_BACKUP_VERIFIED=1
 BUNDLE_SIZE_BYTES=0
 STAGING_DIR=""
 
@@ -100,6 +102,10 @@ devops_backup_websites_status ${status}
 # HELP devops_backup_websites_verified Status weryfikacji integralnosci archiwum stron WWW tar -tzf (1 = poprawne, 0 = blad)
 # TYPE devops_backup_websites_verified gauge
 devops_backup_websites_verified ${BACKUP_VERIFIED}
+
+# HELP devops_backup_websites_db_verified Status weryfikacji zrzutow baz MySQL z LH.pl (1 = poprawne lub niewymagane, 0 = blad zrzutu)
+# TYPE devops_backup_websites_db_verified gauge
+devops_backup_websites_db_verified ${DB_BACKUP_VERIFIED}
 
 # HELP devops_backup_websites_size_bytes Rozmiar archiwum kopii stron WWW w bajtach
 # TYPE devops_backup_websites_size_bytes gauge
@@ -185,16 +191,29 @@ docker run --rm \
 
 rm -f "${LFTP_CMD_FILE}"
 
-# Opcjonalny zrzut bazy danych MySQL/MariaDB (np. osTicket Helpdesk)
-if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAME}" && -n "${LH_DB_USER}" && -n "${LH_DB_PASSWORD}" ]]; then
-    echo "--> [1b/3] Wykonywanie zrzutu bazy danych MySQL (${LH_DB_NAME}@${LH_DB_HOST})..."
-    docker run --rm \
-        -v "${STAGING_DIR}:/target" \
-        -e MYSQL_PWD="${LH_DB_PASSWORD}" \
-        alpine:latest \
-        sh -c "apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${LH_DB_NAME}' | gzip -9 > '/target/_db_${LH_DB_NAME}.sql.gz' && chown ${HOST_UID}:${HOST_GID} '/target/_db_${LH_DB_NAME}.sql.gz'" \
-        && echo "--> [OK] Zrzut bazy danych zapisany w archiwum." \
-        || echo "--> [WARN] Nie udało się wykonać zrzutu bazy danych MySQL (kontynuacja backupu plików)."
+# Opcjonalny zrzut baz danych MySQL/MariaDB (np. osTicket Helpdesk, WordPress) z weryfikacją spójności gzip + Dump completed
+if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAMES}" && -n "${LH_DB_USER}" && -n "${LH_DB_PASSWORD}" ]]; then
+    IFS=',' read -r -a DB_ARRAY <<< "${LH_DB_NAMES}"
+    for raw_db in "${DB_ARRAY[@]}"; do
+        db_name="$(echo "${raw_db}" | tr -d '[:space:]')"
+        [[ -z "${db_name}" ]] && continue
+        echo "--> [1b/3] Wykonywanie i weryfikacja zrzutu bazy danych MySQL (${db_name}@${LH_DB_HOST})..."
+        if docker run --rm \
+            -v "${STAGING_DIR}:/target" \
+            -e MYSQL_PWD="${LH_DB_PASSWORD}" \
+            alpine:latest \
+            sh -c "set -o pipefail && apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${db_name}' | gzip -9 > '/target/_db_${db_name}.sql.gz' && gzip -t '/target/_db_${db_name}.sql.gz' && zcat '/target/_db_${db_name}.sql.gz' | tail -n 5 | grep -q 'Dump completed' && chown ${HOST_UID}:${HOST_GID} '/target/_db_${db_name}.sql.gz'"; then
+            echo "--> [OK] Zrzut bazy danych ${db_name} zweryfikowany (gzip -t + Dump completed) i zapisany w archiwum."
+        else
+            DB_BACKUP_VERIFIED=0
+            echo "--> [WARN] Nie udało się wykonać lub zweryfikować zrzutu bazy danych MySQL: ${db_name}!"
+            send_notification \
+                "⚠️ Ostrzeżenie: Błąd zrzutu bazy MySQL (${db_name})" \
+                "Podczas nocnego backupu stron LH.pl nie powiódł się zrzut bazy MySQL '${db_name}' (${LH_DB_HOST}). Kopia plików FTP jest kontynuowana." \
+                "high" \
+                "warning,database"
+        fi
+    done
 fi
 
 echo "--> [2/3] Kompresja i archiwizacja kopii stron WWW..."
