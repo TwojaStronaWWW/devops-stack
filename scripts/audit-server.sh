@@ -470,16 +470,17 @@ else
         fi
     fi
 
-    # Sprawdzenie aktywnych alertów Prometheusa (rules/ai-router.yml) + wysyłka Push do Ntfy.sh
+    # Sprawdzenie aktywnych alertów Prometheusa (rules/ai-router.yml, poziom warning/critical w stanie firing) + wysyłka Push do Ntfy.sh
     PROM_ALERTS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/alerts" 2>/dev/null || true)"
     if [[ -n "${PROM_ALERTS}" ]]; then
-        FIRING_COUNT="$(echo "${PROM_ALERTS}" | grep -o '"state":"firing"' | wc -l | tr -d ' ')"
-        if [[ "${FIRING_COUNT}" -eq 0 ]]; then
-            pass "Reguły Alertów Prometheusa (AI Router & Infrastruktura): 0 aktywnych alarmów (firing=0)."
+        FIRING_BLOCKS="$(echo "${PROM_ALERTS}" | sed 's/},{"labels":/}\n{"labels":/g' | grep '"state":"firing"' | grep -E '"severity":"(warning|critical)"' || true)"
+        if [[ -z "${FIRING_BLOCKS}" ]]; then
+            pass "Reguły Alertów Prometheusa (AI Router & Infrastruktura): 0 aktywnych alarmów (warning/critical firing=0)."
             rm -f /tmp/devops_ntfy_alert_dedup.state 2>/dev/null || true
         else
-            FIRING_NAMES="$(echo "${PROM_ALERTS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
-            FIRING_SUMMARIES="$(echo "${PROM_ALERTS}" | grep -oE '"summary":"[^"]+"' | cut -d'"' -f4 | sort -u | sed 's/^/• /' || echo '')"
+            FIRING_COUNT="$(echo "${FIRING_BLOCKS}" | wc -l | tr -d ' ')"
+            FIRING_NAMES="$(echo "${FIRING_BLOCKS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
+            FIRING_SUMMARIES="$(echo "${FIRING_BLOCKS}" | grep -oE '"summary":"[^"]+"' | cut -d'"' -f4 | sort -u | sed 's/^/• /' || echo '')"
             warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
                  "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
             NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
