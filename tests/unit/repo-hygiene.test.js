@@ -269,8 +269,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const router = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
     assert.match(router, /require_once __DIR__ \. '\/ai-stats\.php'/);
     assert.match(router, /register_shutdown_function/);
-    // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey
-    assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|openRouterApiKey)/.test(router), false);
+    // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey/$cerebrasApiKey
+    assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|cerebrasApiKey|openRouterApiKey)/.test(router), false);
+    assert.strictEqual(router.includes('csk-'), false, 'Wykryto zahardkodowany klucz Cerebras API w chat-router.php');
   });
 
   it('dashboard AI Router w Grafanie powinien być poprawnym JSON-em z unikalnymi ID paneli i metrykami kaskady oraz Cache RAG', () => {

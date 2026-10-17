@@ -2,9 +2,9 @@
 
 > Stan na 2026-10-16. Dane liczbowe pochodzą z pomiarów na żywym serwerze VPS (`89.168.62.31`, `docker stats`, `docker system df`, `docker inspect`) oraz z kodu produkcyjnego `services/ai-router/src/`.
 
-## 1. Jak to działa (jeden router, pamięć podręczna RAG `< 5 ms` i 7 „asystentów” w kaskadzie)
+## 1. Jak to działa (jeden router, pamięć podręczna RAG `< 5 ms` i 9 „asystentów” w kaskadzie)
 
-Na VPS działa **jeden** kontener `ai-router`. „Asystentami” są **modele LLM w 7-stopniowej kaskadzie** – router najpierw sprawdza atomową pamięć podręczną RAG (`/app/storage/cache`), a przy braku wpisu odpytuje modele po kolei, aż któryś odpowie. Użytkownik strony widzi jednego czatbota.
+Na VPS działa **jeden** kontener `ai-router`. „Asystentami” są **modele LLM w 9-stopniowej kaskadzie** – router najpierw sprawdza atomową pamięć podręczną RAG (`/app/storage/cache`), a przy braku wpisu odpytuje modele po kolei, aż któryś odpowie. Użytkownik strony widzi jednego czatbota.
 
 ```
 fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
@@ -15,14 +15,16 @@ fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
                           ┌───────────────────────┴───────────────────────┐
                           ▼                                               ▼
         [ TRAFIENIE W CACHE RAG (< 5 ms) ]               [ BRAK W CACHE (COLD QUERY) ]
-        Zwrot odpowiedzi w ~1.8 ms (0 tokenów)           ┌────── Kaskada 7 modeli (pozycja 0 → 6) ──────┐
+        Zwrot odpowiedzi w ~1.8 ms (0 tokenów)           ┌────── Kaskada 9 modeli (pozycja 0 → 8) ──────┐
         Auto-inwalidacja po filemtime bazy wiedzy        │ 0 gemini-3.5-flash (MINIMAL, ~1.5s, RPD: 500)│
         Pre-warming: scripts/warm-ai-cache.sh            │ 1 gemini-3.5-flash-lite  (MINIMAL, RPD: 1500)│
                                                          │ 2 gemini-3.7-flash       (LOW, RPD: 500)     │
                                                          │ 3 gemini-3.8-flash       (LOW, RPD: 500)     │
                                                          │ 4 gemma-4-31b-it         (RPD: 14400)        │
                                                          │ 5 groq/openai/gpt-oss-120b (~0.6s, RPD: 1000)│
-                                                         │ 6 openrouter/nemotron-3-super-120b:free (200)│
+                                                         │ 6 cerebras/gpt-oss-120b    (~0.15s, RPD:2400)│
+                                                         │ 7 cerebras/qwen-3.8-27b    (~0.15s, 648000)  │
+                                                         │ 8 openrouter/nemotron-3-super-120b:free (200)│
                                                          └──────────────────────────────────────────────┘
 ```
 
@@ -41,7 +43,7 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 | 429, minutowy limit | `rate_limited` | `retryDelay` z odpowiedzi, 5–300 s (domyślnie 60 s) |
 | 429, limit dzienny (`PerDay`) | `quota_daily` | do północy czasu Pacyficznego (reset RPD Gemini = **09:00 w Polsce**) |
 | 5xx (`503 High Demand`) | `unavailable` | **180 s (3 min)** |
-| timeout (4s) / błąd cURL | `network` | **600 s (10 min)** + **natychmiastowy Fast-Fail do Groq LPU** |
+| timeout (4s) / błąd cURL | `network` | **600 s (10 min)** + **natychmiastowy Fast-Fail do Groq LPU / Cerebras WSE** |
 | 404 (model nie istnieje) | `not_found` | 1 h |
 | 401/403/`API_KEY_INVALID` | `auth` | 5 min |
 
@@ -51,21 +53,23 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
    - Dlatego router wymusza `maxOutputTokens: 2048` oraz przekazuje:
      - `'thinkingConfig' => ['thinkingLevel' => 'MINIMAL']` dla modeli `gemini-3.5-*` (redukuje `thoughtsTokenCount` do `0` i czas odpowiedzi z `4.5 s` do **`1.4–2.1 s`**),
      - `'thinkingConfig' => ['thinkingLevel' => 'LOW']` dla modeli `gemini-3.7-flash` i `gemini-3.8-flash` (nie wspierają poziomu `MINIMAL`),
+     - `'reasoning_effort' => 'low'` dla `cerebras/gpt-oss-120b` oraz `'disable_reasoning' => true` dla `cerebras/qwen-3.8-27b` (`reasoning_tokens = 0`, generacja w `~17–34 ms`),
      - `'reasoning' => ['effort' => 'none']` dla modelu `nvidia/nemotron-3-super-120b-a12b:free` na OpenRouterze (`reasoning_tokens = 0`).
-   - Dodatkowo strażnik `finishReason === 'MAX_TOKENS'` bezwzględnie odrzuca każdą uciętą odpowiedź i przełącza na kolejny model.
-2. **Smart Fast-Fail do Groq LPU (`~0.6 s`):**
+   - Dodatkowo strażnik `finishReason === 'MAX_TOKENS'` (`length`) bezwzględnie odrzuca każdą uciętą odpowiedź i przełącza na kolejny model.
+2. **Smart Fast-Fail do Groq LPU (`~0.6 s`) i Cerebras WSE (`~0.15 s`):**
    - Timeout pojedynczej próby Gemini wynosi **`4 s`** (`CURLOPT_CONNECTTIMEOUT = 2 s`).
-   - Jeśli pierwszy model Gemini przekroczy timeout sieciowy LUB suma błędów i modeli pominiętych przez cooldown wyniesie $\ge 2$ (`$geminiTransientFailures + $geminiSkipped >= 2`), router **przerywa pętlę Google i w `0 ms` przeskakuje do `groq/openai/gpt-oss-120b`**, który odpowiada w `~0.5–0.9 s`.
+   - Jeśli pierwszy model Gemini przekroczy timeout sieciowy LUB suma błędów i modeli pominiętych przez cooldown wyniesie $\ge 2$ (`$geminiTransientFailures + $geminiSkipped >= 2`), router **przerywa pętlę Google i w `0 ms` przeskakuje do `groq/openai/gpt-oss-120b` oraz `cerebras/gpt-oss-120b`**, które odpowiadają w `~0.15–0.8 s`.
 
-## 3. Aktywni dostawcy i modele na VPS (3 klucze API / 7 modeli)
+## 3. Aktywni dostawcy i modele na VPS (4 klucze API / 9 modeli)
 
 | Provider | Modele w kaskadzie | Stan na VPS |
 |---|---|---|
 | Google AI Studio (`GEMINI_API_KEY`) | 5 (`gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.7-flash`, `gemini-3.8-flash`, `gemma-4-31b-it`) | **AKTYWNY** (`ai_router_provider_configured{provider="gemini"} 1`) |
 | Groq Cloud (`GROQ_API_KEY`) | 1 (`openai/gpt-oss-120b`) | **AKTYWNY** (`ai_router_provider_configured{provider="groq"} 1`) |
+| Cerebras WSE (`CEREBRAS_API_KEY`) | 2 (`gpt-oss-120b`, `qwen-3.8-27b`) | **AKTYWNY** (`ai_router_provider_configured{provider="cerebras"} 1`) |
 | OpenRouter (`OPENROUTER_API_KEY`) | 1 (`nvidia/nemotron-3-super-120b-a12b:free` — wyłącznie modele `:free`) | **AKTYWNY** (`ai_router_provider_configured{provider="openrouter"} 1`) |
 
-**Łącznie działa 7 niezależnych modeli u 3 dostawców chmurowych.** Nawet całkowita awaria Google AI Studio powoduje automatyczne przełączenie na Groq Cloud LPU lub OpenRouter.
+**Łącznie działa 9 niezależnych modeli u 4 dostawców chmurowych.** Nawet całkowita awaria Google AI Studio powoduje automatyczne przełączenie na Groq Cloud LPU, Cerebras Wafer-Scale Engine lub OpenRouter.
 
 ## 4. Limity darmowe RPD, Cache RAG i Detektor „Gorącego Leada”
 
@@ -74,8 +78,10 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
    - `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`: po `500` zapytań/doba
    - `gemma-4-31b-it`: `14 400` zapytań/doba
    - `groq/openai/gpt-oss-120b`: `1 000` zapytań/doba
+   - `cerebras/gpt-oss-120b`: `2 400` zapytań/doba (`1 000 000` tokenów/doba)
+   - `cerebras/qwen-3.8-27b`: `648 000` zapytań/doba (`450` RPM, `216 000 000` tokenów/doba)
    - `openrouter/nvidia/nemotron-3-super-120b-a12b:free`: `200` zapytań/doba
-   - Łączna dzienna pula darmowa wynosi **ponad 18 600 zapytań na dobę** (można ją nadpisać zmienną `MODEL_DAILY_LIMITS` w `.env`).
+   - Łączna dzienna pula darmowa wynosi **ponad 669 000 zapytań na dobę** (można ją nadpisać zmienną `MODEL_DAILY_LIMITS` w `.env`).
 2. **Pamięć podręczna RAG (`/app/storage/cache`):**
    - Identyczne pytania (po normalizacji białych znaków i wielkości liter) są zwracane z dysku w **`~1.8 ms`** (`"cached": true`), nie zużywając ani jednego zapytania z puli RPD.
    - Klucz SHA-256 uwzględnia `filemtime` pliku wiedzy `<site_id>-knowledge.txt` — każda aktualizacja bazy wiedzy natychmiast unieważnia stare wpisy cache.

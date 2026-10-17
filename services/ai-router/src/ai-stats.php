@@ -41,6 +41,17 @@ function aiGeminiChain(string $configured): array
     ]));
 }
 
+/** Kaskada modeli Cerebras Wafer-Scale Engine (osobna pula RPD na każdy model). */
+function aiCerebrasChain(): array
+{
+    $primary = trim((string)(getenv('CEREBRAS_MODEL') ?: 'gpt-oss-120b'));
+    return array_values(array_unique([
+        $primary,
+        'gpt-oss-120b',
+        'qwen-3.8-27b',
+    ]));
+}
+
 /** Pełna kaskada (z providerami) w kolejności prób - tylko aktywne providery. */
 function aiFullChain(): array
 {
@@ -52,6 +63,11 @@ function aiFullChain(): array
     }
     if ((getenv('GROQ_API_KEY') ?: '') !== '') {
         $chain[] = ['model' => 'groq/' . (getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b'), 'provider' => 'groq'];
+    }
+    if ((getenv('CEREBRAS_API_KEY') ?: '') !== '') {
+        foreach (aiCerebrasChain() as $cm) {
+            $chain[] = ['model' => 'cerebras/' . $cm, 'provider' => 'cerebras'];
+        }
     }
     if ((getenv('OPENROUTER_API_KEY') ?: '') !== '') {
         $chain[] = ['model' => 'openrouter/' . (getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'), 'provider' => 'openrouter'];
@@ -307,6 +323,8 @@ function aiDailyLimits(): array
         'gemma-4-31b-it'                                   => 14400,
         'gemma-3-27b-it'                                   => 14400,
         'groq/openai/gpt-oss-120b'                         => 1000,
+        'cerebras/gpt-oss-120b'                            => 2400,
+        'cerebras/qwen-3.8-27b'                            => 648000,
         'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
     ];
     foreach (explode(',', (string)(getenv('MODEL_DAILY_LIMITS') ?: '')) as $pair) {
@@ -338,7 +356,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)';
     $o[] = '# TYPE ai_router_status gauge';
     $o[] = 'ai_router_status 1';
-    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'openrouter' => 'OPENROUTER_API_KEY'] as $prov => $env) {
+    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'openrouter' => 'OPENROUTER_API_KEY'] as $prov => $env) {
         if ($prov === 'gemini') {
             $o[] = '# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)';
             $o[] = '# TYPE ai_router_api_key_configured gauge';

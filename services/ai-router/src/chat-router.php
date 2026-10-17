@@ -431,9 +431,11 @@ if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheF
 // -----------------------------------------------------------------------------
 $geminiApiKey = getenv('GEMINI_API_KEY') ?: '';
 $groqApiKey = getenv('GROQ_API_KEY') ?: '';
+$cerebrasApiKey = getenv('CEREBRAS_API_KEY') ?: '';
 $openRouterApiKey = getenv('OPENROUTER_API_KEY') ?: '';
+$hasFastFallback = ($groqApiKey !== '' || $cerebrasApiKey !== '');
 
-if ($geminiApiKey === '' && $groqApiKey === '' && $openRouterApiKey === '') {
+if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && $openRouterApiKey === '') {
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -566,8 +568,8 @@ if ($geminiApiKey !== '') {
         if ($cdLeft > 0 && !$allCooling) {
             aiRecordSkip('gemini', $candidateModel, $cdLeft);
             $geminiSkipped++;
-            if ($geminiSkipped >= 2 && $groqApiKey !== '') {
-                break; // Jeśli 2 główne modele Gemini są na cooldownie, przejdź w 0 ms do Groq LPU (~0.6s)
+            if ($geminiSkipped >= 2 && $hasFastFallback) {
+                break; // Jeśli 2 główne modele Gemini są na cooldownie, przejdź w 0 ms do Groq LPU / Cerebras WSE
             }
             continue;
         }
@@ -591,8 +593,8 @@ if ($geminiApiKey !== '') {
             [$cls, $cd] = aiClassify(0, null, (string)($res['error'] ?: 'curl'));
             aiRecordAttempt('gemini', $candidateModel, $cls, 0, $ms, $cd);
             $geminiTransientFailures++;
-            if ($groqApiKey !== '') {
-                break; // Natychmiastowy Fast-Fail do Groq LPU po timeoucie sieciowym Google API
+            if ($hasFastFallback) {
+                break; // Natychmiastowy Fast-Fail do Groq LPU / Cerebras WSE po timeoucie sieciowym Google API
             }
             continue;
         }
@@ -622,7 +624,7 @@ if ($geminiApiKey !== '') {
             if ($finishReason === 'MAX_TOKENS') {
                 aiRecordAttempt('gemini', $candidateModel, 'empty', 200, $ms, 120);
                 $geminiTransientFailures++;
-                if (($geminiTransientFailures + $geminiSkipped) >= 2 && $groqApiKey !== '') {
+                if (($geminiTransientFailures + $geminiSkipped) >= 2 && $hasFastFallback) {
                     break;
                 }
                 continue;
@@ -652,14 +654,14 @@ if ($geminiApiKey !== '') {
             break;
         }
 
-        // Fast-Fail: jeśli suma błędów i pominiętych modeli >= 2, przełącz natychmiast na Groq LPU
-        if (($geminiTransientFailures + $geminiSkipped) >= 2 && $groqApiKey !== '') {
+        // Fast-Fail: jeśli suma błędów i pominiętych modeli >= 2, przełącz natychmiast na Groq LPU / Cerebras WSE
+        if (($geminiTransientFailures + $geminiSkipped) >= 2 && $hasFastFallback) {
             break;
         }
     }
 }
 
-// Darmowy Fallback 2: Groq Cloud API (Llama 3.3 70B Versatile - Free Tier LPU)
+// Darmowy Fallback 2: Groq Cloud API (Free Tier LPU)
 if ($answer === null && $groqApiKey !== '') {
     $groqModel = getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b';
     $groqLabel = "groq/{$groqModel}";
@@ -709,7 +711,77 @@ if ($answer === null && $groqApiKey !== '') {
     }
 }
 
-// Darmowy Fallback 3: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
+// Darmowy Fallback 3: Cerebras Wafer-Scale Engine API (~2000 tok/s, gpt-oss-120b + qwen-3.8-27b)
+if ($answer === null && $cerebrasApiKey !== '') {
+    $messages = [['role' => 'system', 'content' => $systemInstruction]];
+    foreach ($sanitizedHistory as $turn) {
+        $messages[] = [
+            'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+            'content' => $turn['text']
+        ];
+    }
+    $messages[] = ['role' => 'user', 'content' => $question];
+
+    foreach (aiCerebrasChain() as $cerebrasModel) {
+        $cerebrasLabel = "cerebras/{$cerebrasModel}";
+        $chainPos++;
+        $cdLeft = aiCooldownRemaining($aiStats, $cerebrasLabel);
+        if ($cdLeft > 0 && !$allCooling) {
+            aiRecordSkip('cerebras', $cerebrasLabel, $cdLeft);
+            continue;
+        }
+
+        $cbPayload = [
+            'model'       => $cerebrasModel,
+            'messages'    => $messages,
+            'temperature' => 0.25,
+            'max_tokens'  => 1200,
+        ];
+        if (str_starts_with($cerebrasModel, 'qwen-')) {
+            $cbPayload['disable_reasoning'] = true;
+        } else {
+            $cbPayload['reasoning_effort'] = 'low';
+        }
+
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            'https://api.cerebras.ai/v1/chat/completions',
+            $cbPayload,
+            ["Authorization: Bearer {$cerebrasApiKey}"],
+            4
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        $candidateText = null;
+        $finishReason = 'stop';
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $finishReason = (string)($res['json']['choices'][0]['finish_reason'] ?? 'stop');
+            $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+        }
+        if ($finishReason === 'length') {
+            aiRecordAttempt('cerebras', $cerebrasLabel, 'empty', 200, $ms, 120);
+            continue;
+        }
+        if ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $cerebrasLabel;
+            $aiDepth = $chainPos;
+            aiRecordAttempt('cerebras', $cerebrasLabel, 'ok', 200, $ms);
+            break;
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('cerebras', $cerebrasLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('cerebras', $cerebrasLabel, $cls, $res['httpCode'], $ms, $cd);
+            if ($res['httpCode'] === 401 || $res['httpCode'] === 403) {
+                break;
+            }
+        }
+    }
+}
+
+// Darmowy Fallback 4: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
 if ($answer === null && $openRouterApiKey !== '') {
     $orModel = getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free';
     $orLabel = "openrouter/{$orModel}";
