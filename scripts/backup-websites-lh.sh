@@ -18,10 +18,11 @@ if [[ -f "${STACK_ROOT}/.env" ]]; then
     set +a
 fi
 
+umask 077
 BACKUP_DIR="${LH_BACKUP_DIR:-/opt/devops-stack/backups/websites}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
-NTFY_TOPIC="${NTFY_TOPIC:-kpoczatek-vps-alerty}"
+NTFY_TOPIC="${NTFY_TOPIC:-}"
 NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
 HOST_UID="$(id -u)"
@@ -34,12 +35,13 @@ LH_FTP_USERNAME="${LH_FTP_USERNAME:-}"
 LH_FTP_PASSWORD="${LH_FTP_PASSWORD:-}"
 LH_REMOTE_DIR="${LH_REMOTE_DIR:-/public_html}"
 LH_FTP_SSL="${LH_FTP_SSL:-true}"
+LH_FTP_VERIFY_CERT="${LH_FTP_VERIFY_CERT:-no}"
 
 # Opcjonalny backup bazy danych MySQL/MariaDB z LH.pl (np. osTicket Helpdesk)
 LH_DB_HOST="${LH_DB_HOST:-}"
 LH_DB_NAME="${LH_DB_NAME:-}"
 LH_DB_USER="${LH_DB_USER:-}"
-LH_DB_PASSWORD="${LH_DB_PASSWORD:-}"
+LH_DB_PASSWORD="${LH_DB_PASSWORD:-${LH_DB_PASS:-}}"
 
 # S3 / Cloudflare R2 + opcjonalne szyfrowanie symetryczne AES-256-CBC (ISO 27001)
 S3_ENDPOINT="${S3_ENDPOINT:-}"
@@ -56,12 +58,17 @@ BUNDLE_SIZE_BYTES=0
 STAGING_DIR=""
 
 mkdir -p "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}" 2>/dev/null || true
 
 send_notification() {
     local title="$1"
     local message="$2"
     local priority="${3:-default}"
     local tags="${4:-package}"
+
+    if [[ -z "${NTFY_TOPIC}" ]]; then
+        return 0
+    fi
 
     curl -s \
         -H "Title: ${title}" \
@@ -162,7 +169,7 @@ chmod 600 "${LFTP_CMD_FILE}"
 cat <<EOF > "${LFTP_CMD_FILE}"
 set ftp:ssl-allow ${LH_FTP_SSL}
 set ftp:ssl-protect-data true
-set ssl:verify-certificate no
+set ssl:verify-certificate ${LH_FTP_VERIFY_CERT}
 set net:timeout 15
 set net:max-retries 3
 open -p "${LH_FTP_PORT}" -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
@@ -218,6 +225,7 @@ if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; th
     UPLOAD_NAME="${ARCHIVE_NAME}"
 fi
 
+chmod 600 "${ARCHIVE_PATH}" 2>/dev/null || true
 ARCHIVE_SIZE="$(du -h "${ARCHIVE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${ARCHIVE_PATH}" | tr -d ' ')"
 STATUS=1

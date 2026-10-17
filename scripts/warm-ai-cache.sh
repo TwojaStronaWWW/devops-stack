@@ -27,9 +27,11 @@ PROMPTS=(
     "fuegolingua|Ile kosztuje kurs hiszpańskiego?"
     "fuegolingua|Zajęcia indywidualne czy grupowe?"
     "fuegolingua|Hiszpański w biznesie / branżowy"
+    "katosalsahub|Czym jest Salsopedia i jak z niej korzystać?"
+    "katosalsahub|Wyjaśnij figury: Dile Que No, Enchufla i Setenta"
+    "katosalsahub|Gdzie tańczymy w Katowicach i na Trzech Stawach?"
+    "katosalsahub|Jak zacząć od zera (P0) i czy działa Multisport?"
     "katosalsahub|Ile kosztuje karnet?"
-    "katosalsahub|Czy akceptujecie Multisport?"
-    "katosalsahub|Kursy od podstaw (P0)"
 )
 
 echo "==> [warm-ai-cache] Rozgrzewanie pamięci podręcznej RAG (${#PROMPTS[@]} pytań startowych)..."

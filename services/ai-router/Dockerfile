@@ -20,5 +20,5 @@ USER nobody
 # Port wewnętrzny kontenera
 EXPOSE 8080
 
-# Wbudowany, lekki serwer HTTP PHP przekierowujący ruch przez router (brak ciężkiego Apache/Nginx)
-CMD ["php", "-S", "0.0.0.0:8080", "-t", "/app/src", "/app/src/chat-router.php"]
+# Wbudowany, lekki serwer HTTP PHP przekierowujący ruch przez router (brak ciężkiego Apache/Nginx, ukryty X-Powered-By)
+CMD ["php", "-d", "expose_php=0", "-S", "0.0.0.0:8080", "-t", "/app/src", "/app/src/chat-router.php"]

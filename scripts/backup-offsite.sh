@@ -17,10 +17,11 @@ if [[ -f "${STACK_ROOT}/.env" ]]; then
     set +a
 fi
 
+umask 077
 BACKUP_DIR="${BACKUP_DIR:-/opt/devops-stack/backups}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
-NTFY_TOPIC="${NTFY_TOPIC:-kpoczatek-vps-alerty}"
+NTFY_TOPIC="${NTFY_TOPIC:-}"
 NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
@@ -43,12 +44,17 @@ VOLUMES_TO_BACKUP=(
 )
 
 mkdir -p "${BACKUP_DIR}"
+chmod 700 "${BACKUP_DIR}" 2>/dev/null || true
 
 send_notification() {
     local title="$1"
     local message="$2"
     local priority="${3:-default}"
     local tags="${4:-package}"
+
+    if [[ -z "${NTFY_TOPIC}" ]]; then
+        return 0
+    fi
 
     curl -s \
         -H "Title: ${title}" \
@@ -200,6 +206,7 @@ if [[ -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; th
     BUNDLE_PATH="${BUNDLE_PATH}.enc"
 fi
 
+chmod 600 "${BUNDLE_PATH}" 2>/dev/null || true
 BUNDLE_SIZE="$(du -h "${BUNDLE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${BUNDLE_PATH}" | tr -d ' ')"
 BACKUP_STATUS=1

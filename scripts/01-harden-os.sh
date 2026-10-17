@@ -79,6 +79,10 @@ ufw limit 22/tcp comment 'SSH Rate Limited'
 # ufw allow 80/tcp comment 'HTTP'
 # ufw allow 443/tcp comment 'HTTPS'
 
+# Wyłączenie i zamaskowanie zbędnego demona rpcbind (port 111 TCP/UDP - CIS Benchmark / ISO 27001)
+systemctl disable --now rpcbind.service rpcbind.socket 2>/dev/null || true
+systemctl mask rpcbind.service rpcbind.socket 2>/dev/null || true
+
 ufw --force enable
 ufw status verbose
 

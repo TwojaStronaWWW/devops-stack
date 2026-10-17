@@ -42,7 +42,7 @@ Write-Host ">> [DevOps Live Audit] Łączenie z serwerem $User@$HostIp i urucham
 
 # Wczytanie skryptu, usunięcie ewentualnego BOM i wymuszenie zakończeń linii LF (Unix)
 $BashContent = ([System.IO.File]::ReadAllText($AuditScriptPath, $Utf8NoBom)).TrimStart([char]0xFEFF) -replace "`r`n", "`n"
-$RemoteArgs = if ($Strict) { "bash -s -- --strict" } else { "bash -s" }
+$RemoteArgs = if ($Strict) { "sed '1s/^\xEF\xBB\xBF//' | bash -s -- --strict" } else { "sed '1s/^\xEF\xBB\xBF//' | bash -s" }
 
 $AuditOutput = $BashContent | & ssh -o BatchMode=yes -o ConnectTimeout=12 -i "$KeyPath" "$User@$HostIp" $RemoteArgs
 $ExitCode = $LASTEXITCODE

@@ -60,7 +60,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       }
     });
 
-    it('wszystkie kontenery w docker-compose.yml i extensions.yml powinny wymuszać no-new-privileges:true oraz limity pamięci RAM', () => {
+    it('wszystkie kontenery w docker-compose.yml, extensions.yml i runners.yml powinny wymuszać no-new-privileges:true oraz limity pamięci RAM', () => {
       const mainCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'docker-compose.yml'), 'utf-8');
       const noNewPrivCount = (mainCompose.match(/no-new-privileges:true/g) || []).length;
       const memLimitCount = (mainCompose.match(/memory:\s*\d+[MG]/g) || []).length;
@@ -68,15 +68,20 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       // W docker-compose.yml jest 8 usług (uptime-kuma, prometheus, grafana, node-exporter, cadvisor, dozzle, github-exporter, ai-router)
       assert.ok(noNewPrivCount >= 8, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 8)`);
       assert.ok(memLimitCount >= 8, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 8)`);
+
+      const runnersCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
+      const runnersNoNewPriv = (runnersCompose.match(/no-new-privileges:true/g) || []).length;
+      assert.ok(runnersNoNewPriv >= 4, `Brak deklaracji no-new-privileges:true dla wszystkich runnerów w compose/runners.yml (${runnersNoNewPriv} < 4)`);
     });
 
-    it('skrypt 01-harden-os.sh powinien wymuszać twardą politykę SSH, UFW, Fail2ban oraz ochronę jądra (sysctl / noexec)', () => {
+    it('skrypt 01-harden-os.sh powinien wymuszać twardą politykę SSH, UFW, Fail2ban, wyłączenie rpcbind oraz ochronę jądra (sysctl / noexec)', () => {
       const hardenScript = fs.readFileSync(path.join(ROOT_DIR, 'scripts', '01-harden-os.sh'), 'utf-8');
       assert.match(hardenScript, /^PermitRootLogin no$/m);
       assert.match(hardenScript, /^PasswordAuthentication no$/m);
       assert.match(hardenScript, /^AuthenticationMethods publickey$/m);
       assert.match(hardenScript, /ufw default deny incoming/);
       assert.match(hardenScript, /ufw limit 22\/tcp/);
+      assert.match(hardenScript, /systemctl mask rpcbind\.service rpcbind\.socket/);
       assert.match(hardenScript, /net\.ipv4\.tcp_syncookies\s*=\s*1/);
       assert.match(hardenScript, /net\.ipv4\.conf\.all\.rp_filter\s*=\s*1/);
       assert.match(hardenScript, /noexec,nosuid,nodev/);
@@ -172,16 +177,17 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       }
     });
 
-    it('endpoint /health powinien zwracać nagłówki bezpieczeństwa X-Content-Type-Options: nosniff oraz X-Frame-Options: DENY', async () => {
+    it('endpoint /health powinien zwracać nagłówki bezpieczeństwa X-Content-Type-Options: nosniff, X-Frame-Options: DENY i ukrywać X-Powered-By', async () => {
       const res = await fetch(`${baseUrl}/health`);
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
       assert.strictEqual(res.headers.get('x-frame-options'), 'DENY');
+      assert.strictEqual(res.headers.get('x-powered-by'), null);
       const body = await res.json();
       assert.strictEqual(body.status, 'UP');
     });
 
-    it('powinien blokować żądania z nieautoryzowanych domen (CORS Forbidden -> HTTP 403)', async () => {
+    it('powinien blokować żądania z nieautoryzowanych domen oraz fałszowanie Origin: http://localhost przez Cloudflare (HTTP 403)', async () => {
       const res = await fetch(`${baseUrl}/chat-router.php`, {
         method: 'POST',
         headers: {
@@ -198,6 +204,19 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const data = await res.json();
       assert.strictEqual(data.success, false);
       assert.match(data.error, /CORS Forbidden/);
+
+      // Próba obejścia CORS z internetu przez podanie Origin: http://localhost przy obecnym CF-Connecting-IP
+      const spoofRes = await fetch(`${baseUrl}/chat-router.php`, {
+        method: 'POST',
+        headers: {
+          Origin: 'http://localhost:3000',
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': '198.51.100.12',
+        },
+        body: JSON.stringify({ site_id: 'twojastronawww', question: 'Test spoofing localhost' }),
+      });
+      trackIpRateFile('198.51.100.12');
+      assert.strictEqual(spoofRes.status, 403);
     });
 
     it('powinien akceptować preflight OPTIONS z autoryzowanej domeny na białej liście CORS (HTTP 204)', async () => {
@@ -349,6 +368,12 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.strictEqual(metricsText.includes(ip), false, 'Wyciek adresu IP klienta do /metrics!');
       assert.strictEqual(metricsText.includes('203.0.113.199'), false, 'Wyciek adresu IP z rate-limitera do /metrics!');
       assert.strictEqual(metricsText.includes('/etc/passwd'), false, 'Wyciek niezwalidowanego site_id do etykiet /metrics!');
+
+      // Publiczny dostęp z internetu przez Cloudflare Tunnel do /metrics musi być zablokowany (HTTP 403)
+      const wanMetricsRes = await fetch(`${baseUrl}/metrics`, {
+        headers: { 'CF-Connecting-IP': '198.51.100.99' },
+      });
+      assert.strictEqual(wanMetricsRes.status, 403);
     });
   });
 });

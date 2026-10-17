@@ -170,6 +170,7 @@ else
         "S3_BUCKET"
         "S3_ACCESS_KEY"
         "S3_SECRET_KEY"
+        "BACKUP_ENCRYPTION_KEY"
         "LH_FTP_USERNAME"
         "LH_FTP_PASSWORD"
     )
@@ -206,6 +207,15 @@ else
              "Zastąp wartości przykładowe w ${ENV_FILE} docelowymi sekretami z KeePass"
     fi
 
+    # Weryfikacja czy NTFY_TOPIC nie jest słownikowym, publicznie znanym tematem
+    NTFY_CUR_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || true)"
+    if [[ -n "${NTFY_CUR_VAL}" && "${NTFY_CUR_VAL}" != "twojastronawww-alerty-prod" && "${#NTFY_CUR_VAL}" -ge 24 ]]; then
+        pass "Kanał Ntfy (NTFY_TOPIC) posiada kryptograficzny, niepubliczny identyfikator."
+    else
+        warn "Zmienna NTFY_TOPIC w .env jest zbyt krótka lub używa publicznego szablonu (ryzyko podsłuchu powiadomień)." \
+             "Ustaw losowy NTFY_TOPIC (min. 24 znaki) w ${ENV_FILE} oraz w aplikacji Ntfy"
+    fi
+
     # Porównanie wszystkich kluczy z .env.example
     if [[ -f "${ENV_EXAMPLE}" ]]; then
         EXAMPLE_KEYS="$(grep -E '^[A-Z0-9_]+=' "${ENV_EXAMPLE}" | cut -d'=' -f1)"
@@ -223,18 +233,18 @@ else
         fi
     fi
 
-    # Sprawdzenie kluczy opcjonalnych (Chmura S3 / Backup LH.pl)
+    # Sprawdzenie kluczy opcjonalnych (Chmura S3 / Szyfrowanie AES-256 / Backup LH.pl)
     MISSING_OPT=()
     for OKEY in "${OPTIONAL_KEYS[@]}"; do
         OVAL="$(grep -E "^${OKEY}=" "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || true)"
-        if [[ -z "${OVAL}" || "${OVAL}" == *"<account_id>"* ]]; then
+        if [[ -z "${OVAL}" || "${OVAL}" == *"<account_id>"* || "${OVAL}" == *"ChangeMe_"* ]]; then
             MISSING_OPT+=("${OKEY}")
         fi
     done
     if [[ ${#MISSING_OPT[@]} -eq 0 ]]; then
-        pass "Klucze integracji chmurowej S3/R2 oraz LH.pl są skonfigurowane."
+        pass "Klucze integracji chmurowej S3/R2, szyfrowania AES-256 oraz LH.pl są skonfigurowane."
     else
-        warn "Nieuzupełnione opcjonalne klucze backupu zewnętrznego (S3/LH.pl): ${MISSING_OPT[*]}"
+        warn "Nieuzupełnione klucze backupu/szyfrowania (S3/AES-256/LH.pl): ${MISSING_OPT[*]}"
     fi
 fi
 
@@ -252,14 +262,14 @@ fi
 # ==============================================================================
 section "[3/5] WARSTWA 3: Bezpieczeństwo Systemu Operacyjnego i Sieci"
 
-# 1. Porty nasłuchujące na interfejsach publicznych (0.0.0.0 / [::])
-EXPOSED_WEB_PORTS="$(ss -tuln 2>/dev/null | awk 'NR>1 {print $1, $5}' | grep -E '(0\.0\.0\.0:|\[::\]:)(80|443|3000|3001|8080|8085|8888|9090)$' || true)"
+# 1. Porty nasłuchujące na interfejsach publicznych (0.0.0.0 / [::]) - w tym rpcbind (111)
+EXPOSED_WEB_PORTS="$(ss -tuln 2>/dev/null | awk 'NR>1 {print $1, $5}' | grep -E '(0\.0\.0\.0:|\[::\]:)(80|111|443|3000|3001|8080|8085|8888|9090)$' || true)"
 if [[ -z "${EXPOSED_WEB_PORTS}" ]]; then
-    pass "Zero Trust WAN: Żaden port webowy/aplikacyjny nie nasłuchuje na 0.0.0.0 (wyłącznie 127.0.0.1)."
+    pass "Zero Trust WAN: Żaden port webowy/aplikacyjny ani rpcbind (111) nie nasłuchuje na 0.0.0.0 (wyłącznie 127.0.0.1)."
 else
     OS_HARDENED=0
-    fail "Wykryto porty aplikacji wystawione publicznie na 0.0.0.0: ${EXPOSED_WEB_PORTS}" \
-         "Sprawdź sekcję ports w compose/*.yml i wymuś prefix 127.0.0.1:"
+    fail "Wykryto zbędne porty wystawione publicznie na 0.0.0.0: ${EXPOSED_WEB_PORTS}" \
+         "Wyłącz rpcbind (sudo systemctl disable --now rpcbind.service rpcbind.socket) i sprawdź compose/*.yml"
 fi
 
 # 2. Zapora UFW
@@ -455,7 +465,7 @@ else
             FIRING_NAMES="$(echo "${PROM_ALERTS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
             warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
                  "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
-            NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo 'kpoczatek-vps-alerty')"
+            NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
             if [[ -n "${NTFY_TOPIC_VAL}" ]]; then
                 DEDUP_FILE="/tmp/devops_ntfy_alert_dedup.state"
                 NOW_EPOCH="$(date +%s)"

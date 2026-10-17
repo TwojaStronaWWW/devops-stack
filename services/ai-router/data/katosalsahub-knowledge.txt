@@ -1,32 +1,58 @@
-# BAZA WIEDZY: KATO SALSA HUB (Katowice)
+# BAZA WIEDZY: KATO SALSA HUB (Katowice & Śląsk)
 
-## O nas:
-Kato Salsa Hub to wiodąca społeczność i szkoła tańców karaibskich na Śląsku, z siedzibą w centrum Katowic. Organizujemy regularne kursy tańca, warsztaty weekendowe oraz integracyjne imprezy taneczne (sociale).
+## 1. Tożsamość marki i misja
+- **Nazwa:** Kato Salsa Hub (`https://katosalsahub.pl`)
+- **Rola:** Oficjalny portal społecznościowy, centrum kultury kubańskiej i latynoskiej oraz baza wiedzy tancerzy Salsy Cubana (Casino), Timby, Rueda de Casino, Son Cubano, Rumby, Bachaty i Kizomby na Śląsku (Katowice, Gliwice, Tychy, Chorzów, Bielsko-Biała i cała aglomeracja).
+- **Ton głosu (Tone of Voice):** Ciepły, energetyczny, autentyczny, ekspercki, bez sztucznego żargonu technicznego. Piszesz jak doświadczony tancerz i gospodarz śląskiej społeczności.
+- **Kontakt:** E-mail: **kontakt@katosalsahub.pl** lub formularz kontaktowy w sekcji **#kontakt** na stronie głównej.
 
-## Style tańca w ofercie:
-1. Salsa Cubana (Casino) - tradycyjna kubańska salsa, taniec w parach oraz rueda de casino.
-2. Salsa Liniowa (Cross Body Lead / On1 & On2) - elegancki styl tańczony w linii, duży nacisk na technikę obrotów i styling.
-3. Bachata Dominicana & Sensual - zmysłowy taniec z Dominikany, płynne prowadzenie, izolacje ciała i interpretacja muzyczna.
+## 2. Salsopedia (`salsopedia.html`) — Główne Centrum Wiedzy i Encyklopedia Tańca
+- **Czym jest Salsopedia:** Interaktywna, społecznościowa encyklopedia pojęć, figur, kroków, rytmów, instrumentów, historii, bóstw Orishas, zespołów muzycznych, szkół tańca i instruktorów tworzona przez śląską społeczność pod adresem `https://katosalsahub.pl/salsopedia.html`.
+- **11 głównych kategorii Salsopedii:**
+  1. `steps` — Kroki (Podstawy), np. Básico (Guapea), Adelante, Atrás, Caminando Arriba, Cruzado, Vuelta.
+  2. `figures` — Figury (Casino / Rueda de Casino), np. Dile Que No, Enchufla, Enchufla Doble, Dame, Dame Dos, Vacilala, Sombrero, Setenta (70), Setenta Complicado, Ochenta y Cuatro (84), Abanico, Prima, Prima con Hermana, Exhíbela (Sacala), Dedo, Coca-Cola, Panque, Paseala, Candado, Cadena, Kentucky.
+  3. `dance` — Taniec i technika, np. Cuban Motion, Manos (rama i prowadzenie), Alarde, Saloneo, Despelote, Vacunao.
+  4. `styles` — Style Tańca, np. Casino (Salsa Kubańska), Rueda de Casino, Timba, Son Cubano (tańczony na contratiempo / On2), Rumba Kubańska (Yambú, Guaguancó, Columbia), Mambo, Bachata (Dominicana, Sensual, Moderna), Kizomba, Urban Kiz, Semba.
+  5. `music` — Muzyka i teoria rytmu, np. Clave (Rytm 2-3 i 3-2), Tumbao, Montuno (Call & Response), Suena, Bomba, Plena.
+  6. `instruments` — Instrumenty afro-kubańskie, np. Clave (dwa drewniane kołki), Conga (tumbadoras), Timbales, Bongó, Güiro, Campana, Tres kubański.
+  7. `history` — Historia i korzenie kultury kubańskiej i karaibskiej (Casino Deportivo w Hawanie lat 50., Tumba Francesa, Fania Records).
+  8. `gods` — Bogowie (Orishas / Afro-Cuban Santería / Yoruba):
+     - **Eleggua** — strażnik dróg i skrzyżowań, otwiera i zamyka ceremonie (kolory: czerwono-czarny, atrybut: garabato).
+     - **Chango (Shangó)** — władca ognia, piorunów i bębnów Batá (kolory: czerwono-biały, silny, męski taniec).
+     - **Yemaya** — matka wszystkich Orishas, bogini oceanu i macierzyństwa (kolory: niebiesko-biały, ruchy fal i wirów morskich).
+     - **Oshun** — bogini miłości, słodkich wód (rzek), złota i kobiecości (kolor: żółty/złoty, zmysłowy taniec z bransoletkami).
+     - **Oya** — wojownicza bogini wiatrów, burzy i przemiany (kolory: bordo/tęcza, atrybut: iruke).
+     - **Ogun** — bóstwo żelaza, wojny i ciężkiej pracy (kolory: zielono-czarny, taniec z maczetą).
+     - **Obatala** — bóstwo bieli, pokoju i mądrości (kolor: biały).
+  9. `bands` — Zespoły i Artyści, np. Los Van Van (Juan Formell, twórcy Songo), Havana D'Primera (Alexander Abreu), Maykel Blanco y Su Salsa Mayor ("La Máquina de Cuba"), Fania All-Stars, El Gran Combo de Puerto Rico, Calle Real.
+  10. `instructors` — Instruktorzy śląskiej i kubańskiej sceny: Pedro y Bella, Ela Stępień, Michał Rozewski, Daniel Rojewski, Maja Modliszewska, Regla (Kuba / Katowice), Ania „Ana” Kurowska, Dariusz Kurzeja, Damian Ratajczak (FeelTheSalsa), Leidel Portuondo (Kuba).
+  11. `schools` — Szkoły Tańca i miejsca taneczne na Śląsku.
+- **6 podkategorii technicznych w Salsopedii:** `lead` (Prowadzenie), `follow` (Podążanie), `partnerwork` (W parach), `solo` (Solo / Footwork), `rueda` (Rueda de Casino), `musicality` (Muzykalność).
+- **Jak działa Salsopedia Studio i moderacja społecznościowa:**
+  - Każdy tancerz może kliknąć przycisk **„+ Dodaj hasło”** w Salsopedii (`salsopedia.html`) i otworzyć **Salsopedia Studio** z podglądem karty na żywo (**Live Preview**) oraz kolorowym porównaniem zmian (**Visual Diff** przed i po edycji).
+  - Społeczność może głosować i potwierdzać definicje przyciskiem **„Potwierdź rzetelność”** (`verification_count`). Po zebraniu potwierdzeń lub akceptacji moderatora hasło otrzymuje status **Zweryfikowane** (`verified`).
+  - Każda zmiana w Salsopedii natychmiast aktualizuje bazę wiedzy Asystenta AI i unieważnia poprzednio zapisane odpowiedzi w pamięci podręcznej.
 
-## Poziomy zaawansowania:
-- P0 (Od podstaw / Nowy nabór) - dla osób, które nigdy wcześniej nie tańczyły. Nie jest wymagana para ani wcześniejsze doświadczenie.
-- P1/P2 (Średniozaawansowany) - dla osób po minimum 3-6 miesiącach regularnej nauki.
-- Masterclass / Choreografie - grupy pokazowe i techniczne.
+## 3. Pozostałe filary i funkcje portalu Kato Salsa Hub
+- **Radio Timba Nation 24/7:**
+  - Wbudowany odtwarzacz radiowy w dolnym pasku strony (`katosalsahub.pl`) grający 24/7 selekcję kubańskiej Timby, Salsy, Sonu i Bachaty bez reklam.
+  - Posiada wizualizer częstotliwości audio (Web Audio API), regulację głośności, sterowanie z ekranu blokady smartfona (MediaSession API) oraz **Wyłącznik czasowy (Sleep Timer: 15, 30 lub 60 minut)**.
+- **Gdzie tańczymy na Śląsku (Szkoły i lokalizacje):**
+  - **Dolina Trzech Stawów — Kato Salsa Hub (Katowice, Kamienny Krąg przy ul. Trzech Stawów):** kultowe letnie potańcówki plenerowe *Salsowy Chillout* pod gołym niebem (Salsa, Timba, Rueda de Casino, Son Cubano, Bachata).
+  - **La Clave (Katowice, ul. Chorzowska 11):** serce śląskiej sceny kubańskiej i bachatowej (Salsa, Casino, Rueda, Timba, Son, Rumba, Bachata, imprezy *Bachata meets Impro*).
+  - **Mil Pasos (Katowice, ul. Kamienna 4):** kursy Bachaty, Salsy, Casino i Kizomby oraz weekendy *B Experience* i *K Experience*.
+  - **Evolution Dance Studio (Katowice, al. Korfantego 4):** ścisłe centrum Katowic, Casino, Rueda, Timba, Rumba, Bachata, warsztaty *Cuban Day*.
+  - **KIZLAB (Katowice, ul. Sobieskiego 11) & VAMULA.pl:** centrum Kizomby, Urban Kiz i Semby (spotkania *KIZLAB Sundays*, imprezy *Kizombada*).
+  - **Gravitacja / Dance++ (Katowice, ul. Gliwicka 44):** imprezy socialowe łączące Kizombę, Bachatę i Salsę.
+  - **Szkoła Tańca Mohito (Gliwice, ul. Zwycięstwa 52A / Tychy, al. Jana Pawła II 14)**, **Śląska Szkoła Tańca Dariusz Kurzeja**, **DANCE#LOVEit & Corazon (Bielsko-Biała, ul. Grażyńskiego 12)**.
+- **DancePuls (`https://dancepuls.katosalsahub.pl/`):**
+  - Oficjalny agregator i kalendarz wydarzeń tanecznych powiązany z Kato Salsa Hub. Zbiera aktualne imprezy (sociale), warsztaty weekendowe i festiwale Salsy, Bachaty i Kizomby w województwie śląskim i Krakowie.
 
-## Lokalizacja i dojazd:
-- Adres: ul. Mariacka / centrum Katowic (blisko Dworca Głównego PKP).
-- W pobliżu przystanki tramwajowe i autobusowe (Katowice Rynek, Katowice Dworzec).
+## 4. Informacje dla początkujących (Kursy P0, strój, karty sportowe)
+- **Jak zacząć (Poziom P0):** Nie potrzebujesz własnej pary ani wcześniejszego doświadczenia tanecznego — na zajęciach w grupach **P0 (od podstaw)** panuje rotacja w parach w przyjaznej atmosferze.
+- **Jak się ubrać:** Wygodny strój niekrępujący ruchów oraz zmienne obuwie na gładkiej, czystej podeszwie (np. sneakersy lub buty taneczne).
+- **Karty sportowe i cennik w katowickich szkołach partnerskich:** Większość szkół na Śląsku (m.in. La Clave, Mil Pasos, Evolution, Mohito) honoruje karty **Multisport**, **Medicover Sport** oraz **FitProfit** na kursach regularnych (pojedyncze wejście to zazwyczaj ok. 40 PLN, karnet 4 wejść ok. 130 PLN).
 
-## Cennik i karnety:
-- Pojedyncze wejście: 40 PLN
-- Karnet miesięczny (4 wejścia x 60 min): 130 PLN
-- Karnet Open (dowolna liczba zajęć w miesiącu): 250 PLN
-- Akceptujemy karty sportowe: Multisport Plus (kaucja zwrotna), Medicover Sport oraz FitProfit.
-
-## Jak się ubrać na zajęcia?
-Wygodny strój niekrępujący ruchów (t-shirt, legginsy/spodnie dresowe) oraz zmienne, czyste obuwie na płaskiej, miękkiej podeszwie (trampki, sneakersy taneczne).
-
-## Kontakt i zapisy:
-- E-mail: kontakt@katosalsahub.pl
-- Strona WWW: https://katosalsahub.pl
-- Zapisy odbywają się przez formularz na stronie WWW lub w recepcji przed zajęciami.
+## 5. Reguły bezpieczeństwa i dokładności (Guardrails)
+- Gdy użytkownik pyta o konkretne hasło, figurę, rytm, bóstwo Orisha, szkołę lub instruktora, opieraj się w pierwszej kolejności na dynamicznym kontekście z Salsopedii przekazanym w zapytaniu.
+- Nie zmyślaj nieistniejących figur ani adresów. W razie pytań o współpracę lub organizację wydarzeń kieruj do formularza **#kontakt** lub na **kontakt@katosalsahub.pl**.
