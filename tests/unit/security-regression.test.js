@@ -143,6 +143,8 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
           GEMINI_API_KEY: '',
           GROQ_API_KEY: '',
           CEREBRAS_API_KEY: '',
+          CF_AI_API_TOKEN: '',
+          CF_ACCOUNT_ID: '',
           OPENROUTER_API_KEY: '',
           ALLOWED_ORIGINS: 'https://twojastronawww.pl,https://katosalsahub.pl,https://fuegolingua.pl',
         },

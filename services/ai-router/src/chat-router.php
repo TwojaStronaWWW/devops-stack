@@ -432,10 +432,12 @@ if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheF
 $geminiApiKey = getenv('GEMINI_API_KEY') ?: '';
 $groqApiKey = getenv('GROQ_API_KEY') ?: '';
 $cerebrasApiKey = getenv('CEREBRAS_API_KEY') ?: '';
+$cfAiToken = getenv('CF_AI_API_TOKEN') ?: '';
+$cfAccountId = preg_replace('/[^a-f0-9]/i', '', (string)(getenv('CF_ACCOUNT_ID') ?: ''));
 $openRouterApiKey = getenv('OPENROUTER_API_KEY') ?: '';
 $hasFastFallback = ($groqApiKey !== '' || $cerebrasApiKey !== '');
 
-if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && $openRouterApiKey === '') {
+if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && ($cfAiToken === '' || $cfAccountId === '') && $openRouterApiKey === '') {
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -781,7 +783,58 @@ if ($answer === null && $cerebrasApiKey !== '') {
     }
 }
 
-// Darmowy Fallback 4: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
+// Darmowy Fallback 4: Cloudflare Workers AI (10 000 Neurons/day Free Tier)
+if ($answer === null && $cfAiToken !== '' && $cfAccountId !== '') {
+    $cfModel = getenv('CF_AI_MODEL') ?: '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+    $cfLabel = "cloudflare/{$cfModel}";
+    $chainPos++;
+    $cdLeft = aiCooldownRemaining($aiStats, $cfLabel);
+    if ($cdLeft > 0 && !$allCooling) {
+        aiRecordSkip('cloudflare', $cfLabel, $cdLeft);
+    } else {
+        $messages = [['role' => 'system', 'content' => $systemInstruction]];
+        foreach ($sanitizedHistory as $turn) {
+            $messages[] = [
+                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+                'content' => $turn['text']
+            ];
+        }
+        $messages[] = ['role' => 'user', 'content' => $question];
+
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            "https://api.cloudflare.com/client/v4/accounts/{$cfAccountId}/ai/v1/chat/completions",
+            [
+                'model'       => $cfModel,
+                'messages'    => $messages,
+                'temperature' => 0.25,
+                'max_tokens'  => 900
+            ],
+            ["Authorization: Bearer {$cfAiToken}"],
+            5
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        $candidateText = null;
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+        }
+        if ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $cfLabel;
+            $aiDepth = $chainPos;
+            aiRecordAttempt('cloudflare', $cfLabel, 'ok', 200, $ms);
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('cloudflare', $cfLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('cloudflare', $cfLabel, $cls, $res['httpCode'], $ms, $cd);
+        }
+    }
+}
+
+// Darmowy Fallback 5: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
 if ($answer === null && $openRouterApiKey !== '') {
     $orModel = getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free';
     $orLabel = "openrouter/{$orModel}";

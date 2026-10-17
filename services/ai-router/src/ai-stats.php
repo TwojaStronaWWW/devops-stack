@@ -69,6 +69,9 @@ function aiFullChain(): array
             $chain[] = ['model' => 'cerebras/' . $cm, 'provider' => 'cerebras'];
         }
     }
+    if ((getenv('CF_AI_API_TOKEN') ?: '') !== '' && (getenv('CF_ACCOUNT_ID') ?: '') !== '') {
+        $chain[] = ['model' => 'cloudflare/' . (getenv('CF_AI_MODEL') ?: '@cf/meta/llama-3.3-70b-instruct-fp8-fast'), 'provider' => 'cloudflare'];
+    }
     if ((getenv('OPENROUTER_API_KEY') ?: '') !== '') {
         $chain[] = ['model' => 'openrouter/' . (getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'), 'provider' => 'openrouter'];
     }
@@ -325,6 +328,7 @@ function aiDailyLimits(): array
         'groq/openai/gpt-oss-120b'                         => 1000,
         'cerebras/gpt-oss-120b'                            => 2400,
         'cerebras/qwen-3.8-27b'                            => 648000,
+        'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 1000,
         'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
     ];
     foreach (explode(',', (string)(getenv('MODEL_DAILY_LIMITS') ?: '')) as $pair) {
@@ -356,7 +360,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)';
     $o[] = '# TYPE ai_router_status gauge';
     $o[] = 'ai_router_status 1';
-    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'openrouter' => 'OPENROUTER_API_KEY'] as $prov => $env) {
+    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'cloudflare' => 'CF_AI_API_TOKEN', 'openrouter' => 'OPENROUTER_API_KEY'] as $prov => $env) {
         if ($prov === 'gemini') {
             $o[] = '# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)';
             $o[] = '# TYPE ai_router_api_key_configured gauge';
