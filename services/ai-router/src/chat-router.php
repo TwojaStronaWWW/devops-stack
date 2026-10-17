@@ -435,9 +435,10 @@ $cerebrasApiKey = getenv('CEREBRAS_API_KEY') ?: '';
 $cfAiToken = getenv('CF_AI_API_TOKEN') ?: '';
 $cfAccountId = preg_replace('/[^a-f0-9]/i', '', (string)(getenv('CF_ACCOUNT_ID') ?: ''));
 $openRouterApiKey = getenv('OPENROUTER_API_KEY') ?: '';
+$anthropicApiKey = getenv('ANTHROPIC_API_KEY') ?: '';
 $hasFastFallback = ($groqApiKey !== '' || $cerebrasApiKey !== '');
 
-if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && ($cfAiToken === '' || $cfAccountId === '') && $openRouterApiKey === '') {
+if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && ($cfAiToken === '' || $cfAccountId === '') && $openRouterApiKey === '' && $anthropicApiKey === '') {
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -886,6 +887,92 @@ if ($answer === null && $openRouterApiKey !== '') {
         } else {
             [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
             aiRecordAttempt('openrouter', $orLabel, $cls, $res['httpCode'], $ms, $cd);
+        }
+    }
+}
+
+// Ostatni Bezpiecznik (Fallback 6 - pozycja 10): Anthropic Claude Haiku 4.5 (Pre-paid $5, Extended Thinking: disabled, Prompt Caching: ephemeral -90%)
+if ($answer === null && $anthropicApiKey !== '') {
+    $anthropicModel = getenv('ANTHROPIC_MODEL') ?: 'claude-haiku-4-5';
+    $anthropicLabel = "anthropic/{$anthropicModel}";
+    $chainPos++;
+    $cdLeft = aiCooldownRemaining($aiStats, $anthropicLabel);
+    if ($cdLeft > 0 && !$allCooling) {
+        aiRecordSkip('anthropic', $anthropicLabel, $cdLeft);
+    } else {
+        // Anthropic API wymaga naprzemiennych ról user/assistant rozpoczynających się od 'user'
+        $rawAnthropicTurns = [];
+        foreach ($sanitizedHistory as $turn) {
+            $rawAnthropicTurns[] = [
+                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+                'content' => $turn['text']
+            ];
+        }
+        $rawAnthropicTurns[] = ['role' => 'user', 'content' => $question];
+
+        $anthropicMessages = [];
+        foreach ($rawAnthropicTurns as $t) {
+            if (empty($anthropicMessages) && $t['role'] !== 'user') {
+                continue;
+            }
+            $lastIdx = count($anthropicMessages) - 1;
+            if ($lastIdx >= 0 && $anthropicMessages[$lastIdx]['role'] === $t['role']) {
+                $anthropicMessages[$lastIdx]['content'] .= "\n\n" . $t['content'];
+            } else {
+                $anthropicMessages[] = $t;
+            }
+        }
+
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            'https://api.anthropic.com/v1/messages',
+            [
+                'model'       => $anthropicModel,
+                'max_tokens'  => 900,
+                'temperature' => 0.25,
+                'system'      => [
+                    [
+                        'type'          => 'text',
+                        'text'          => $systemInstruction,
+                        'cache_control' => ['type' => 'ephemeral']
+                    ]
+                ],
+                'messages'    => $anthropicMessages
+            ],
+            [
+                "x-api-key: {$anthropicApiKey}",
+                'anthropic-version: 2023-06-01'
+            ],
+            6
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        $candidateText = null;
+        $stopReason = 'end_turn';
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $stopReason = (string)($res['json']['stop_reason'] ?? 'end_turn');
+            $contentBlocks = $res['json']['content'] ?? [];
+            if (is_array($contentBlocks)) {
+                foreach ($contentBlocks as $block) {
+                    if (($block['type'] ?? '') === 'text' && isset($block['text']) && trim((string)$block['text']) !== '') {
+                        $candidateText = ($candidateText === null) ? $block['text'] : ($candidateText . "\n" . $block['text']);
+                    }
+                }
+            }
+        }
+        if ($stopReason === 'max_tokens') {
+            aiRecordAttempt('anthropic', $anthropicLabel, 'empty', 200, $ms, 120);
+        } elseif ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $anthropicLabel;
+            $aiDepth = $chainPos;
+            aiRecordAttempt('anthropic', $anthropicLabel, 'ok', 200, $ms);
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('anthropic', $anthropicLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('anthropic', $anthropicLabel, $cls, $res['httpCode'], $ms, $cd);
         }
     }
 }

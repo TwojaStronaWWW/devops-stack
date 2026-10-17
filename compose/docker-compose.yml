@@ -292,6 +292,8 @@ services:
       - CF_AI_MODEL=${CF_AI_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENROUTER_MODEL=${OPENROUTER_MODEL:-nvidia/nemotron-3-super-120b-a12b:free}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-haiku-4-5}
       - MODEL_DAILY_LIMITS=${MODEL_DAILY_LIMITS:-}
       - AI_CACHE_TTL=${AI_CACHE_TTL:-86400}
       - NTFY_TOPIC=${NTFY_TOPIC:-}

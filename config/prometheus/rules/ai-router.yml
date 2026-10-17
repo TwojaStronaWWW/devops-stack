@@ -45,12 +45,12 @@ groups:
           description: "Zuzycie dzienne (doba Pacyficzna): {{ $value | humanizePercentage }}."
 
       - alert: AIRouterNoFallbackProvider
-        expr: sum(ai_router_provider_configured{provider=~"groq|cerebras|cloudflare|openrouter"}) == 0
+        expr: sum(ai_router_provider_configured{provider=~"groq|cerebras|cloudflare|openrouter|anthropic"}) == 0
         for: 1h
         labels:
           severity: info
         annotations:
-          summary: "Brak skonfigurowanego zapasowego providera (Groq/Cerebras/Cloudflare/OpenRouter)"
+          summary: "Brak skonfigurowanego zapasowego providera (Groq/Cerebras/Cloudflare/OpenRouter/Anthropic)"
           description: "Kaskada opiera sie wylacznie na modelach Gemini - jedna awaria konta/klucza wylacza czatboty."
 
       - alert: AIRouterRateLimitSpike

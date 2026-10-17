@@ -27,12 +27,12 @@ sudo bash scripts/02-install-docker.sh
 ```
 
 ### Krok 3: Odtworzenie zmiennych środowiskowych i poświadczeń (Czas: ~1 min)
-Wszystkie poświadczenia (hasła Grafana, Uptime Kuma, tokeny Cloudflare, tokeny runnerów oraz 5 kluczy API dla AI Routera: `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `CF_AI_API_TOKEN`, `OPENROUTER_API_KEY`) są bezpiecznie zarchiwizowane w Twojej bazie **KeePass** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`) oraz w **GitHub Actions Secrets**.
+Wszystkie poświadczenia (hasła Grafana, Uptime Kuma, tokeny Cloudflare, tokeny runnerów oraz 6 kluczy API dla AI Routera: `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `CF_AI_API_TOKEN`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) są bezpiecznie zarchiwizowane w Twojej bazie **KeePass** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`) oraz w **GitHub Actions Secrets**.
 
 ```bash
 cp .env.example .env
 nano .env
-# Wprowadź poświadczenia z KeePassa / GitHub Secrets (w tym GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, CF_AI_API_TOKEN, CF_ACCOUNT_ID, OPENROUTER_API_KEY)
+# Wprowadź poświadczenia z KeePassa / GitHub Secrets (w tym GEMINI_API_KEY, GROQ_API_KEY, CEREBRAS_API_KEY, CF_AI_API_TOKEN, CF_ACCOUNT_ID, OPENROUTER_API_KEY, ANTHROPIC_API_KEY)
 
 # Utworzenie zabezpieczonego pliku poświadczeń dla scrapera Prometheusa (UID 65534 - ISO 27001):
 echo -n "TwojeHasloKumaZKeePassa" > config/prometheus/kuma_password

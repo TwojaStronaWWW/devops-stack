@@ -2,9 +2,9 @@
 
 > Stan na 2026-10-16. Dane liczbowe pochodzą z pomiarów na żywym serwerze VPS (`89.168.62.31`, `docker stats`, `docker system df`, `docker inspect`) oraz z kodu produkcyjnego `services/ai-router/src/`.
 
-## 1. Jak to działa (jeden router, pamięć podręczna RAG `< 5 ms` i 10 „asystentów” w kaskadzie)
+## 1. Jak to działa (jeden router, pamięć podręczna RAG `< 5 ms` i 11 „asystentów” w kaskadzie)
 
-Na VPS działa **jeden** kontener `ai-router`. „Asystentami” są **modele LLM w 10-stopniowej kaskadzie** – router najpierw sprawdza atomową pamięć podręczną RAG (`/app/storage/cache`), a przy braku wpisu odpytuje modele po kolei, aż któryś odpowie. Użytkownik strony widzi jednego czatbota.
+Na VPS działa **jeden** kontener `ai-router`. „Asystentami” są **modele LLM w 11-stopniowej kaskadzie** – router najpierw sprawdza atomową pamięć podręczną RAG (`/app/storage/cache`), a przy braku wpisu odpytuje modele po kolei, aż któryś odpowie. Użytkownik strony widzi jednego czatbota.
 
 ```
 fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
@@ -15,17 +15,18 @@ fuegolingua.pl / katosalsahub.pl / twojastronawww.pl
                           ┌───────────────────────┴───────────────────────┐
                           ▼                                               ▼
         [ TRAFIENIE W CACHE RAG (< 5 ms) ]               [ BRAK W CACHE (COLD QUERY) ]
-        Zwrot odpowiedzi w ~1.8 ms (0 tokenów)           ┌────── Kaskada 10 modeli (pozycja 0 → 9) ─────┐
-        Auto-inwalidacja po filemtime bazy wiedzy        │ 0 gemini-3.5-flash (MINIMAL, ~1.5s, RPD: 500)│
-        Pre-warming: scripts/warm-ai-cache.sh            │ 1 gemini-3.5-flash-lite  (MINIMAL, RPD: 1500)│
-                                                         │ 2 gemini-3.7-flash       (LOW, RPD: 500)     │
-                                                         │ 3 gemini-3.8-flash       (LOW, RPD: 500)     │
-                                                         │ 4 gemma-4-31b-it         (RPD: 14400)        │
-                                                         │ 5 groq/openai/gpt-oss-120b (~0.6s, RPD: 1000)│
-                                                         │ 6 cerebras/gpt-oss-120b    (~0.15s, RPD:2400)│
-                                                         │ 7 cerebras/qwen-3.8-27b    (~0.15s, 648000)  │
-                                                         │ 8 cloudflare/llama-3.3-70b-fp8-fast (1000)   │
-                                                         │ 9 openrouter/nemotron-3-super-120b:free (200)│
+        Zwrot odpowiedzi w ~1.8 ms (0 tokenów)           ┌────── Kaskada 11 modeli (pozycja 0 → 10) ────┐
+        Auto-inwalidacja po filemtime bazy wiedzy        │ 0  gemini-3.5-flash (MINIMAL, ~1.5s, RPD:500)│
+        Pre-warming: scripts/warm-ai-cache.sh            │ 1  gemini-3.5-flash-lite  (MINIMAL, RPD:1500)│
+                                                         │ 2  gemini-3.7-flash       (LOW, RPD: 500)    │
+                                                         │ 3  gemini-3.8-flash       (LOW, RPD: 500)    │
+                                                         │ 4  gemma-4-31b-it         (RPD: 14400)       │
+                                                         │ 5  groq/openai/gpt-oss-120b (~0.6s, RPD:1000)│
+                                                         │ 6  cerebras/gpt-oss-120b    (~0.15s, RPD:2400│
+                                                         │ 7  cerebras/qwen-3.8-27b    (~0.15s, 648000) │
+                                                         │ 8  cloudflare/llama-3.3-70b-fp8-fast (1000)  │
+                                                         │ 9  openrouter/nemotron-3-super-120b:free(200)│
+                                                         │ 10 anthropic/claude-haiku-4-5 ($5 bezpiecznik│
                                                          └──────────────────────────────────────────────┘
 ```
 
@@ -55,13 +56,14 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
      - `'thinkingConfig' => ['thinkingLevel' => 'MINIMAL']` dla modeli `gemini-3.5-*` (redukuje `thoughtsTokenCount` do `0` i czas odpowiedzi z `4.5 s` do **`1.4–2.1 s`**),
      - `'thinkingConfig' => ['thinkingLevel' => 'LOW']` dla modeli `gemini-3.7-flash` i `gemini-3.8-flash` (nie wspierają poziomu `MINIMAL`),
      - `'reasoning_effort' => 'low'` dla `cerebras/gpt-oss-120b` oraz `'disable_reasoning' => true` dla `cerebras/qwen-3.8-27b` (`reasoning_tokens = 0`, generacja w `~17–34 ms`),
-     - `'reasoning' => ['effort' => 'none']` dla modelu `nvidia/nemotron-3-super-120b-a12b:free` na OpenRouterze (`reasoning_tokens = 0`).
-   - Dodatkowo strażnik `finishReason === 'MAX_TOKENS'` (`length`) bezwzględnie odrzuca każdą uciętą odpowiedź i przełącza na kolejny model.
+     - `'reasoning' => ['effort' => 'none']` dla modelu `nvidia/nemotron-3-super-120b-a12b:free` na OpenRouterze (`reasoning_tokens = 0`),
+     - domyślnie wyłączone *Extended Thinking* oraz włączony *Prompt Caching* (`cache_control: ephemeral`, `-90%` kosztu wejścia) dla `anthropic/claude-haiku-4-5`.
+   - Dodatkowo strażnik `finishReason === 'MAX_TOKENS'` (`length` / `max_tokens`) bezwzględnie odrzuca każdą uciętą odpowiedź i przełącza na kolejny model.
 2. **Smart Fast-Fail do Groq LPU (`~0.6 s`) i Cerebras WSE (`~0.15 s`):**
    - Timeout pojedynczej próby Gemini wynosi **`4 s`** (`CURLOPT_CONNECTTIMEOUT = 2 s`).
    - Jeśli pierwszy model Gemini przekroczy timeout sieciowy LUB suma błędów i modeli pominiętych przez cooldown wyniesie $\ge 2$ (`$geminiTransientFailures + $geminiSkipped >= 2`), router **przerywa pętlę Google i w `0 ms` przeskakuje do `groq/openai/gpt-oss-120b` oraz `cerebras/gpt-oss-120b`**, które odpowiadają w `~0.15–0.8 s`.
 
-## 3. Aktywni dostawcy i modele na VPS (5 kluczy API / 10 modeli)
+## 3. Aktywni dostawcy i modele na VPS (6 kluczy API / 11 modeli)
 
 | Provider | Modele w kaskadzie | Stan na VPS |
 |---|---|---|
@@ -70,12 +72,13 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 | Cerebras WSE (`CEREBRAS_API_KEY`) | 2 (`gpt-oss-120b`, `qwen-3.8-27b`) | **AKTYWNY** (`ai_router_provider_configured{provider="cerebras"} 1`) |
 | Cloudflare Workers AI (`CF_AI_API_TOKEN`) | 1 (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`) | **AKTYWNY** (`ai_router_provider_configured{provider="cloudflare"} 1`) |
 | OpenRouter (`OPENROUTER_API_KEY`) | 1 (`nvidia/nemotron-3-super-120b-a12b:free` — wyłącznie modele `:free`) | **AKTYWNY** (`ai_router_provider_configured{provider="openrouter"} 1`) |
+| Anthropic Claude (`ANTHROPIC_API_KEY`) | 1 (`claude-haiku-4-5` — ostatni bezpiecznik Pre-paid $5 z Prompt Cachingiem) | **AKTYWNY** (`ai_router_provider_configured{provider="anthropic"} 1`) |
 
-**Łącznie działa 10 niezależnych modeli u 5 dostawców chmurowych.** Nawet całkowita awaria Google AI Studio powoduje automatyczne przełączenie na Groq Cloud LPU, Cerebras Wafer-Scale Engine, Cloudflare Workers AI lub OpenRouter.
+**Łącznie działa 11 niezależnych modeli u 6 dostawców chmurowych.** Nawet całkowita awaria wszystkich 10 darmowych modeli powoduje automatyczne przełączenie na ostatni bezpiecznik `anthropic/claude-haiku-4-5`.
 
 ## 4. Limity darmowe RPD, Cache RAG i Detektor „Gorącego Leada”
 
-1. **Domyślne limity dzienne (RPD Free Tier) wbudowane w `ai-stats.php`:**
+1. **Domyślne limity dzienne (RPD Free Tier + bezpiecznik Pre-paid) wbudowane w `ai-stats.php`:**
    - `gemini-3.5-flash-lite`: `1 500` zapytań/doba
    - `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`: po `500` zapytań/doba
    - `gemma-4-31b-it`: `14 400` zapytań/doba
@@ -84,7 +87,8 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
    - `cerebras/qwen-3.8-27b`: `648 000` zapytań/doba (`450` RPM, `216 000 000` tokenów/doba)
    - `cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast`: `1 000` zapytań/doba (`10 000` Neurons/doba)
    - `openrouter/nvidia/nemotron-3-super-120b-a12b:free`: `200` zapytań/doba
-   - Łączna dzienna pula darmowa wynosi **ponad 670 000 zapytań na dobę** (można ją nadpisać zmienną `MODEL_DAILY_LIMITS` w `.env`).
+   - `anthropic/claude-haiku-4-5`: `1 000` zapytań/doba (bufor Pre-paid 5 USD z Prompt Cachingiem `-90%`)
+   - Łączna dzienna pula wynosi **ponad 670 000 darmowych zapytań na dobę + bufor awaryjny Claude Haiku 4.5** (można ją nadpisać zmienną `MODEL_DAILY_LIMITS` w `.env`).
 2. **Pamięć podręczna RAG (`/app/storage/cache`):**
    - Identyczne pytania (po normalizacji białych znaków i wielkości liter) są zwracane z dysku w **`~1.8 ms`** (`"cached": true`), nie zużywając ani jednego zapytania z puli RPD.
    - Klucz SHA-256 uwzględnia `filemtime` pliku wiedzy `<site_id>-knowledge.txt` — każda aktualizacja bazy wiedzy natychmiast unieważnia stare wpisy cache.

@@ -75,6 +75,9 @@ function aiFullChain(): array
     if ((getenv('OPENROUTER_API_KEY') ?: '') !== '') {
         $chain[] = ['model' => 'openrouter/' . (getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'), 'provider' => 'openrouter'];
     }
+    if ((getenv('ANTHROPIC_API_KEY') ?: '') !== '') {
+        $chain[] = ['model' => 'anthropic/' . (getenv('ANTHROPIC_MODEL') ?: 'claude-haiku-4-5'), 'provider' => 'anthropic'];
+    }
     return $chain;
 }
 
@@ -206,6 +209,9 @@ function aiClassify(int $httpCode, ?array $json, string $curlError, string $body
     if ($httpCode === 404) {
         return ['not_found', 3600];
     }
+    if ($httpCode === 400 && stripos($blob, 'credit balance is too low') !== false) {
+        return ['quota_daily', 3600];
+    }
     if ($httpCode === 401 || $httpCode === 403 || ($httpCode === 400 && stripos($blob, 'API_KEY_INVALID') !== false)) {
         return ['auth', 300];
     }
@@ -330,6 +336,7 @@ function aiDailyLimits(): array
         'cerebras/qwen-3.8-27b'                            => 648000,
         'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 1000,
         'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
+        'anthropic/claude-haiku-4-5'                       => 1000,
     ];
     foreach (explode(',', (string)(getenv('MODEL_DAILY_LIMITS') ?: '')) as $pair) {
         if (str_contains($pair, '=')) {
@@ -360,7 +367,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)';
     $o[] = '# TYPE ai_router_status gauge';
     $o[] = 'ai_router_status 1';
-    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'cloudflare' => 'CF_AI_API_TOKEN', 'openrouter' => 'OPENROUTER_API_KEY'] as $prov => $env) {
+    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'cloudflare' => 'CF_AI_API_TOKEN', 'openrouter' => 'OPENROUTER_API_KEY', 'anthropic' => 'ANTHROPIC_API_KEY'] as $prov => $env) {
         if ($prov === 'gemini') {
             $o[] = '# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)';
             $o[] = '# TYPE ai_router_api_key_configured gauge';
