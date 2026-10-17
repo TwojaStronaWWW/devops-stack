@@ -9,9 +9,13 @@ set -uo pipefail
 
 STACK_ROOT="${STACK_ROOT:-/opt/devops-stack}"
 STRICT_MODE=false
-if [[ "${1:-}" == "--strict" ]]; then
-    STRICT_MODE=true
-fi
+FORCE_MORNING_REPORT=false
+for arg in "$@"; do
+    case "${arg}" in
+        --strict) STRICT_MODE=true ;;
+        --morning-report) FORCE_MORNING_REPORT=true ;;
+    esac
+done
 
 # Kolory ANSI (wyłączane automatycznie przy braku terminala lub fladze NO_COLOR)
 if [[ -z "${NO_COLOR:-}" ]]; then
@@ -584,6 +588,15 @@ else
     pass "Higiena obrazów Dockera: brak osieroconych warstw (<none> / dangling=0)."
 fi
 
+# 2b. Kontrola rozrostu plików logów kontenerów Dockera (wykrywanie spamu logów > 15 MB)
+LARGE_LOGS_COUNT="$(sudo find /var/lib/docker/containers -name "*-json.log" -size +15M 2>/dev/null | wc -l | tr -d ' ' || echo '0')"
+if [[ "${LARGE_LOGS_COUNT:-0}" -eq 0 ]]; then
+    pass "Higiena logów kontenerów: żaden plik *-json.log nie przekracza 15 MB."
+else
+    warn "Wykryto ${LARGE_LOGS_COUNT} plików logów kontenerów powyżej 15 MB (możliwy spam błędów w logach)." \
+         "sudo du -sh /var/lib/docker/containers/*/*-json.log | sort -hr | head -n 5"
+fi
+
 # 3. Wolumeny danych
 REQUIRED_VOLUMES=("uptime_kuma_data" "prometheus_data" "grafana_data" "ai_router_storage")
 for VOL in "${REQUIRED_VOLUMES[@]}"; do
@@ -704,16 +717,60 @@ EOF
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
 fi
 
-# Jeśli audyt wykrył błędy krytyczne (FAIL_COUNT > 0), wyślij powiadomienie Push na Ntfy.sh
-if [[ "${FAIL_COUNT}" -gt 0 && -f "${ENV_FILE}" ]]; then
+# Powiadomienia Push na Ntfy.sh:
+# 1. Natychmiastowy alert przy błędach krytycznych (FAIL_COUNT > 0)
+# 2. Alert ostrzeżeń (WARN_COUNT > 0, max raz na 6h, aby unikać spamu)
+# 3. Codzienny Poranny Raport Bezpieczeństwa o 08:00 rano (Europe/Warsaw) lub z flagą --morning-report
+if [[ -f "${ENV_FILE}" ]]; then
     NTFY_AUDIT_TOPIC="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
     if [[ -n "${NTFY_AUDIT_TOPIC}" ]]; then
-        curl -s --max-time 5 \
-            -H "Title: 🚨 Audyt VPS: Wykryto ${FAIL_COUNT} błędów!" \
-            -H "Priority: high" \
-            -H "Tags: warning,shield" \
-            -d "Audyt automatyczny (${HOST_NAME}) zakończony wynikiem: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL." \
-            "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
+        HINTS_SUMMARY=""
+        if [[ ${#REMEDIATION_HINTS[@]} -gt 0 ]]; then
+            HINTS_SUMMARY="$(printf '\n• %s' "${REMEDIATION_HINTS[@]}")"
+        fi
+
+        if [[ "${FAIL_COUNT}" -gt 0 ]]; then
+            curl -s --max-time 5 \
+                -H "Title: Audyt VPS: Wykryto ${FAIL_COUNT} bledow!" \
+                -H "Priority: high" \
+                -H "Tags: rotating_light,shield" \
+                -d "Audyt (${HOST_NAME}): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL.${HINTS_SUMMARY}" \
+                "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
+        elif [[ "${WARN_COUNT}" -gt 0 ]]; then
+            WARN_STAMP_FILE="/var/tmp/devops-warn-alert.ts"
+            LAST_WARN_TS="$(cat "${WARN_STAMP_FILE}" 2>/dev/null || echo 0)"
+            NOW_TS="$(date +%s)"
+            if [[ $((NOW_TS - LAST_WARN_TS)) -ge 21600 ]]; then
+                echo "${NOW_TS}" > "${WARN_STAMP_FILE}" 2>/dev/null || true
+                curl -s --max-time 5 \
+                    -H "Title: Audyt VPS: ${WARN_COUNT} ostrzezen" \
+                    -H "Priority: default" \
+                    -H "Tags: warning,shield" \
+                    -d "Audyt (${HOST_NAME}): ${OK_COUNT} OK | ${WARN_COUNT} WARN | 0 FAIL.${HINTS_SUMMARY}" \
+                    "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
+            fi
+        fi
+
+        # Codzienny Poranny Raport o 08:00 rano (Europe/Warsaw) lub wymuszony przez --morning-report
+        PL_HOUR="$(TZ=Europe/Warsaw date +%H 2>/dev/null || date +%H)"
+        PL_DATE="$(TZ=Europe/Warsaw date +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d)"
+        MORNING_STAMP_FILE="/var/tmp/devops-morning-digest.date"
+        LAST_MORNING_DATE="$(cat "${MORNING_STAMP_FILE}" 2>/dev/null || echo '')"
+
+        if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${PL_HOUR}" == "08" && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
+            echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
+            F2B_BANNED="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}' || echo '0')"
+            MORNING_BODY="✅ Wynik: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+💾 Backupy (03:00): VPS ${B_AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
+🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
+🛡️ Ochrona: Uptime Kuma Auth OK (401) | Bufor OCI $(( OCI_BUFFER_BYTES / 1048576 )) MiB | Fail2ban: ${F2B_BANNED:-0} zbanowanych IP${HINTS_SUMMARY}"
+            curl -s --max-time 5 \
+                -H "Title: Poranny Audyt VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL" \
+                -H "Priority: low" \
+                -H "Tags: sunny,white_check_mark" \
+                -d "${MORNING_BODY}" \
+                "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
+        fi
     fi
 fi
 
