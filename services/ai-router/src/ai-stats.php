@@ -33,10 +33,10 @@ function aiGeminiChain(string $configured): array
 {
     return array_values(array_unique([
         'gemini-3.5-flash',
-        $configured,
         'gemini-3.5-flash-lite',
         'gemini-3.7-flash',
         'gemini-3.8-flash',
+        $configured,
         'gemma-4-31b-it',
     ]));
 }
@@ -366,6 +366,27 @@ function aiEsc(string $v): string
     return str_replace(['\\', '"', "\n"], ['\\\\', '\\"', '\\n'], $v);
 }
 
+/** Czytelna nazwa pozycji i modelu w kaskadzie (np. "#1 Gemini 3.5 Flash") dla Grafany i raportów CLI. */
+function aiReadableSourceLabel(int $pos, string $model): string
+{
+    $num = $pos + 1;
+    $map = [
+        'gemini-3.5-flash'                                    => 'Gemini 3.5 Flash',
+        'gemini-3.5-flash-lite'                               => 'Gemini 3.5 Lite',
+        'gemini-3.7-flash'                                    => 'Gemini 3.7 Flash',
+        'gemini-3.8-flash'                                    => 'Gemini 3.8 Flash',
+        'gemma-4-31b-it'                                      => 'Gemma 4 31B',
+        'groq/openai/gpt-oss-120b'                            => 'Groq GPT-120B',
+        'cerebras/gpt-oss-120b'                               => 'Cerebras 120B',
+        'cerebras/qwen-3.8-27b'                               => 'Cerebras Qwen 27B',
+        'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 'CF Llama 3.3 70B',
+        'openrouter/nvidia/nemotron-3-super-120b-a12b:free'   => 'Nemotron 120B',
+        'anthropic/claude-haiku-4-5'                          => 'Claude Haiku 4.5',
+    ];
+    $short = $map[$model] ?? $model;
+    return '#' . $num . ' ' . $short;
+}
+
 /** Renderowanie metryk Prometheus (format 0.0.4). */
 function aiRenderMetrics(): string
 {
@@ -438,8 +459,11 @@ function aiRenderMetrics(): string
 
     $o[] = '# HELP ai_router_answers_by_depth_total Ile odpowiedzi dal model z danej pozycji kaskady (0 = pierwszy, >0 = przelaczenie)';
     $o[] = '# TYPE ai_router_answers_by_depth_total counter';
-    foreach ($s['depth'] as $d => $n) {
-        $o[] = 'ai_router_answers_by_depth_total{depth="' . aiEsc((string)$d) . '"} ' . (int)$n;
+    foreach ($chain as $idx => $c) {
+        $mName = $c['model'];
+        $mOk = (int)($s['models'][$mName]['attempts']['ok'] ?? 0) + (int)($s['models'][$mName]['attempts']['safety'] ?? 0);
+        $sourceLabel = aiReadableSourceLabel($idx, $mName);
+        $o[] = 'ai_router_answers_by_depth_total{depth="' . $idx . '",model="' . aiEsc($mName) . '",source="' . aiEsc($sourceLabel) . '"} ' . $mOk;
     }
 
     // Definicje metryk per model: nazwa => [typ, opis]. Próbki grupowane pod jednym nagłówkiem HELP/TYPE.

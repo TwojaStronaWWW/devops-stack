@@ -80,9 +80,11 @@ echo "  Pozyskane Leady i zaangazowane sesje (Zero-PII):"
 met ai_router_leads_total | while read -r line; do
   printf '    %-14s %-12s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl type)" "${line##* }"
 done
-echo "  Glebokosc kaskady odpowiedzi (0 = pierwszy asystent, >0 = przelaczenie):"
-met ai_router_answers_by_depth_total | while read -r line; do
-  printf '    pozycja %-3s odpowiedzi: %s\n' "$(printf '%s' "$line" | lbl depth)" "${line##* }"
+echo "  Zrodla odpowiedzi w kaskadzie (#1 = pierwszy asystent, >#1 = przelaczenie):"
+met ai_router_answers_by_depth_total | awk '$NF > 0 {print}' | while read -r line; do
+  src="$(printf '%s' "$line" | lbl source)"
+  [ -z "$src" ] && src="pozycja $(printf '%s' "$line" | lbl depth)"
+  printf '    %-26s odpowiedzi: %s\n' "$src" "${line##* }"
 done
 sum="$(met ai_router_request_duration_seconds_sum | awk '{print $NF}')"; cnt="$(met ai_router_request_duration_seconds_count | awk '{print $NF}')"
 awk -v s="${sum:-0}" -v c="${cnt:-0}" 'BEGIN { if (c > 0) printf "  Sredni czas udanej odpowiedzi: %.2f s (n=%d)\n", s/c, c; else print "  Brak udanych odpowiedzi w statystykach." }'

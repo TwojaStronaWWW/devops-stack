@@ -462,7 +462,7 @@ if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheF
     $cachedJson = $cachedRaw ? json_decode($cachedRaw, true) : null;
     if (is_array($cachedJson) && !empty($cachedJson['answer'])) {
         $usedModel = (string)($cachedJson['model'] ?? 'cache');
-        $aiDepth = 0;
+        $aiDepth = null;
         aiRecordCacheHit($aiSite);
         http_response_code(200);
         echo json_encode([
@@ -616,8 +616,8 @@ if ($geminiApiKey !== '') {
     $geminiTransientFailures = 0;
     $geminiSkipped = 0;
 
-    foreach ($geminiModelChain as $candidateModel) {
-        $chainPos++;
+    foreach ($geminiModelChain as $gIdx => $candidateModel) {
+        $chainPos = $gIdx;
         $cdLeft = aiCooldownRemaining($aiStats, $candidateModel);
         if ($cdLeft > 0 && !$allCooling) {
             aiRecordSkip('gemini', $candidateModel, $cdLeft);
@@ -713,6 +713,7 @@ if ($geminiApiKey !== '') {
             break;
         }
     }
+    $chainPos = count($geminiModelChain) - 1;
 }
 
 // Darmowy Fallback 2: Groq Cloud API (Free Tier LPU)
@@ -776,9 +777,11 @@ if ($answer === null && $cerebrasApiKey !== '') {
     }
     $messages[] = ['role' => 'user', 'content' => $question];
 
-    foreach (aiCerebrasChain() as $cerebrasModel) {
+    $cerebrasBasePos = $chainPos;
+    $cerebrasChain = aiCerebrasChain();
+    foreach ($cerebrasChain as $cIdx => $cerebrasModel) {
         $cerebrasLabel = "cerebras/{$cerebrasModel}";
-        $chainPos++;
+        $chainPos = $cerebrasBasePos + 1 + $cIdx;
         $cdLeft = aiCooldownRemaining($aiStats, $cerebrasLabel);
         if ($cdLeft > 0 && !$allCooling) {
             aiRecordSkip('cerebras', $cerebrasLabel, $cdLeft);
@@ -833,6 +836,7 @@ if ($answer === null && $cerebrasApiKey !== '') {
             }
         }
     }
+    $chainPos = $cerebrasBasePos + count($cerebrasChain);
 }
 
 // Darmowy Fallback 4: Cloudflare Workers AI (10 000 Neurons/day Free Tier)
