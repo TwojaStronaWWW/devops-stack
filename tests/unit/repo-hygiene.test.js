@@ -275,7 +275,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.strictEqual(router.includes('cfut_'), false, 'Wykryto zahardkodowany token Cloudflare Workers AI w chat-router.php');
   });
 
-  it('dashboard AI Router w Grafanie powinien być poprawnym JSON-em z unikalnymi ID paneli i metrykami kaskady oraz Cache RAG', () => {
+  it('dashboard AI Router oraz Centrum Monitoringu w Grafanie powinny być poprawnym JSON-em z unikalnymi ID paneli i pełną telemetrią', () => {
     const dashPath = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions', 'ai-router-overview.json');
     const dash = JSON.parse(fs.readFileSync(dashPath, 'utf-8'));
     const ids = dash.panels.map((p) => p.id);
@@ -290,7 +290,21 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'ai_router_cache_entries',
       'ai_router_leads_total',
     ]) {
-      assert.ok(exprs.includes(metric), `Dashboard nie wizualizuje metryki ${metric}`);
+      assert.ok(exprs.includes(metric), `Dashboard ai-router-overview nie wizualizuje metryki ${metric}`);
+    }
+
+    const kumaDashPath = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions', 'uptime-kuma-overview.json');
+    const kumaDash = JSON.parse(fs.readFileSync(kumaDashPath, 'utf-8'));
+    const kumaIds = kumaDash.panels.map((p) => p.id);
+    assert.strictEqual(new Set(kumaIds).size, kumaIds.length, 'Zduplikowane ID paneli w dashboardzie uptime-kuma-overview');
+    const kumaExprs = JSON.stringify(kumaDash.panels);
+    for (const metric of [
+      'cloudflared_tunnel_ha_connections',
+      'devops_backup_verified',
+      'devops_backup_websites_db_verified',
+      'devops_audit_status',
+    ]) {
+      assert.ok(kumaExprs.includes(metric), `Dashboard uptime-kuma-overview nie wizualizuje metryki ${metric}`);
     }
   });
 
