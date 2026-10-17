@@ -428,7 +428,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const auditSh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'audit-server.sh'), 'utf-8');
     assert.match(auditSh, /docker image prune -f/);
     assert.match(auditSh, /devops_oci_keepalive_buffer_bytes/);
-    assert.match(auditSh, /github_rate_limit/);
+    assert.match(auditSh, /github_request_failures_total/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);

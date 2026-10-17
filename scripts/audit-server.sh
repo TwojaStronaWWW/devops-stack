@@ -512,12 +512,13 @@ else
         fi
     fi
 
-    # 5c. Kontrola autoryzacji GitHub PAT (github-exporter -> github_rate_limit > 0)
-    GH_RATE_LIMIT="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=max(github_rate_limit)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
-    if [[ "${GH_RATE_LIMIT:-0}" -gt 0 ]]; then
-        pass "Tokeny GitHub PAT (github-exporter) są aktywne i autoryzowane (limit API: ${GH_RATE_LIMIT}/h)."
+    # 5c. Kontrola autoryzacji GitHub PAT (github-exporter -> github_repo_created_timestamp > 0 & github_request_failures_total == 0)
+    GH_REPOS_COUNT="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(github_repo_created_timestamp)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
+    GH_FAILURES="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=sum(github_request_failures_total)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
+    if [[ "${GH_REPOS_COUNT:-0}" -gt 0 ]] && [[ "${GH_FAILURES:-0}" -eq 0 ]]; then
+        pass "Tokeny GitHub PAT (github-exporter) są aktywne i autoryzowane (monitorowane repozytoria: ${GH_REPOS_COUNT}, błędy API: 0)."
     else
-        warn "Exporter GitHub nie zwraca limitu API (sprawdź ważność GITHUB_PAT_* w .env)."
+        warn "Exporter GitHub zgłasza problem z API GitHub (repozytoria: ${GH_REPOS_COUNT:-0}, błędy: ${GH_FAILURES:-0} — sprawdź ważność GITHUB_PAT_* w .env)."
     fi
 fi
 
