@@ -62,6 +62,10 @@ jobs:
             cd compose
             docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
 
+            # Automatyczny Garbage Collector po wdrożeniu: usunięcie osieroconych warstw <none> i starego build cache'u (>7 dni)
+            docker image prune -f >/dev/null 2>&1 || true
+            docker builder prune --filter "until=168h" -f >/dev/null 2>&1 || true
+
             # Odświeżenie pamięci podręcznej DNS (nscd) w Uptime Kuma po przebudowie kontenera ai-router
             docker exec uptime-kuma nscd -i hosts >/dev/null 2>&1 || true
 

@@ -535,6 +535,15 @@ fi
 MEM_INFO="$(free -h | awk '/^Mem:/ {print "Użyte: "$3" / "$2" (Dostępne: "$7")"}')"
 pass "Pamięć RAM hosta: ${MEM_INFO}"
 
+# 2a. Higiena obrazów Dockera (wykrywanie i samonaprawa osieroconych warstw <none>)
+DANGLING_IMAGES="$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')"
+if [[ "${DANGLING_IMAGES:-0}" -gt 0 ]]; then
+    docker image prune -f >/dev/null 2>&1 || true
+    pass "Autonomiczny Garbage Collector: oczyszczono ${DANGLING_IMAGES} osieroconych warstw obrazów Dockera (<none>)."
+else
+    pass "Higiena obrazów Dockera: brak osieroconych warstw (<none> / dangling=0)."
+fi
+
 # 3. Wolumeny danych
 REQUIRED_VOLUMES=("uptime_kuma_data" "prometheus_data" "grafana_data" "ai_router_storage")
 for VOL in "${REQUIRED_VOLUMES[@]}"; do

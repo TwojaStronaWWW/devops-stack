@@ -78,7 +78,8 @@ VPS/
 │       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
-│       └── repo-hygiene.test.js   # 24 testy higieny repozytorium, walidacji JSON, telemetrii AI i bezpieczeństwa (node:test)
+│       ├── repo-hygiene.test.js   # 25 testów higieny repozytorium, walidacji JSON, telemetrii AI i kontraktu _site-template
+│       └── security-regression.test.js # 13 testów regresji bezpieczeństwa OWASP / ISO 27001 / Zero Trust (łącznie 38 testów)
 ├── DISASTER_RECOVERY.md           # Procedura odtworzenia serwera i serwisów od zera (RTO < 15 min)
 ├── README.md                      # Dokumentacja produkcyjna z adresami i procedurami
 ├── SECURITY.md                    # Polityka bezpieczeństwa ISO 27001 i Responsible Disclosure
@@ -97,12 +98,13 @@ VPS/
    - **Bezwzględna Procedura Rejestracji w KeePass (KeePass-First Secret Provisioning):** Zanim jakikolwiek nowy klucz, hasło lub token (Cloudflare R2, SSH, API, baza danych, token runnera, Gemini/Groq/Cerebras/Cloudflare/OpenRouter/Anthropic API) zostanie wdrożony do pliku `.env` na serwerze lub do kodu aplikacji, Agent ma bezwzględny obowiązek natychmiastowego zapisania/zaktualizowania go w bazie **KeePass** (`Databasekpoczatek.kdbx`) w odpowiedniej grupie projektowej. Żaden sekret nie może istnieć w infrastrukturze ani kodzie bez odzwierciedlenia w sejfie administratora. W przypadku braku wpisu Agent automatycznie tworzy stosowny wpis w KeePassie.
    - **Zakaz Haseł Słownikowych:** Wszystkie nowe hasła muszą być kryptograficznie silnymi ciągami (min. 32 znaki, litery wielkie/małe, cyfry, symbole, wysoka entropia, brak znaku `$` unikający kolizji z interpolacją Compose).
    - **Zero Secret Leakage:** Pliki `.env`, `.env.bak*`, certyfikaty, klucze prywatne (`*.pem`, `*.key`, `id_ed25519*`) oraz pliki metryk runtime (`*.prom`) pod żadnym pozorem nie mogą trafić do repozytorium Git (`.gitignore` oraz `.githooks/pre-commit`).
-2. **Kopie Zapasowe, Weryfikacja Integralności i Autonomiczny Audyt 24/7 (Disaster Recovery):**
-   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Regularny snapshot wszystkich 7 wolumenów Dockera z automatycznym testem spójności baz SQLite (`PRAGMA quick_check`) i integralności archiwum (`tar -tzf`, metryka `devops_backup_verified`), opcjonalnym szyfrowaniem symetrycznym AES-256-CBC (`BACKUP_ENCRYPTION_KEY`) i kroczącą retencją **30 dni** (lokalnie na VPS oraz w Cloudflare R2 przez `rclone delete --min-age 30d`). Skrypt `restore-backup.sh` realizuje automatyczne odtwarzanie oraz nieinwazyjny test *Restore Drill* (`--verify-only`).
+2. **Kopie Zapasowe, Weryfikacja Integralności, Automated Garbage Collection i Autonomiczny Audyt 24/7 (Disaster Recovery):**
+   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Regularny snapshot wszystkich 7 wolumenów Dockera z automatycznym testem spójności baz SQLite (`PRAGMA quick_check`) i integralności archiwum (`tar -tzf`, metryka `devops_backup_verified`), natychmiastowym usuwaniem tymczasowych plików cząstkowych po weryfikacji paczki zbiorczej, opcjonalnym szyfrowaniem symetrycznym AES-256-CBC (`BACKUP_ENCRYPTION_KEY`) i kroczącą retencją **30 dni** (lokalnie na VPS oraz w Cloudflare R2 przez `rclone delete --min-age 30d`). Skrypt `restore-backup.sh` realizuje automatyczne odtwarzanie oraz nieinwazyjny test *Restore Drill* (`--verify-only`).
    - **Backup Stron WWW (`backup-websites-lh.sh`):** Niezależny backup plików stron z hostingu **LH.pl** przez szyfrowany kanał **FTPS TLS** (`ftp:ssl-allow true`, `ftp:ssl-protect-data true`, normalizacja uprawnień `--no-perms` + `chown`), opcjonalny zrzut bazy MySQL (`mysqldump`), test integralności `tar -tzf` (`devops_backup_websites_verified`) oraz wysyłkę i 30-dniową rotację w Cloudflare R2.
+   - **Automated Garbage Collection (Ochrona przed Resource Sprawl):** Po każdym wdrożeniu (`.github/workflows/deploy.yml`), podczas nocnego backupu (`backup-offsite.sh`) oraz w trakcie samonaprawy strażnika (`audit-server.sh`) automatycznie czyszczone są osierocone warstwy obrazów Dockera (`docker image prune -f`) oraz stary cache budowania (`docker builder prune --filter "until=168h" -f`).
    - **Automatyzacja Harmonogramów Systemd:**
      - `devops-backup.timer` (`setup-backup-timer.sh`) — codzienny backup w nocy o **03:00 UTC**.
-     - `devops-audit.timer` (`setup-audit-timer.sh`) — autonomiczny strażnik uruchamiający `audit-server.sh` **co 15 minut**, odświeżający `audit.prom` dla Grafany, wykonujący samonaprawę DNS `nscd` w Uptime Kuma i wysyłający natychmiastowe powiadomienie Push (Ntfy.sh) w razie błędów lub alarmów Prometheusa.
+     - `devops-audit.timer` (`setup-audit-timer.sh`) — autonomiczny strażnik uruchamiający `audit-server.sh` **co 15 minut**, odświeżający `audit.prom` dla Grafany, wykonujący samonaprawę DNS `nscd` w Uptime Kuma oraz osieroconych obrazów `<none>`, i wysyłający natychmiastowe powiadomienie Push (Ntfy.sh) w razie błędów lub alarmów Prometheusa.
    - **RTO (Recovery Time Objective):** Poniżej 15 minut zgodnie z runbookiem [`DISASTER_RECOVERY.md`](file:///e:/Projekty/VPS/DISASTER_RECOVERY.md).
 3. **Zarządzanie Runnerami GitHub Actions w Odseparowanej Sieci (`devops_runners_network`):**
    - Stack obsługuje 3 kontenerowe runnery ARM64 odseparowane sieciowo od usług wewnętrznych:

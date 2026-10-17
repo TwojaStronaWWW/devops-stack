@@ -417,6 +417,14 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(offsiteBackup, /PRAGMA quick_check/);
     assert.match(offsiteBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
     assert.match(offsiteBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
+    assert.match(offsiteBackup, /docker image prune -f/);
+
+    const deployYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'deploy.yml'), 'utf-8');
+    assert.match(deployYml, /docker image prune -f/);
+    assert.match(deployYml, /docker builder prune/);
+
+    const auditSh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'audit-server.sh'), 'utf-8');
+    assert.match(auditSh, /docker image prune -f/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);

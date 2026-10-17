@@ -271,12 +271,15 @@ fi
 # Zapisanie metryk dla Prometheusa / Grafany
 write_prometheus_metrics "${BACKUP_STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_BYTES}"
 
-# Rotacja lokalna:
+# Rotacja lokalna i Nocny Garbage Collector (Automated Resource Hygiene):
 # 1. Archiwa zbiorcze vps_full_backup_* trzymane przez pełne RETENTION_DAYS (30 dni)
-# 2. Pojedyncze archiwa cząstkowe wolumenów (zawarte już wewnątrz vps_full_backup_*) starsze niż 1 dzień są czyszczone, aby nie duplikować miejsca
-echo "==> Rotacja lokalna: usuwanie kopii zbiorczych starszych niż ${RETENTION_DAYS} dni..."
+# 2. Ewentualne pojedyncze archiwa cząstkowe wolumenów są czyszczone natychmiast
+# 3. Osierocone warstwy obrazów Dockera (<none>) oraz build cache starszy niż 7 dni są automatycznie usuwane
+echo "==> Rotacja lokalna: usuwanie kopii zbiorczych starszych niż ${RETENTION_DAYS} dni oraz higiena obrazów Dockera..."
 find "${BACKUP_DIR}" -maxdepth 1 -type f \( -name "vps_full_backup_*.tar.gz" -o -name "vps_full_backup_*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
-find "${BACKUP_DIR}" -maxdepth 1 -type f ! -name "vps_full_backup_*" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -mtime +1 -exec rm -f {} +
+find "${BACKUP_DIR}" -maxdepth 1 -type f ! -name "vps_full_backup_*" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -exec rm -f {} +
+docker image prune -f >/dev/null 2>&1 || true
+docker builder prune --filter "until=168h" -f >/dev/null 2>&1 || true
 
 echo "=============================================================================="
 echo "==> [ZAKOŃCZONO] Procedura backupu zakończona pomyślnie (retencja: ${RETENTION_DAYS} dni)."

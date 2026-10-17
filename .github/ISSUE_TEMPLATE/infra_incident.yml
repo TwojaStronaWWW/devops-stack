@@ -34,6 +34,6 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Logi z kontenera lub serwera
-      description: Wklej odpowiednie logi z polecenia `docker compose logs <usługa>` lub `journalctl`
+      label: Wynik audytu i logi z kontenera lub serwera
+      description: Wklej wynik `npm run audit` (`scripts/audit-server.sh`), `./scripts/ai-router-report.ps1` lub logi z `docker compose logs <usługa>` / `journalctl`
       render: shell

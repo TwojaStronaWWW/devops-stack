@@ -20,9 +20,11 @@ body:
       label: Kryteria sukcesu (Definition of Done)
       description: Jak zweryfikujemy, że usługa działa poprawnie i bezpiecznie?
       value: |
-        - [ ] Konfiguracja w compose przetestowana lokalnie lub na VPS
-        - [ ] Brak przekroczenia limitów Oracle Always Free (0.00 PLN)
-        - [ ] Routing zabezpieczony tunelem Cloudflare Zero Trust
-        - [ ] Zgodność z ISO 27001 i zaktualizowana dokumentacja
+        - [ ] Konfiguracja w compose przetestowana lokalnie (`npm run check` — 38/38 testów) i na VPS (`npm run audit` — 55 OK / 0 WARN / 0 FAIL)
+        - [ ] Brak przekroczenia limitów Oracle Always Free (0.00 PLN / 4 OCPU / 24 GB RAM / 200 GB Storage)
+        - [ ] Routing zabezpieczony tunelem Cloudflare Zero Trust (`127.0.0.1` + dwustrefowa izolacja sieciowa)
+        - [ ] Nowe sekrety zarejestrowane w KeePass (`Databasekpoczatek.kdbx`) przed wdrożeniem do `.env`
+        - [ ] Brak osieroconych zasobów (Automated Garbage Collection: `docker image prune -f` / `builder prune`)
+        - [ ] Zgodność z ISO 27001, `_site-template` (Cross-Template Contract) i zaktualizowana dokumentacja (`AGENTS.md`, `GEMINI.md`, `README.md`)
     validations:
       required: true
