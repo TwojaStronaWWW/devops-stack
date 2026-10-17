@@ -21,6 +21,7 @@ umask 077
 BACKUP_DIR="${BACKUP_DIR:-/opt/devops-stack/backups}"
 TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
+R2_RETENTION_DAYS="${R2_RETENTION_DAYS:-14}"
 NTFY_TOPIC="${NTFY_TOPIC:-}"
 NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
 HOST_UID="$(id -u)"
@@ -231,7 +232,7 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
         OFFSITE_STATUS=1
         echo "==> [SUKCES CHMURY] Backup ${BUNDLE_NAME} wysłany do ${S3_BUCKET}."
 
-        echo "--> [3a/3] Rotacja chmurowa R2: usuwanie kopii VPS starszych niż ${RETENTION_DAYS} dni..."
+        echo "--> [3a/3] Rotacja chmurowa R2: usuwanie kopii VPS starszych niż ${R2_RETENTION_DAYS} dni (ochrona limitu 10 GB Free Tier)..."
         docker run --rm \
             -e RCLONE_CONFIG_R2_TYPE=s3 \
             -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
@@ -240,11 +241,11 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
             -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
             -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
             rclone/rclone:latest \
-            delete --min-age "${RETENTION_DAYS}d" "r2:${S3_BUCKET}/backups/" >/dev/null 2>&1 || true
+            delete --min-age "${R2_RETENTION_DAYS}d" "r2:${S3_BUCKET}/backups/" >/dev/null 2>&1 || true
         
         send_notification \
             "✅ Sukces: Backup VPS w Chmurze" \
-            "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury (retencja: ${RETENTION_DAYS} dni)." \
+            "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury (retencja lokalna: ${RETENTION_DAYS}d, R2: ${R2_RETENTION_DAYS}d)." \
             "low" \
             "white_check_mark,cloud"
     else

@@ -196,6 +196,16 @@ else
     echo "Dostępny RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB - pomijanie tworzenia pliku SWAP."
 fi
 
+# Ograniczenie rozmiaru logów systemowych systemd-journald do 200 MB (ochrona dysku 96 GB)
+mkdir -p /etc/systemd/journald.conf.d
+cat << 'EOF' > /etc/systemd/journald.conf.d/size-limit.conf
+[Journal]
+SystemMaxUse=200M
+RuntimeMaxUse=50M
+MaxRetentionSec=14day
+EOF
+systemctl restart systemd-journald 2>/dev/null || true
+
 echo "======================================================================"
 echo ">> [SUKCES] Pełny hardening systemu zakończony pomyślnie."
 echo "======================================================================"

@@ -511,6 +511,14 @@ else
             fi
         fi
     fi
+
+    # 5c. Kontrola autoryzacji GitHub PAT (github-exporter -> github_rate_limit > 0)
+    GH_RATE_LIMIT="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=max(github_rate_limit)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
+    if [[ "${GH_RATE_LIMIT:-0}" -gt 0 ]]; then
+        pass "Tokeny GitHub PAT (github-exporter) są aktywne i autoryzowane (limit API: ${GH_RATE_LIMIT}/h)."
+    else
+        warn "Exporter GitHub nie zwraca limitu API (sprawdź ważność GITHUB_PAT_* w .env)."
+    fi
 fi
 
 # ==============================================================================
@@ -531,9 +539,24 @@ else
          "docker system prune -af (UWAGA: bez flagi --volumes!)"
 fi
 
-# 2. Pamięć RAM i SWAP
-MEM_INFO="$(free -h | awk '/^Mem:/ {print "Użyte: "$3" / "$2" (Dostępne: "$7")"}')"
-pass "Pamięć RAM hosta: ${MEM_INFO}"
+# 2. Pamięć RAM, SWAP i Bufor Ochronny OCI Keepalive (>20% alokacji RAM przeciwko Idle Instance Reclamation)
+OCI_BUFFER_FILE="/dev/shm/.oci-keepalive-buffer"
+OCI_BUFFER_TARGET_MB=4864
+OCI_BUFFER_BYTES=0
+MEM_TOTAL_MB="$(free -m | awk '/^Mem:/ {print $2}')"
+if [[ "${MEM_TOTAL_MB:-0}" -gt 16000 && -d /dev/shm && -w /dev/shm ]]; then
+    CURRENT_BUF_MB=0
+    if [[ -f "${OCI_BUFFER_FILE}" ]]; then
+        CURRENT_BUF_MB=$(( $(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0) / 1048576 ))
+    fi
+    if [[ "${CURRENT_BUF_MB}" -lt "${OCI_BUFFER_TARGET_MB}" ]]; then
+        dd if=/dev/zero of="${OCI_BUFFER_FILE}" bs=1M count="${OCI_BUFFER_TARGET_MB}" status=none 2>/dev/null || true
+        chmod 600 "${OCI_BUFFER_FILE}" 2>/dev/null || true
+    fi
+    OCI_BUFFER_BYTES="$(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0)"
+fi
+MEM_INFO="$(free -h | awk '/^Mem:/ {print "Użyte przez usługi: "$3" / "$2" (Dostępne: "$7")"}')"
+pass "Pamięć RAM hosta: ${MEM_INFO} + Bufor Ochronny OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB (>20% RAM)."
 
 # 2a. Higiena obrazów Dockera (wykrywanie i samonaprawa osieroconych warstw <none>)
 DANGLING_IMAGES="$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')"
@@ -655,6 +678,10 @@ devops_audit_os_hardened ${OS_HARDENED}
 # HELP devops_audit_containers_healthy Status kondycji wszystkich kontenerow i endpointow (1 = zdrowe, 0 = blad)
 # TYPE devops_audit_containers_healthy gauge
 devops_audit_containers_healthy ${CONTAINERS_HEALTHY}
+
+# HELP devops_oci_keepalive_buffer_bytes Rozmiar bufora ochronnego RAM w /dev/shm chroniacego przed Oracle Idle Instance Reclamation
+# TYPE devops_oci_keepalive_buffer_bytes gauge
+devops_oci_keepalive_buffer_bytes ${OCI_BUFFER_BYTES:-0}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true

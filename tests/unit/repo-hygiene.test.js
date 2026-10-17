@@ -410,13 +410,15 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const rulesYml = fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'rules', 'ai-router.yml'), 'utf-8');
     assert.match(rulesYml, /alert:\s*CloudflareTunnelDown/);
+    assert.match(rulesYml, /alert:\s*AIRouterModelDeprecated/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /devops_backup_verified/);
     assert.match(offsiteBackup, /devops_backup_sqlite_verified/);
     assert.match(offsiteBackup, /PRAGMA quick_check/);
     assert.match(offsiteBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
-    assert.match(offsiteBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
+    assert.match(offsiteBackup, /R2_RETENTION_DAYS="\$\{R2_RETENTION_DAYS:-14\}"/);
+    assert.match(offsiteBackup, /delete --min-age "\$\{R2_RETENTION_DAYS\}d"/);
     assert.match(offsiteBackup, /docker image prune -f/);
 
     const deployYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'deploy.yml'), 'utf-8');
@@ -425,14 +427,17 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const auditSh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'audit-server.sh'), 'utf-8');
     assert.match(auditSh, /docker image prune -f/);
+    assert.match(auditSh, /devops_oci_keepalive_buffer_bytes/);
+    assert.match(auditSh, /github_rate_limit/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);
     assert.match(lhBackup, /devops_backup_websites_db_verified/);
     assert.match(lhBackup, /LH_DB_NAMES/);
     assert.match(lhBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
+    assert.match(lhBackup, /R2_RETENTION_DAYS="\$\{R2_RETENTION_DAYS:-14\}"/);
     assert.match(lhBackup, /mirror --verbose --delete --no-perms/);
-    assert.match(lhBackup, /delete --min-age "\$\{RETENTION_DAYS\}d"/);
+    assert.match(lhBackup, /delete --min-age "\$\{R2_RETENTION_DAYS\}d"/);
 
     const setupAuditTimer = path.join(ROOT_DIR, 'scripts', 'setup-audit-timer.sh');
     assert.ok(fs.existsSync(setupAuditTimer), 'Brak scripts/setup-audit-timer.sh');

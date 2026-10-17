@@ -61,6 +61,14 @@ groups:
           summary: "Duzo blokad rate-limit (429) na AI Routerze"
           description: "{{ $value }} zablokowanych zapytan w 10 min - mozliwy abuse lub zbyt niski limit per IP."
 
+      - alert: AIRouterModelDeprecated
+        expr: increase(ai_router_model_attempts_total{result="not_found"}[1h]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Model AI {{ $labels.model }} zwraca HTTP 404 (wycofany przez dostawce)"
+          description: "Dostawca wycofal lub zmienil identyfikator modelu {{ $labels.model }} (not_found). Zaktualizuj kaskade w chat-router.php."
+
   - name: devops-infrastructure
     interval: 30s
     rules:
