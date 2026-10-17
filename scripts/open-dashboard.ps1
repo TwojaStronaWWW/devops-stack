@@ -35,10 +35,10 @@ function Test-PortOpen([string]$Address, [int]$Port) {
 
 Write-Host ">> [DevOps Launcher] Weryfikacja stanu bezpiecznego tunelu..." -ForegroundColor Cyan
 
-# Sprawdzenie czy port Grafany (3000) jest już otwarty lokalnie
-if (-not (Test-PortOpen "127.0.0.1" 3000)) {
+# Sprawdzenie czy porty Grafany (3000) i Uptime Kuma (3001) są już otwarte lokalnie
+if (-not (Test-PortOpen "127.0.0.1" 3000) -or -not (Test-PortOpen "127.0.0.1" 3001)) {
     Write-Host ">> Uruchamianie cichego tunelu SSH w tle do $HostIp..." -ForegroundColor Yellow
-    $sshArgs = "-N -o ExitOnForwardFailure=yes -L 3000:127.0.0.1:3000 -L 8888:127.0.0.1:8888 -L 9090:127.0.0.1:9090 -i `"$KeyPath`" $User@$HostIp"
+    $sshArgs = "-N -o ExitOnForwardFailure=yes -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 -L 8888:127.0.0.1:8888 -L 9090:127.0.0.1:9090 -i `"$KeyPath`" $User@$HostIp"
     Start-Process -FilePath "ssh" -ArgumentList $sshArgs -WindowStyle Hidden
     
     # Odczekaj na zainicjowanie połączenia (max 3 sekundy)
@@ -54,6 +54,6 @@ if (-not (Test-PortOpen "127.0.0.1" 3000)) {
 Write-Host ">> Otwieranie paneli monitoringu w przeglądarce..." -ForegroundColor Green
 Start-Process "http://localhost:3000/d/uptime-kuma-overview?refresh=5s"
 Start-Process "http://localhost:8888"
-Start-Process "https://monitoring.twojastronawww.pl"
+Start-Process "http://localhost:3001/dashboard"
 
 Write-Host ">> [OK] Panele zostały otwarte pomyślnie." -ForegroundColor Cyan

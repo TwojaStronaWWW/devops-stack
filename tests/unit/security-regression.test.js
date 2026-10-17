@@ -68,6 +68,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       // W docker-compose.yml jest 8 usług (uptime-kuma, prometheus, grafana, node-exporter, cadvisor, dozzle, github-exporter, ai-router)
       assert.ok(noNewPrivCount >= 8, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 8)`);
       assert.ok(memLimitCount >= 8, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 8)`);
+      assert.match(mainCompose, /referenced_memory/, 'cAdvisor powinien wyłączać metrykę referenced_memory (ochrona przed spamem smaps w logach)');
 
       const runnersCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
       const runnersNoNewPriv = (runnersCompose.match(/no-new-privileges:true/g) || []).length;
@@ -85,6 +86,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(hardenScript, /net\.ipv4\.tcp_syncookies\s*=\s*1/);
       assert.match(hardenScript, /net\.ipv4\.conf\.all\.rp_filter\s*=\s*1/);
       assert.match(hardenScript, /noexec,nosuid,nodev/);
+      assert.match(hardenScript, /SystemMaxUse=200M/);
     });
 
     it('składnia PHP w plikach źródłowych AI Routera powinna być wolna od błędów (php -l)', { skip: !hasPhpCli() }, () => {

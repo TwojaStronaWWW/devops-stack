@@ -434,6 +434,22 @@ else
     check_http "Dozzle Logs" "http://127.0.0.1:8888"
     check_http "AI Router"   "http://127.0.0.1:8085/health"
 
+    # Weryfikacja wymogu hasła w Uptime Kuma (ochrona przed disableAuth=true / auto-loginem z WAN)
+    KUMA_UNAUTH_CODE="$(curl -s -o /dev/null -w "%{http_code}" --max-time 4 "http://127.0.0.1:3001/metrics" 2>/dev/null || echo "000")"
+    if [[ "${KUMA_UNAUTH_CODE}" == "401" ]]; then
+        pass "Ochrona Uptime Kuma Auth: autoryzacja hasłem AKTYWNA (brak dostępu bez hasła -> HTTP 401)."
+    else
+        KUMA_DB="/var/lib/docker/volumes/uptime_kuma_data/_data/kuma.db"
+        if sudo test -f "${KUMA_DB}" && command -v python3 >/dev/null 2>&1; then
+            sudo python3 -c "import sqlite3; c=sqlite3.connect('${KUMA_DB}'); c.execute(\"UPDATE setting SET value='false' WHERE key='disableAuth'\"); c.commit()" 2>/dev/null || true
+            docker restart uptime-kuma >/dev/null 2>&1 || true
+            warn "Wykryto wyłączone hasło w Uptime Kuma (disableAuth=true) — automatycznie przywrócono wymóg hasła i zrestartowano kontener!"
+        else
+            fail "Uptime Kuma NIE WYMAGA HASŁA (HTTP ${KUMA_UNAUTH_CODE} na /metrics bez autoryzacji)!" \
+                 "Włącz uwierzytelnianie w ustawieniach Uptime Kuma (Security -> Enable Auth)"
+        fi
+    fi
+
     # Weryfikacja gotowości tunelu krawędziowego Cloudflare Zero Trust wewnątrz sieci Dockera
     if docker exec prometheus wget -q -T 4 --spider "http://cloudflared:2000/ready" >/dev/null 2>&1; then
         pass "Smoke Test Tunelu [cloudflared]: http://cloudflared:2000/ready -> Połączenie QUIC aktywne (READY)"

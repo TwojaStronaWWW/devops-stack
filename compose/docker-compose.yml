@@ -192,7 +192,7 @@ services:
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=15s"
-      - "--disable_metrics=disk,diskIO,tcp,udp,percpu,sched,process"
+      - "--disable_metrics=disk,diskIO,tcp,udp,percpu,sched,process,referenced_memory"
     deploy:
       resources:
         limits:
