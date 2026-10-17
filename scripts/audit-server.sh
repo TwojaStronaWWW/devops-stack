@@ -760,14 +760,133 @@ if [[ -f "${ENV_FILE}" ]]; then
         if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${PL_HOUR}" == "08" && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
             echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
             F2B_BANNED="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}' || echo '0')"
+
+            # Zbieranie Głębokiego Rentgena (Deep X-Ray) dla modelu Claude Sonnet 4.6
+            ANTHROPIC_KEY="$(grep -E '^ANTHROPIC_API_KEY=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+            AI_AUDIT_INSIGHT=""
+            if [[ -n "${ANTHROPIC_KEY}" ]] && command -v python3 >/dev/null 2>&1; then
+                XRAY_FILE="/var/tmp/devops-xray.txt"
+                {
+                    echo "=== WYNIK SKRYPTU AUDYTU ==="
+                    echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL"
+                    echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
+                    echo "Backupy: VPS ${B_AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Fail2ban zbanowane IP: ${F2B_BANNED:-0}"
+                    if [[ -n "${HINTS_SUMMARY}" ]]; then
+                        echo "Wykryte wskazowki: ${HINTS_SUMMARY}"
+                    fi
+                    echo "=== ROZMIARY LOGOW KONTENEROW (TOP 5) ==="
+                    sudo sh -c 'du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -hr | head -n 5' || true
+                    echo "=== USTAWIENIA BEZPIECZENSTWA UPTIME KUMA (kuma.db) ==="
+                    sudo python3 -c "import sqlite3; c=sqlite3.connect('/var/lib/docker/volumes/uptime_kuma_data/_data/kuma.db'); print(c.execute(\"SELECT key, value FROM setting WHERE key IN ('disableAuth','tlsExpiryNotifyDays','keepDataPeriodDays')\").fetchall())" 2>/dev/null || true
+                    echo "=== REGULY INGRESS CLOUDFLARED ==="
+                    docker logs cloudflared 2>&1 | grep -i "Updated to new configuration" | tail -n 1 || true
+                    echo "=== OSTATNIE LOGI KONTENEROW (OSTRZEZENIA I BLEDY) ==="
+                    for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+                        echo "--- [${cname}] ---"
+                        docker logs --tail 6 "${cname}" 2>&1 | tr -d '\000' | cut -c 1-240 || true
+                    done
+                    echo "=== BLEDY SYSTEMOWE (journalctl 24h) ==="
+                    sudo journalctl -p err..emerg --since "24 hours ago" --no-pager 2>/dev/null | tail -n 10 || true
+                } > "${XRAY_FILE}" 2>/dev/null
+
+                AI_AUDIT_INSIGHT="$(sudo ANTHROPIC_KEY="${ANTHROPIC_KEY}" XRAY_FILE="${XRAY_FILE}" python3 - << 'PYEOF' 2>/dev/null || true
+import json, os, urllib.request
+
+key = os.environ.get("ANTHROPIC_KEY", "")
+xray_path = os.environ.get("XRAY_FILE", "")
+budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
+
+with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
+    xray_text = f.read()[:12000]
+
+sys_prompt = (
+    "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
+    "Przeanalizuj poranny Rentgen serwera (logi kontenerów, rozmiary logów, ustawienia bazy Uptime Kuma, reguły tunelu Cloudflare, błędy journalctl). "
+    "Napisz po polsku bardzo zwięzłą diagnozę (maksymalnie 3 krótkie wypunktowania, łącznie do 380 znaków): "
+    "1) Czy w logach kontenerów lub systemie widać jakiekolwiek ciche błędy/anomalie, "
+    "2) Stan ochrony Zero Trust i backupów, "
+    "3) Ewentualna rekomendacja (lub potwierdzenie 100% czystości)."
+)
+
+payload = {
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 260,
+    "system": [{"type": "text", "text": sys_prompt, "cache_control": {"type": "ephemeral"}}],
+    "messages": [{"role": "user", "content": xray_text}]
+}
+
+req = urllib.request.Request(
+    "https://api.anthropic.com/v1/messages",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    },
+    method="POST"
+)
+
+with urllib.request.urlopen(req, timeout=25) as resp:
+    data = json.loads(resp.read().decode("utf-8"))
+
+answer = ""
+for block in data.get("content", []):
+    if block.get("type") == "text":
+        answer += block.get("text", "").strip()
+
+usage = data.get("usage", {})
+in_tok = int(usage.get("input_tokens", 0))
+out_tok = int(usage.get("output_tokens", 0))
+cache_w = int(usage.get("cache_creation_input_tokens", 0))
+cache_r = int(usage.get("cache_read_input_tokens", 0))
+total_tok_today = in_tok + out_tok + cache_w + cache_r
+
+# Cennik Claude Sonnet 4.6: $3/1M input, $15/1M output, $3.75/1M cache_write, $0.30/1M cache_read
+cost_usd = (in_tok * 3.0 + out_tok * 15.0 + cache_w * 3.75 + cache_r * 0.30) / 1_000_000.0
+
+budget = {"initial_usd": 5.00, "spent_usd": 0.0, "total_tokens": 0, "runs": 0}
+if os.path.exists(budget_path):
+    try:
+        with open(budget_path, "r", encoding="utf-8") as bf:
+            budget.update(json.load(bf))
+    except Exception:
+        pass
+
+budget["spent_usd"] = round(float(budget.get("spent_usd", 0.0)) + cost_usd, 6)
+budget["total_tokens"] = int(budget.get("total_tokens", 0)) + total_tok_today
+budget["runs"] = int(budget.get("runs", 0)) + 1
+rem_usd = max(0.0, round(float(budget["initial_usd"]) - budget["spent_usd"], 4))
+avg_cost = budget["spent_usd"] / max(1, budget["runs"])
+est_days = int(rem_usd / avg_cost) if avg_cost > 0 else 999
+
+try:
+    os.makedirs(os.path.dirname(budget_path), exist_ok=True)
+    with open(budget_path, "w", encoding="utf-8") as bf:
+        json.dump(budget, bf, indent=2)
+except Exception:
+    pass
+
+print(f"🤖 Diagnoza Claude Sonnet 4.6:\n{answer}\n\n💰 Budżet API Anthropic ($5.00):\n• Ten audyt: {total_tok_today} tok. (${cost_usd:.4f})\n• Wydano łącznie: ${budget['spent_usd']:.4f} ({budget['total_tokens']} tok.)\n• Pozostało: ${rem_usd:.4f} (wystarczy na ~{est_days} porannych audytów)")
+PYEOF
+)"
+                rm -f "${XRAY_FILE}" 2>/dev/null || true
+            fi
+
             MORNING_BODY="✅ Wynik: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${B_AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
 🛡️ Ochrona: Uptime Kuma Auth OK (401) | Bufor OCI $(( OCI_BUFFER_BYTES / 1048576 )) MiB | Fail2ban: ${F2B_BANNED:-0} zbanowanych IP${HINTS_SUMMARY}"
+            if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
+                MORNING_BODY="${MORNING_BODY}
+
+${AI_AUDIT_INSIGHT}"
+                printf "\n${C_CYAN}%s${C_RESET}\n" "${AI_AUDIT_INSIGHT}"
+            fi
+
             curl -s --max-time 5 \
-                -H "Title: Poranny Audyt VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL" \
+                -H "Title: Poranny Audyt AI VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL" \
                 -H "Priority: low" \
-                -H "Tags: sunny,white_check_mark" \
+                -H "Tags: sunny,robot" \
                 -d "${MORNING_BODY}" \
                 "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
         fi
