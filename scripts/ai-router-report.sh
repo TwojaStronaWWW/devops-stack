@@ -56,7 +56,7 @@ done
 # ------------------------------------------------------------------------------
 hr "3. KASKADA MODELI (kolejnosc prob) I STAN"
 printf '  %-3s %-34s %-10s %-11s %-9s %-8s %-8s %s\n' "#" "MODEL" "PROVIDER" "STAN" "COOLDOWN" "DZIS" "OK DZIS" "LIMIT/DOBA"
-met ai_router_model_info | sort -t'"' -k6 | while read -r line; do
+met ai_router_model_info | sort -t'"' -k6n | while read -r line; do
   m="$(printf '%s' "$line" | lbl model)"; p="$(printf '%s' "$line" | lbl provider)"; pos="$(printf '%s' "$line" | lbl position)"
   val() { met "$1" | grep "model=\"$m\"" | head -1 | awk '{print $NF}' || true; }
   susp="$(val ai_router_model_suspended)"; cd="$(val ai_router_model_cooldown_remaining_seconds)"
