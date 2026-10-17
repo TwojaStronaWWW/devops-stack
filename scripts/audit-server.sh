@@ -770,7 +770,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "=== WYNIK SKRYPTU AUDYTU ==="
                     echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL"
                     echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
-                    echo "Backupy: VPS ${B_AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Fail2ban zbanowane IP: ${F2B_BANNED:-0}"
+                    echo "Backupy: VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Fail2ban zbanowane IP: ${F2B_BANNED:-0}"
                     if [[ -n "${HINTS_SUMMARY}" ]]; then
                         echo "Wykryte wskazowki: ${HINTS_SUMMARY}"
                     fi
@@ -873,7 +873,7 @@ PYEOF
             fi
 
             MORNING_BODY="✅ Wynik: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
-💾 Backupy (03:00): VPS ${B_AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
+💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
 🛡️ Ochrona: Uptime Kuma Auth OK (401) | Bufor OCI $(( OCI_BUFFER_BYTES / 1048576 )) MiB | Fail2ban: ${F2B_BANNED:-0} zbanowanych IP${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
