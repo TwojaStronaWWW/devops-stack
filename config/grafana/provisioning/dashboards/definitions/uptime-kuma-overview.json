@@ -354,7 +354,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
+        "w": 3,
         "x": 0,
         "y": 16
       },
@@ -386,7 +386,7 @@
           "refId": "A"
         }
       ],
-      "title": "Obciążenie Procesora (CPU)",
+      "title": "Procesor (CPU)",
       "type": "gauge"
     },
     {
@@ -399,7 +399,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 3,
+          "decimals": 1,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -425,14 +425,14 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 4,
+        "w": 6,
+        "x": 3,
         "y": 16
       },
       "id": 5,
-      "description": "Łączna alokacja RAM widoczna dla Oracle Cloud (~26% z 24 GB): ~6% to realne zużycie usług, a ~20% (4.75 GiB w /dev/shm) to celowy Bufor Ochronny OCI Keepalive chroniący darmową maszynę ARM64 przed wyłączeniem za bezczynność (<20% RAM).",
+      "description": "Lewy zegar pokazuje realne zużycie pamięci przez usługi (~5.6%). Prawy zegar pokazuje wartość sztucznie zawyżoną o +20.3% (4.75 GiB w /dev/shm) dla Oracle Cloud (~25.9%), aby chronić darmowy serwer ARM64 przed wyłączeniem za bezczynność (<20% RAM).",
       "options": {
-        "orientation": "auto",
+        "orientation": "vertical",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -451,14 +451,26 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "expr": "clamp_min(((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes - (devops_oci_keepalive_buffer_bytes or vector(0))) / node_memory_MemTotal_bytes) * 100, 0)",
           "instant": true,
-          "legendFormat": "w tym ~20% Bufor Ochronny OCI",
+          "legendFormat": "Realny RAM usług",
           "range": false,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "instant": true,
+          "legendFormat": "Sztuczny dla OCI (+20%)",
+          "range": false,
+          "refId": "B"
         }
       ],
-      "title": "Pamięć RAM (w tym ~20% Bufor Ochronny OCI)",
+      "title": "RAM: Sztucznie +20% (Ochrona OCI)",
       "type": "gauge"
     },
     {
@@ -471,7 +483,7 @@
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 3,
+          "decimals": 1,
           "max": 100,
           "min": 0,
           "thresholds": {
@@ -497,8 +509,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 8,
+        "w": 3,
+        "x": 9,
         "y": 16
       },
       "id": 6,
@@ -529,7 +541,7 @@
           "refId": "A"
         }
       ],
-      "title": "Zapełnienie Dysku SSD (z 96 GB)",
+      "title": "Dysk SSD (96 GB)",
       "type": "gauge"
     },
     {
@@ -537,7 +549,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Rozbicie pamięci RAM: Realne zużycie usług (~6%) vs 🛡️ Bufor Ochronny OCI Keepalive (~20% w /dev/shm), które razem utrzymują alokację widoczną dla Oracle Cloud na poziomie ~26% (ochrona przed Idle Instance Reclamation <20%).",
+      "description": "Rozbicie pamięci RAM: Realne zużycie usług (~5.6%) vs 🛡️ Sztucznie zawyżony Bufor Ochronny OCI (+20.3% w /dev/shm), które razem utrzymują alokację widoczną dla Oracle Cloud na poziomie ~25.9% (ochrona przed Idle Instance Reclamation <20%).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -636,7 +648,7 @@
           "editorMode": "code",
           "expr": "clamp_min(((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes - (devops_oci_keepalive_buffer_bytes or vector(0))) / node_memory_MemTotal_bytes) * 100, 0)",
           "instant": false,
-          "legendFormat": "Realne zużycie RAM usług (%) — bez bufora",
+          "legendFormat": "Realny RAM usług (%) — bez bufora",
           "range": true,
           "refId": "B"
         },
@@ -648,7 +660,7 @@
           "editorMode": "code",
           "expr": "((devops_oci_keepalive_buffer_bytes or vector(0)) / node_memory_MemTotal_bytes) * 100",
           "instant": false,
-          "legendFormat": "🛡️ Bufor Ochronny OCI Keepalive (%) — ochrona >20%",
+          "legendFormat": "🛡️ Sztucznie zawyżony Bufor OCI (+20.3%)",
           "range": true,
           "refId": "C"
         },
@@ -665,7 +677,7 @@
           "refId": "D"
         }
       ],
-      "title": "Obciążenie Hosta VPS (CPU, Realny RAM Usług & Bufor Ochronny OCI)",
+      "title": "RAM (Realny vs Sztuczny +20% OCI) & CPU",
       "type": "timeseries"
     },
     {
