@@ -161,9 +161,15 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: 64M
+          memory: 128M
         reservations:
-          memory: 16M
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9100/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================================================
   # cAdvisor: Monitorowanie zasobów kontenerów Dockera (CPU, RAM, Sieć)
@@ -200,6 +206,12 @@ services:
           memory: 128M
         reservations:
           memory: 32M
+    healthcheck:
+      test: ["CMD", "/usr/bin/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================================================
   # Dozzle: Ultralekki podgląd logów kontenerów w czasie rzeczywistym
@@ -227,9 +239,9 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: 64M
+          memory: 128M
         reservations:
-          memory: 16M
+          memory: 32M
     healthcheck:
       test: ["CMD", "/dozzle", "healthcheck"]
       interval: 30s
@@ -259,9 +271,15 @@ services:
       resources:
         limits:
           cpus: "0.2"
-          memory: 64M
+          memory: 128M
         reservations:
-          memory: 16M
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "/usr/bin/github_exporter", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # ============================================================================
   # AI Router: Scentralizowana bramka AI (PHP 8.3 Alpine, RAG per strona, Zero-Bloat)

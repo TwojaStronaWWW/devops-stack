@@ -23,6 +23,12 @@ services:
           memory: 256M
         reservations:
           memory: 64M
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:2000", "ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ============================================================================
   # GitHub Actions Self-Hosted Runner (opcjonalny, izolowany runner wdrożeniowy)

@@ -387,6 +387,15 @@ else
             C_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CNAME}" 2>/dev/null || echo 'none')"
             C_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "${CNAME}" 2>/dev/null || echo '0')"
 
+            # Jeśli kontener został świeżo utworzony podczas deployu i jest w fazie 'starting', poczekaj na pierwszy wynik healthchecka
+            if [[ "${C_STATE}" == "running" && "${C_HEALTH}" == "starting" ]]; then
+                for _wait_hc in {1..18}; do
+                    sleep 2
+                    C_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CNAME}" 2>/dev/null || echo 'none')"
+                    [[ "${C_HEALTH}" != "starting" ]] && break
+                done
+            fi
+
             if [[ "${C_STATE}" == "running" ]]; then
                 if [[ "${C_HEALTH}" == "healthy" || "${C_HEALTH}" == "none" ]]; then
                     if [[ "${C_RESTARTS}" -gt 3 ]]; then

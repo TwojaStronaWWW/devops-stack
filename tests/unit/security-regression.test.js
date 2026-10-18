@@ -60,19 +60,27 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       }
     });
 
-    it('wszystkie kontenery w docker-compose.yml, extensions.yml i runners.yml powinny wymuszać no-new-privileges:true oraz limity pamięci RAM', () => {
+    it('wszystkie kontenery w docker-compose.yml, extensions.yml i runners.yml powinny wymuszać no-new-privileges:true, limity pamięci RAM oraz zdefiniowany healthcheck', () => {
       const mainCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'docker-compose.yml'), 'utf-8');
       const noNewPrivCount = (mainCompose.match(/no-new-privileges:true/g) || []).length;
       const memLimitCount = (mainCompose.match(/memory:\s*\d+[MG]/g) || []).length;
+      const mainHealthCount = (mainCompose.match(/^\s*healthcheck:\s*$/gm) || []).length;
 
       // W docker-compose.yml jest 8 usług (uptime-kuma, prometheus, grafana, node-exporter, cadvisor, dozzle, github-exporter, ai-router)
       assert.ok(noNewPrivCount >= 8, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 8)`);
       assert.ok(memLimitCount >= 8, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 8)`);
+      assert.strictEqual(mainHealthCount, 8, `Wszystkie 8 usług w docker-compose.yml musi posiadać zdefiniowany healthcheck (znaleziono: ${mainHealthCount})`);
       assert.match(mainCompose, /referenced_memory/, 'cAdvisor powinien wyłączać metrykę referenced_memory (ochrona przed spamem smaps w logach)');
+
+      const extCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'extensions.yml'), 'utf-8');
+      const extHealthCount = (extCompose.match(/^\s*healthcheck:\s*$/gm) || []).length;
+      assert.strictEqual(extHealthCount, 1, `Usługa cloudflared w compose/extensions.yml musi posiadać zdefiniowany healthcheck (znaleziono: ${extHealthCount})`);
 
       const runnersCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
       const runnersNoNewPriv = (runnersCompose.match(/no-new-privileges:true/g) || []).length;
+      const runnersHealthCount = (runnersCompose.match(/^\s*healthcheck:\s*$/gm) || []).length;
       assert.ok(runnersNoNewPriv >= 4, `Brak deklaracji no-new-privileges:true dla wszystkich runnerów w compose/runners.yml (${runnersNoNewPriv} < 4)`);
+      assert.strictEqual(runnersHealthCount, 4, `Wszystkie 4 definicje runnerów w compose/runners.yml muszą posiadać zdefiniowany healthcheck (znaleziono: ${runnersHealthCount})`);
     });
 
     it('skrypt 01-harden-os.sh powinien wymuszać twardą politykę SSH, UFW, Fail2ban, wyłączenie rpcbind oraz ochronę jądra (sysctl / noexec)', () => {
