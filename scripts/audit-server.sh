@@ -789,10 +789,17 @@ if [[ -f "${ENV_FILE}" ]]; then
                     sudo journalctl -p err..emerg --since "24 hours ago" --no-pager 2>/dev/null | tail -n 10 || true
                 } > "${XRAY_FILE}" 2>/dev/null
 
-                AI_AUDIT_INSIGHT="$(sudo ANTHROPIC_KEY="${ANTHROPIC_KEY}" XRAY_FILE="${XRAY_FILE}" python3 - << 'PYEOF' 2>/dev/null || true
+                AI_AUDIT_INSIGHT="$(sudo ENV_FILE="${ENV_FILE}" XRAY_FILE="${XRAY_FILE}" python3 - << 'PYEOF' 2>/dev/null || true
 import json, os, urllib.request
 
-key = os.environ.get("ANTHROPIC_KEY", "")
+env_path = os.environ.get("ENV_FILE", "/opt/devops-stack/.env")
+key = ""
+if os.path.exists(env_path):
+    with open(env_path, "r", encoding="utf-8", errors="ignore") as ef:
+        for line in ef:
+            if line.startswith("ANTHROPIC_API_KEY="):
+                key = line.split("=", 1)[1].strip().strip("\"'")
+
 xray_path = os.environ.get("XRAY_FILE", "")
 budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
 
@@ -802,7 +809,7 @@ with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
 sys_prompt = (
     "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
     "Przeanalizuj poranny Rentgen serwera (logi kontenerów, rozmiary logów, ustawienia bazy Uptime Kuma, reguły tunelu Cloudflare, błędy journalctl). "
-    "Napisz po polsku bardzo zwięzłą diagnozę (maksymalnie 3 krótkie wypunktowania, łącznie do 380 znaków): "
+    "Napisz po polsku bardzo zwięzłą, kompletną diagnozę (maksymalnie 3 krótkie wypunktowania, łącznie do 450 znaków, nigdy nie ucinaj zdań): "
     "1) Czy w logach kontenerów lub systemie widać jakiekolwiek ciche błędy/anomalie, "
     "2) Stan ochrony Zero Trust i backupów, "
     "3) Ewentualna rekomendacja (lub potwierdzenie 100% czystości)."
@@ -810,7 +817,7 @@ sys_prompt = (
 
 payload = {
     "model": "claude-sonnet-4-6",
-    "max_tokens": 260,
+    "max_tokens": 400,
     "system": [{"type": "text", "text": sys_prompt, "cache_control": {"type": "ephemeral"}}],
     "messages": [{"role": "user", "content": xray_text}]
 }
