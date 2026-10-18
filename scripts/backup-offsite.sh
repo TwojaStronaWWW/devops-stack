@@ -70,6 +70,7 @@ OFFSITE_STATUS=0
 BACKUP_STATUS=0
 BACKUP_VERIFIED=0
 SQLITE_VERIFIED=1
+RESTORE_DRILL_VERIFIED=0
 
 # Konfiguracja eksportu metryk dla Prometheusa / Grafany
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
@@ -100,6 +101,10 @@ devops_backup_verified ${BACKUP_VERIFIED}
 # HELP devops_backup_sqlite_verified Status weryfikacji spojnosci baz SQLite PRAGMA quick_check (1 = poprawne, 0 = blad)
 # TYPE devops_backup_sqlite_verified gauge
 devops_backup_sqlite_verified ${SQLITE_VERIFIED}
+
+# HELP devops_backup_restore_drill_verified Status pelnego testu odtworzeniowego Restore Drill --verify-only (1 = sukces, 0 = blad)
+# TYPE devops_backup_restore_drill_verified gauge
+devops_backup_restore_drill_verified ${RESTORE_DRILL_VERIFIED}
 
 # HELP devops_backup_size_bytes Rozmiar archiwum zbiorczego kopii zapasowej w bajtach
 # TYPE devops_backup_size_bytes gauge
@@ -211,6 +216,16 @@ fi
 chmod 600 "${BUNDLE_PATH}" 2>/dev/null || true
 BUNDLE_SIZE="$(du -h "${BUNDLE_PATH}" | awk '{print $1}')"
 BUNDLE_SIZE_BYTES="$(wc -c < "${BUNDLE_PATH}" | tr -d ' ')"
+
+echo "--> [2c/3] Automatyczny Restore Drill (--verify-only): próbne odszyfrowanie AES-256 i test odtworzeniowy..."
+if bash "${SCRIPT_DIR}/restore-backup.sh" --verify-only "${BUNDLE_PATH}" >/dev/null 2>&1; then
+    RESTORE_DRILL_VERIFIED=1
+    echo "--> [OK DRILL] Automatyczny test odtworzeniowy (--verify-only) zakończony w 100% pomyślnie."
+else
+    RESTORE_DRILL_VERIFIED=0
+    echo "--> [OSTRZEŻENIE DRILL] Test odtworzeniowy (--verify-only) zgłosił błąd!"
+fi
+
 BACKUP_STATUS=1
 
 # Wysyłka offsite do chmury + rotacja chmurowa (RETENTION_DAYS), jeśli skonfigurowano klucze S3 / R2 / Oracle

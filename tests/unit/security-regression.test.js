@@ -413,10 +413,25 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
         });
 
         assert.strictEqual(res.status, 403, `Atak "${payloadQ}" powinien zostać zablokowany kodem 403 przez WAF`);
+        assert.ok(res.headers.get('retry-after'), 'Brak nagłówka Retry-After przy blokadzie WAF');
         const body = await res.json();
         assert.strictEqual(body.success, false);
         assert.match(body.error, /WAF|Prompt Injection/);
       }
+
+      // Weryfikacja 15-minutowego Penalty Box (Auto-Ban): zbanowane IP (198.51.100.140) musi zostać
+      // natychmiast odrzucone na bramce nawet przy pozornie zwykłym pytaniu
+      const penaltyRes = await fetch(`${baseUrl}/chat-router.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': '198.51.100.140',
+        },
+        body: JSON.stringify({ site_id: 'twojastronawww', question: 'Ile kosztuje zwykła strona?' }),
+      });
+      assert.strictEqual(penaltyRes.status, 403, 'Zbanowane IP powinno być w 15-minutowym Penalty Box');
+      const penaltyBody = await penaltyRes.json();
+      assert.match(penaltyBody.error, /Penalty Box/);
 
       await new Promise((r) => setTimeout(r, 40));
       const metricsRes = await fetch(`${baseUrl}/metrics`);

@@ -218,6 +218,30 @@ if (!is_dir($storageDir)) {
     @mkdir($storageDir, 0755, true);
 }
 
+/**
+ * Nakłada tymczasową blokadę (Penalty Box) na adres IP agresora w pliku rate-limit
+ */
+function banClientIp(string $rateFile, int $seconds, string $reason): void {
+    $fp = @fopen($rateFile, 'c+');
+    if ($fp && flock($fp, LOCK_EX)) {
+        $content = stream_get_contents($fp);
+        $data = $content ? json_decode($content, true) : [];
+        if (!is_array($data)) {
+            $data = [];
+        }
+        $data['blocked_until'] = time() + $seconds;
+        $data['ban_reason'] = $reason;
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($data));
+        fflush($fp);
+        flock($fp, LOCK_UN);
+    }
+    if ($fp) {
+        fclose($fp);
+    }
+}
+
 // Unikalny plik per IP zabezpieczający przed kolizjami i race conditions
 $rateFile = $storageDir . '/' . hash('sha256', $clientIp) . '.json';
 $fp = @fopen($rateFile, 'c+');
@@ -226,15 +250,59 @@ if ($fp) {
     if (flock($fp, LOCK_EX)) {
         $content = stream_get_contents($fp);
         $data = $content ? json_decode($content, true) : null;
+        if (!is_array($data)) {
+            $data = [];
+        }
         $now = time();
+
+        // Sprawdzenie czy IP znajduje się w 15-minutowym Penalty Box (Auto-Ban po ataku WAF lub floodzie)
+        $blockedUntil = (int)($data['blocked_until'] ?? 0);
+        if ($blockedUntil > $now) {
+            $retryAfter = $blockedUntil - $now;
+            $banReason = (string)($data['ban_reason'] ?? 'security_penalty_box');
+            flock($fp, LOCK_UN);
+            fclose($fp);
+
+            header("Retry-After: {$retryAfter}");
+            if ($banReason === 'rate_limit_abuse') {
+                http_response_code(429);
+                echo json_encode([
+                    'success'     => false,
+                    'error'       => 'Adres IP tymczasowo zablokowany (Penalty Box 15 min) z powodu wielokrotnego przekroczenia limitu zapytań.',
+                    'retry_after' => $retryAfter
+                ], JSON_UNESCAPED_UNICODE);
+            } else {
+                $aiSecurityBlocked = true;
+                http_response_code(403);
+                echo json_encode([
+                    'success'     => false,
+                    'error'       => 'Forbidden: Adres IP zablokowany na 15 minut (Penalty Box) po wykryciu próby ataku WAF / Prompt Injection.',
+                    'retry_after' => $retryAfter
+                ], JSON_UNESCAPED_UNICODE);
+            }
+            exit;
+        }
 
         $timestamps = is_array($data['timestamps'] ?? null) ? $data['timestamps'] : [];
         // Filtrujemy tylko zapytania z ostatnich 60 sekund
         $timestamps = array_values(array_filter($timestamps, fn($ts) => is_int($ts) && $ts > ($now - $rateLimitWindow)));
 
         if (count($timestamps) >= $rateLimitMax) {
-            $oldest = $timestamps[0];
-            $retryAfter = max(1, $rateLimitWindow - ($now - $oldest));
+            $violations = (int)($data['violations'] ?? 0) + 1;
+            $data['timestamps'] = $timestamps;
+            $data['violations'] = $violations;
+            if ($violations >= 3) {
+                $data['blocked_until'] = $now + 900;
+                $data['ban_reason'] = 'rate_limit_abuse';
+                $retryAfter = 900;
+            } else {
+                $oldest = $timestamps[0];
+                $retryAfter = max(1, $rateLimitWindow - ($now - $oldest));
+            }
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, json_encode($data));
+            fflush($fp);
             flock($fp, LOCK_UN);
             fclose($fp);
 
@@ -250,9 +318,10 @@ if ($fp) {
 
         // Rejestrujemy bieżące zapytanie
         $timestamps[] = $now;
+        $data['timestamps'] = $timestamps;
         ftruncate($fp, 0);
         rewind($fp);
-        fwrite($fp, json_encode(['timestamps' => $timestamps]));
+        fwrite($fp, json_encode($data));
         fflush($fp);
         flock($fp, LOCK_UN);
     }
@@ -345,11 +414,14 @@ $exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover
 if (preg_match($promptInjectionPattern, $qLower) || preg_match($exploitPayloadPattern, $qLower)) {
     $aiSecurityBlocked = true;
     $wafReason = preg_match($promptInjectionPattern, $qLower) ? 'prompt_injection' : 'exploit_payload';
-    aiLog('security_blocked', ['site' => $aiSite, 'reason' => $wafReason]);
+    banClientIp($rateFile, 900, $wafReason);
+    aiLog('security_blocked', ['site' => $aiSite, 'reason' => $wafReason, 'penalty_box_sec' => 900]);
+    header('Retry-After: 900');
     http_response_code(403);
     echo json_encode([
-        'success' => false,
-        'error'   => 'Forbidden: Żądanie zostało zablokowane przez filtr bezpieczeństwa (WAF / Prompt Injection Guard).'
+        'success'     => false,
+        'error'       => 'Forbidden: Żądanie zostało zablokowane przez filtr bezpieczeństwa (WAF / Prompt Injection Guard). Adres IP umieszczony w Penalty Box (15 min).',
+        'retry_after' => 900
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

@@ -322,6 +322,43 @@ else
          "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
 fi
 
+# 4b. Kontrola Integralności Kluczy SSH i Wskaźników Włamania (IoC - Indicators of Compromise)
+IOC_CLEAN=1
+NON_ROOT_UID0="$(awk -F: '($3 == 0 && $1 != "root") {print $1}' /etc/passwd 2>/dev/null || true)"
+if [[ -z "${NON_ROOT_UID0}" ]]; then
+    pass "Integralność kont (IoC): Tylko konto 'root' posiada uprawnienia superużytkownika (UID 0)."
+else
+    IOC_CLEAN=0
+    OS_HARDENED=0
+    fail "ALARM WŁAMANIA (IoC): Wykryto obce konto z uprawnieniami UID 0: ${NON_ROOT_UID0}!" \
+         "Natychmiast zbadaj /etc/passwd i zablokuj nieautoryzowane konto"
+fi
+
+if [[ -f /home/ubuntu/.ssh/authorized_keys ]]; then
+    AK_PERMS="$(stat -c '%a' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || echo 'unknown')"
+    AK_COUNT="$(grep -cE '^ssh-(ed25519|rsa|ecdsa)' /home/ubuntu/.ssh/authorized_keys 2>/dev/null || true)"
+    AK_COUNT="${AK_COUNT:-0}"
+    if [[ "${AK_PERMS}" == "600" && "${AK_COUNT}" -le 2 && "${AK_COUNT}" -ge 1 ]]; then
+        pass "Integralność kluczy SSH (IoC): /home/ubuntu/.ssh/authorized_keys posiada chmod 600 oraz ${AK_COUNT} autoryzowane klucze Ed25519."
+    else
+        IOC_CLEAN=0
+        OS_HARDENED=0
+        fail "ALARM INTEGRALNOŚCI SSH (IoC): Nieprawidłowe uprawnienia (${AK_PERMS}) lub liczba kluczy (${AK_COUNT}) w /home/ubuntu/.ssh/authorized_keys!" \
+             "Zweryfikuj zawartość /home/ubuntu/.ssh/authorized_keys oraz nadaj chmod 600"
+    fi
+fi
+
+SSH_ANOMALY_LOGINS="$(sudo -n journalctl -u ssh --since '24 hours ago' --no-pager 2>/dev/null | grep -cE 'Accepted password|Accepted .* for root' || true)"
+SSH_ANOMALY_LOGINS="${SSH_ANOMALY_LOGINS:-0}"
+if [[ "${SSH_ANOMALY_LOGINS}" -eq 0 ]]; then
+    pass "Dziennik autoryzacji SSH (IoC): 0 logowań hasłem i 0 logowań na konto root (100% połączeń kluczem Ed25519)."
+else
+    IOC_CLEAN=0
+    OS_HARDENED=0
+    fail "ALARM WŁAMANIA SSH (IoC): Wykryto ${SSH_ANOMALY_LOGINS} podejrzanych logowań (hasłem lub na konto root) w ostatnich 24h!" \
+         "Sprawdź: sudo journalctl -u ssh | grep Accepted"
+fi
+
 # 5. Kernel sysctl & /dev/shm
 SYNC_COOKIES="$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo '0')"
 RP_FILTER="$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo '0')"
@@ -742,6 +779,10 @@ devops_fail2ban_banned_total ${F2B_BANNED_TOTAL:-0}
 # HELP devops_fail2ban_banned_current Liczba aktualnie aktywnych blokad IP w Fail2Ban
 # TYPE devops_fail2ban_banned_current gauge
 devops_fail2ban_banned_current ${F2B_BANNED_CURRENT:-0}
+
+# HELP devops_security_ioc_clean Status braku oznak wlamania IoC (1 = czysto, 0 = wykryto naruszenie integralnosci kluczy/kont)
+# TYPE devops_security_ioc_clean gauge
+devops_security_ioc_clean ${IOC_CLEAN:-1}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
