@@ -73,17 +73,19 @@ if ($requestUri === '/health') {
 // -----------------------------------------------------------------------------
 // 1b. TELEMETRIA ŻĄDAŃ CZATU (jedno miejsce zapisu wyniku niezależnie od ścieżki exit)
 // -----------------------------------------------------------------------------
-$aiStart    = microtime(true);
-$aiSite     = 'unknown';
-$usedModel  = null;
-$aiDepth    = null;
-$aiAttempts = 0;
-register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, $aiStart): void {
+$aiStart           = microtime(true);
+$aiSite            = 'unknown';
+$usedModel         = null;
+$aiDepth           = null;
+$aiAttempts        = 0;
+$aiSecurityBlocked = false;
+register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, &$aiSecurityBlocked, $aiStart): void {
     $code = http_response_code() ?: 200;
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204) {
         return; // preflight CORS nie jest zapytaniem czatu
     }
     $outcome = match (true) {
+        $aiSecurityBlocked => 'security_blocked',
         $code === 200 => 'success',
         $code === 400 => 'bad_request',
         $code === 403 => 'cors_forbidden',
@@ -331,6 +333,23 @@ if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
     echo json_encode([
         'success' => false,
         'error'   => 'Bad Request: Treść pytania musi zawierać od 2 do 2000 znaków.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// WAF / Prompt Injection & Exploit Guard (< 0.5 ms, ochrona tokenów API i systemu przed atakami)
+$qLower = mb_strtolower($question);
+$promptInjectionPattern = '/(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)|zignoruj\s+(wszystkie\s+)?(wcze[śs]niejsze|poprzednie)\s+(instrukcje|zasady)|reveal\s+your\s+(system\s+)?prompt|poka[żz]\s+(sw[óo]j\s+)?system\s+prompt|you\s+are\s+now\s+dan\b|developer\s+mode\s+enabled)/iu';
+$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/)/iu';
+
+if (preg_match($promptInjectionPattern, $qLower) || preg_match($exploitPayloadPattern, $qLower)) {
+    $aiSecurityBlocked = true;
+    $wafReason = preg_match($promptInjectionPattern, $qLower) ? 'prompt_injection' : 'exploit_payload';
+    aiLog('security_blocked', ['site' => $aiSite, 'reason' => $wafReason]);
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Forbidden: Żądanie zostało zablokowane przez filtr bezpieczeństwa (WAF / Prompt Injection Guard).'
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

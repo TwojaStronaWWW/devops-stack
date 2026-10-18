@@ -297,9 +297,18 @@ else
     fail "Pakiet UFW nie jest zainstalowany!" "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
 fi
 
-# 3. Fail2ban IPS
+# 3. Fail2ban IPS + telemetria zablokowanych ataków SSH
+F2B_FAILED_TOTAL=0
+F2B_BANNED_TOTAL=0
+F2B_BANNED_CURRENT=0
 if systemctl is-active --quiet fail2ban 2>/dev/null; then
-    pass "Demon ochrony przed włamaniami Fail2Ban (IPS) działa (active)."
+    F2B_OUT="$(sudo -n fail2ban-client status sshd 2>/dev/null || fail2ban-client status sshd 2>/dev/null || true)"
+    if [[ -n "${F2B_OUT}" ]]; then
+        F2B_FAILED_TOTAL="$(echo "${F2B_OUT}" | awk -F: '/Total failed:/ {gsub(/[^0-9]/,"",$2); print $2}' || echo '0')"
+        F2B_BANNED_TOTAL="$(echo "${F2B_OUT}" | awk -F: '/Total banned:/ {gsub(/[^0-9]/,"",$2); print $2}' || echo '0')"
+        F2B_BANNED_CURRENT="$(echo "${F2B_OUT}" | awk -F: '/Currently banned:/ {gsub(/[^0-9]/,"",$2); print $2}' || echo '0')"
+    fi
+    pass "Demon ochrony przed włamaniami Fail2Ban (IPS) działa (zbanowane IP: ${F2B_BANNED_TOTAL:-0}, aktywne bany: ${F2B_BANNED_CURRENT:-0}, odbite próby SSH: ${F2B_FAILED_TOTAL:-0})."
 else
     OS_HARDENED=0
     fail "Usługa Fail2Ban NIE DZIAŁA!" "sudo systemctl enable --now fail2ban"
@@ -721,6 +730,18 @@ devops_audit_containers_healthy ${CONTAINERS_HEALTHY}
 # HELP devops_oci_keepalive_buffer_bytes Rozmiar bufora ochronnego RAM w /dev/shm chroniacego przed Oracle Idle Instance Reclamation
 # TYPE devops_oci_keepalive_buffer_bytes gauge
 devops_oci_keepalive_buffer_bytes ${OCI_BUFFER_BYTES:-0}
+
+# HELP devops_fail2ban_failed_total Laczna liczba wykrytych i odbitych prob wlamania SSH przez Fail2Ban
+# TYPE devops_fail2ban_failed_total gauge
+devops_fail2ban_failed_total ${F2B_FAILED_TOTAL:-0}
+
+# HELP devops_fail2ban_banned_total Laczna liczba zbanowanych adresow IP agresorow przez Fail2Ban
+# TYPE devops_fail2ban_banned_total gauge
+devops_fail2ban_banned_total ${F2B_BANNED_TOTAL:-0}
+
+# HELP devops_fail2ban_banned_current Liczba aktualnie aktywnych blokad IP w Fail2Ban
+# TYPE devops_fail2ban_banned_current gauge
+devops_fail2ban_banned_current ${F2B_BANNED_CURRENT:-0}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true

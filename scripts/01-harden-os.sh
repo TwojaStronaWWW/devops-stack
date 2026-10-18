@@ -91,13 +91,16 @@ echo ">> [6/8] Fail2Ban (Intrusion Prevention System - IPS)..."
 echo "======================================================================"
 cat << 'EOF' > /etc/fail2ban/jail.local
 [DEFAULT]
-# Czas blokady agresora: 1 godzina
-bantime  = 1h
+# Czas blokady agresora: 1 godzina (progresywnie do 7 dni dla recydywistów)
+bantime           = 1h
+bantime.increment = true
+bantime.factor    = 2
+bantime.maxtime   = 7d
 # Okno czasowe zliczania prób: 10 minut
-findtime = 10m
-# Maksymalna liczba błędów przed banem: 4
-maxretry = 4
-banaction = ufw
+findtime          = 10m
+# Maksymalna liczba błędów przed banem: 3
+maxretry          = 3
+banaction         = ufw
 
 [sshd]
 enabled = true

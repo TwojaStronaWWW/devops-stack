@@ -69,6 +69,14 @@ groups:
           summary: "Model AI {{ $labels.model }} zwraca HTTP 404 (wycofany przez dostawce)"
           description: "Dostawca wycofal lub zmienil identyfikator modelu {{ $labels.model }} (not_found). Zaktualizuj kaskade w chat-router.php."
 
+      - alert: AIRouterSecurityAttackDetected
+        expr: sum(increase(ai_router_requests_total{outcome=~"security_blocked|cors_forbidden|bad_request"}[10m])) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wykryto zmasowany atak / skanowanie na AI Router (WAF / Prompt Injection / CORS)"
+          description: "W ostatnich 10 minutach filtr bezpieczenstwa AI Routera zablokowal {{ $value | printf \"%.0f\" }} zlosliwych zadan."
+
   - name: devops-infrastructure
     interval: 30s
     rules:
@@ -134,5 +142,14 @@ groups:
         annotations:
           summary: "Tunel krawedziowy Cloudflare Zero Trust (cloudflared) nie odpowiada"
           description: "Kontener cloudflared nie eksportuje telemetrii na porcie 2000 od ponad 2 minut - ruch z WAN do ai.twojastronawww.pl moze byc przerwany."
+
+      - alert: SSHBruteForceWaveDetected
+        expr: devops_fail2ban_banned_current >= 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Aktywna fala ataku Brute-Force na SSH (Fail2Ban zbanowal >= 5 IP jednoczesnie)"
+          description: "Demon IPS Fail2Ban utrzymuje obecnie {{ $value }} jednoczesnych blokad IP na porcie 22 SSH."
 
 
