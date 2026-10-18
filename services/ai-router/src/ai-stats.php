@@ -108,13 +108,22 @@ function aiSecondsToQuotaReset(): int
 function aiStatsDefault(): array
 {
     return [
-        'requests'    => [],  // "site|outcome" => n
-        'cache_hits'  => [],  // site => n
-        'leads'       => [],  // "site|type" => n (contact | hot_lead)
-        'req_lat_sum' => 0.0,
-        'req_lat_cnt' => 0,
-        'depth'       => [],  // pozycja modelu, który odpowiedział => n
-        'models'      => [],  // model => dane
+        'requests'      => [],  // "site|outcome" => n
+        'cache_hits'    => [],  // site => n
+        'leads'         => [],  // "site|type" => n (contact | hot_lead)
+        'req_lat_sum'   => 0.0,
+        'req_lat_cnt'   => 0,
+        'depth'         => [],  // pozycja modelu, który odpowiedział => n
+        'models'        => [],  // model => dane
+        'web_analytics' => [
+            'day'             => '',
+            'pageviews'       => [], // "site|path" => n
+            'sources'         => [], // "site|source" => n
+            'devices'         => [], // "site|device" => n
+            'countries'       => [], // "site|country" => n
+            'search_terms'    => [], // "site|term" => n
+            'unique_visitors' => [], // site => [hash => 1]
+        ],
     ];
 }
 
@@ -301,6 +310,70 @@ function aiRecordLead(string $site, string $type): void
         }
         $key = $site . '|' . $type;
         $s['leads'][$key] = (int)($s['leads'][$key] ?? 0) + 1;
+    });
+}
+
+/**
+ * Rejestruje zdarzenie bezciasteczkowej analityki ruchu WWW (Cookieless RODO / Zero-PII).
+ */
+function aiRecordWebAnalytics(
+    string $site,
+    string $eventType,
+    string $path,
+    string $source,
+    string $device,
+    string $country,
+    string $visitorHash,
+    string $searchTerm = ''
+): void {
+    aiStatsMutate(function (array &$s) use ($site, $eventType, $path, $source, $device, $country, $visitorHash, $searchTerm): void {
+        if (!isset($s['web_analytics']) || !is_array($s['web_analytics'])) {
+            $s['web_analytics'] = aiStatsDefault()['web_analytics'];
+        }
+        $wa = &$s['web_analytics'];
+        $today = gmdate('Y-m-d');
+        if (($wa['day'] ?? '') !== $today) {
+            $wa['day'] = $today;
+            $wa['unique_visitors'] = [];
+        }
+
+        if ($eventType === 'search' && $searchTerm !== '') {
+            $wa['search_terms'] = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
+            $tKey = $site . '|' . $searchTerm;
+            if (isset($wa['search_terms'][$tKey]) || count($wa['search_terms']) < 80) {
+                $wa['search_terms'][$tKey] = (int)($wa['search_terms'][$tKey] ?? 0) + 1;
+            }
+            return;
+        }
+
+        $wa['pageviews'] = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
+        $pKey = $site . '|' . $path;
+        if (isset($wa['pageviews'][$pKey]) || count($wa['pageviews']) < 60) {
+            $wa['pageviews'][$pKey] = (int)($wa['pageviews'][$pKey] ?? 0) + 1;
+        }
+
+        $wa['sources'] = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
+        $sKey = $site . '|' . $source;
+        $wa['sources'][$sKey] = (int)($wa['sources'][$sKey] ?? 0) + 1;
+
+        $wa['devices'] = is_array($wa['devices'] ?? null) ? $wa['devices'] : [];
+        $dKey = $site . '|' . $device;
+        $wa['devices'][$dKey] = (int)($wa['devices'][$dKey] ?? 0) + 1;
+
+        $wa['countries'] = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
+        $cKey = $site . '|' . $country;
+        if (isset($wa['countries'][$cKey]) || count($wa['countries']) < 40) {
+            $wa['countries'][$cKey] = (int)($wa['countries'][$cKey] ?? 0) + 1;
+        }
+
+        if ($visitorHash !== '') {
+            if (!isset($wa['unique_visitors'][$site]) || !is_array($wa['unique_visitors'][$site])) {
+                $wa['unique_visitors'][$site] = [];
+            }
+            if (count($wa['unique_visitors'][$site]) < 5000) {
+                $wa['unique_visitors'][$site][$visitorHash] = 1;
+            }
+        }
     });
 }
 
@@ -538,6 +611,80 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_cache_entries Liczba zapisanych odpowiedzi w pamieci podrecznej RAG';
     $o[] = '# TYPE ai_router_cache_entries gauge';
     $o[] = 'ai_router_cache_entries ' . count($cacheFiles);
+
+    // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
+    $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];
+    $waSameDay = (($wa['day'] ?? '') === gmdate('Y-m-d'));
+
+    $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO)';
+    $o[] = '# TYPE web_analytics_unique_visitors_today gauge';
+    $uvMap = ($waSameDay && is_array($wa['unique_visitors'] ?? null)) ? $wa['unique_visitors'] : [];
+    foreach (['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'] as $defSite) {
+        $uvCount = isset($uvMap[$defSite]) && is_array($uvMap[$defSite]) ? count($uvMap[$defSite]) : 0;
+        $o[] = 'web_analytics_unique_visitors_today{site="' . aiEsc($defSite) . '"} ' . $uvCount;
+    }
+
+    $o[] = '# HELP web_analytics_pageviews_total Laczna liczba odslon podstron i sekcji SPA (Cookieless)';
+    $o[] = '# TYPE web_analytics_pageviews_total counter';
+    $pvMap = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
+    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'dancepuls|/', 'fuegolingua|/', 'twojastronawww|/'] as $defPv) {
+        if (!isset($pvMap[$defPv])) {
+            $pvMap[$defPv] = 0;
+        }
+    }
+    foreach ($pvMap as $pvKey => $pvCount) {
+        [$pvSite, $pvPath] = array_pad(explode('|', (string)$pvKey, 2), 2, '/');
+        $o[] = 'web_analytics_pageviews_total{site="' . aiEsc($pvSite) . '",path="' . aiEsc($pvPath) . '"} ' . (int)$pvCount;
+    }
+
+    $o[] = '# HELP web_analytics_sources_total Zrodla wejsc uzytkownikow (Google, Facebook, Instagram, Direct, Inne)';
+    $o[] = '# TYPE web_analytics_sources_total counter';
+    $srcMap = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
+    foreach (['direct', 'google', 'facebook', 'instagram'] as $defSrc) {
+        $sKey = 'katosalsahub|' . $defSrc;
+        if (!isset($srcMap[$sKey])) {
+            $srcMap[$sKey] = 0;
+        }
+    }
+    foreach ($srcMap as $sKey => $sCount) {
+        [$sSite, $sSource] = array_pad(explode('|', (string)$sKey, 2), 2, 'direct');
+        $o[] = 'web_analytics_sources_total{site="' . aiEsc($sSite) . '",source="' . aiEsc($sSource) . '"} ' . (int)$sCount;
+    }
+
+    $o[] = '# HELP web_analytics_devices_total Urzadzenia odwiedzajacych (mobile vs desktop)';
+    $o[] = '# TYPE web_analytics_devices_total counter';
+    $devMap = is_array($wa['devices'] ?? null) ? $wa['devices'] : [];
+    foreach (['mobile', 'desktop'] as $defDev) {
+        $dKey = 'katosalsahub|' . $defDev;
+        if (!isset($devMap[$dKey])) {
+            $devMap[$dKey] = 0;
+        }
+    }
+    foreach ($devMap as $dKey => $dCount) {
+        [$dSite, $dDevice] = array_pad(explode('|', (string)$dKey, 2), 2, 'desktop');
+        $o[] = 'web_analytics_devices_total{site="' . aiEsc($dSite) . '",device="' . aiEsc($dDevice) . '"} ' . (int)$dCount;
+    }
+
+    $o[] = '# HELP web_analytics_countries_total Kraje odwiedzajacych wg naglowka Cloudflare CF-IPCountry';
+    $o[] = '# TYPE web_analytics_countries_total counter';
+    $cntMap = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
+    if (!isset($cntMap['katosalsahub|PL'])) {
+        $cntMap['katosalsahub|PL'] = 0;
+    }
+    foreach ($cntMap as $cKey => $cCount) {
+        [$cSite, $cCountry] = array_pad(explode('|', (string)$cKey, 2), 2, 'PL');
+        $o[] = 'web_analytics_countries_total{site="' . aiEsc($cSite) . '",country="' . aiEsc($cCountry) . '"} ' . (int)$cCount;
+    }
+
+    $o[] = '# HELP web_analytics_search_terms_total Wyszukiwane hasla i frazy kluczowe w Salsopedii oraz parametrach UTM';
+    $o[] = '# TYPE web_analytics_search_terms_total counter';
+    $termMap = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
+    foreach ($termMap as $tKey => $tCount) {
+        [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
+        if ($tTerm !== '') {
+            $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '"} ' . (int)$tCount;
+        }
+    }
 
     return implode("\n", $o) . "\n";
 }

@@ -79,10 +79,10 @@ $usedModel         = null;
 $aiDepth           = null;
 $aiAttempts        = 0;
 $aiSecurityBlocked = false;
-register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, &$aiSecurityBlocked, $aiStart): void {
+register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, &$aiSecurityBlocked, $aiStart, $requestUri): void {
     $code = http_response_code() ?: 200;
-    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204) {
-        return; // preflight CORS nie jest zapytaniem czatu
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204 || $requestUri === '/analytics' || $requestUri === '/collect') {
+        return; // preflight CORS oraz beacony analityki WWW nie są zapytaniami czatu
     }
     $outcome = match (true) {
         $aiSecurityBlocked => 'security_blocked',
@@ -102,17 +102,21 @@ register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$
 // -----------------------------------------------------------------------------
 // 2. ZABEZPIECZENIE CORS & BIAŁA LISTA DOMEN
 // -----------------------------------------------------------------------------
+$defaultAllowedOrigins = [
+    'https://katosalsahub.pl',
+    'https://www.katosalsahub.pl',
+    'https://dancepuls.katosalsahub.pl',
+    'https://dancepuls.pl',
+    'https://www.dancepuls.pl',
+    'https://fuegolingua.pl',
+    'https://www.fuegolingua.pl',
+    'https://twojastronawww.pl',
+    'https://www.twojastronawww.pl'
+];
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
-    ? array_map('trim', explode(',', $allowedOriginsEnv))
-    : [
-        'https://katosalsahub.pl',
-        'https://www.katosalsahub.pl',
-        'https://fuegolingua.pl',
-        'https://www.fuegolingua.pl',
-        'https://twojastronawww.pl',
-        'https://www.twojastronawww.pl'
-    ];
+    ? array_values(array_unique(array_merge($defaultAllowedOrigins, array_map('trim', explode(',', $allowedOriginsEnv)))))
+    : $defaultAllowedOrigins;
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 
@@ -143,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-// Tylko żądania POST są akceptowane dla czatu
+// Tylko żądania POST są akceptowane dla czatu i analityki
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode([
@@ -178,6 +182,81 @@ function getClientIp(): string {
     }
 
     return filter_var($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1', FILTER_VALIDATE_IP) ?: '127.0.0.1';
+}
+
+// -----------------------------------------------------------------------------
+// 2b. ENDPOINT BEZCIASTECZKOWEJ ANALITYKI RUCHU WWW (POST /analytics | /collect)
+//     100% Cookieless RODO, Zero-PII (dzienny skrót SHA-256 bez zapisu IP)
+// -----------------------------------------------------------------------------
+if ($requestUri === '/analytics' || $requestUri === '/collect') {
+    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+    if (preg_match('/(bot|crawler|spider|lighthouse|headless|uptime-kuma|curl|python)/i', $ua)) {
+        http_response_code(202);
+        echo json_encode(['success' => true, 'skipped' => 'bot']);
+        exit;
+    }
+
+    $rawBeacon = file_get_contents('php://input');
+    $beacon = $rawBeacon ? json_decode($rawBeacon, true) : null;
+    if (!is_array($beacon)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Bad Request: Invalid JSON']);
+        exit;
+    }
+
+    $bSite = strtolower(trim((string)($beacon['site_id'] ?? '')));
+    if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Bad Request: Invalid site_id']);
+        exit;
+    }
+
+    $bType = (($beacon['type'] ?? '') === 'search') ? 'search' : 'pageview';
+    $rawPath = trim((string)($beacon['path'] ?? '/'));
+    $bPath = substr(preg_replace('/[^a-zA-Z0-9_\/#.-]/', '', $rawPath) ?: '/', 0, 48);
+    if (!str_starts_with($bPath, '/')) {
+        $bPath = '/' . $bPath;
+    }
+
+    $utmSource = strtolower(trim((string)($beacon['utm_source'] ?? '')));
+    $referrer  = strtolower(trim((string)($beacon['referrer'] ?? '')));
+    $bSource   = 'direct';
+    $sourceProbe = $utmSource !== '' ? $utmSource : $referrer;
+    if ($sourceProbe !== '') {
+        if (preg_match('/(facebook|fb\.com|fbclid|messenger)/', $sourceProbe)) {
+            $bSource = 'facebook';
+        } elseif (preg_match('/(instagram|ig\b)/', $sourceProbe)) {
+            $bSource = 'instagram';
+        } elseif (preg_match('/(google\.|bing\.|duckduckgo\.|yahoo\.|ecosia\.)/', $sourceProbe)) {
+            $bSource = 'google';
+        } elseif (preg_match('/(youtube\.|youtu\.be)/', $sourceProbe)) {
+            $bSource = 'youtube';
+        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|localhost|127\.0\.0\.1)/', $sourceProbe)) {
+            $bSource = 'other';
+        }
+    }
+
+    $bDevice = preg_match('/(Mobile|Android|iPhone|iPad|Windows Phone)/i', $ua) ? 'mobile' : 'desktop';
+    $rawCountry = strtoupper(trim((string)($_SERVER['HTTP_CF_IPCOUNTRY'] ?? 'PL')));
+    $bCountry = (preg_match('/^[A-Z]{2}$/', $rawCountry) && $rawCountry !== 'XX') ? $rawCountry : 'PL';
+
+    $bIp = getClientIp();
+    $visitorHash = substr(hash('sha256', gmdate('Y-m-d') . '|' . $bSite . '|' . $bIp . '|' . $ua), 0, 16);
+
+    $rawTerm = trim((string)($beacon['term'] ?? $beacon['utm_term'] ?? ''));
+    $bTerm = mb_substr(trim((string)preg_replace('/[^a-ząćęłńóśźż0-9 _-]/iu', '', mb_strtolower($rawTerm))), 0, 40);
+    if (mb_strlen($bTerm) < 2) {
+        $bTerm = '';
+    }
+
+    aiRecordWebAnalytics($bSite, $bType, $bPath, $bSource, $bDevice, $bCountry, $visitorHash, $bTerm);
+    if ($bType === 'pageview' && $bTerm !== '') {
+        aiRecordWebAnalytics($bSite, 'search', $bPath, $bSource, $bDevice, $bCountry, $visitorHash, $bTerm);
+    }
+
+    http_response_code(202);
+    echo json_encode(['success' => true]);
+    exit;
 }
 
 // Wczytanie zmiennych z lokalnego pliku .env (jako bezpieczny fallback poza kontenerem)

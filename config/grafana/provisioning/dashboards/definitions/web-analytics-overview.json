@@ -1,0 +1,441 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": ["twojastronawww"],
+      "targetBlank": false,
+      "title": "Dashboardy TwojaStronaWWW",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 300,
+      "title": "📊 Analityka Ruchu WWW & SEO (100% Cookieless RODO / Zero-PII)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Unikalni odwiedzający dziś na katosalsahub.pl (anonimowy dzienny skrót SHA-256 bez zapisu IP i bez ciasteczek).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 301,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "sum(web_analytics_unique_visitors_today{site=\"katosalsahub\"}) or vector(0)",
+          "legendFormat": "KatoSalsaHub dziś",
+          "refId": "A"
+        }
+      ],
+      "title": "Unikalni Dziś (KSH)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Łączna liczba odsłon podstron i sekcji SPA w serwisie katosalsahub.pl.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "purple", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 302,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(web_analytics_pageviews_total{site=\"katosalsahub\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Odsłony KSH (Łącznie)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Wejścia organiczne z wyszukiwarek (Google, Bing, DuckDuckGo).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 303,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(web_analytics_sources_total{source=\"google\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Wejścia z Google (SEO)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Wejścia z mediów społecznościowych (Facebook + Instagram).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "orange", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 304,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(web_analytics_sources_total{source=~\"facebook|instagram\"}) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Social Media (FB + IG)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Odsetek użytkowników odwiedzających portal ze smartfonów.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 50 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 305,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "100 * sum(web_analytics_devices_total{device=\"mobile\"}) / clamp_min(sum(web_analytics_devices_total), 1)",
+          "refId": "A"
+        }
+      ],
+      "title": "Ruch Mobilny (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Łączna liczba wyszukiwań haseł w Salsopedii oraz wejść z parametrem frazy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "yellow", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 306,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(web_analytics_search_terms_total) or vector(0)",
+          "refId": "A"
+        }
+      ],
+      "title": "Wyszukiwania Haseł",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Skąd przychodzą użytkownicy? Podział wg źródła wejścia (Referer / UTM): Facebook, Instagram, Google, Direct.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 5 },
+      "id": 307,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "sum by (source) (web_analytics_sources_total{site=\"katosalsahub\"})",
+          "legendFormat": "🌐 {{source}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Skąd wchodzą ludzie? (Źródła Ruchu - KatoSalsaHub)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Najczęściej odwiedzane podstrony i sekcje SPA na katosalsahub.pl (np. /, /salsopedia.html, /#radio, /#mapa, /#style).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 5 },
+      "id": 308,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (path) (web_analytics_pageviews_total{site=\"katosalsahub\"}))",
+          "legendFormat": "📄 {{path}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Najpopularniejsze podstrony i sekcje (katosalsahub.pl)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Jakich haseł i pojęć szukają tancerze w Salsopedii oraz po jakich frazach UTM wchodzą na stronę.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 5 },
+      "id": 309,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(12, sum by (term) (web_analytics_search_terms_total))",
+          "legendFormat": "🔍 {{term}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Wyszukiwane Hasła i Frazy Kluczowe (Salsopedia & UTM)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Odsłony stron w czasie (przyrosty na minutę).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "stacking": { "group": "A", "mode": "normal" }
+          },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
+      "id": 310,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (site, path) (increase(web_analytics_pageviews_total[1m]))",
+          "legendFormat": "{{site}} • {{path}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Odsłony na żywo (ruch w czasie wg podstrony)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Podział ruchu wg typu urządzenia (Smartfony vs Komputery) oraz kraju (Cloudflare GeoIP).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 13 },
+      "id": 311,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "sum by (device) (web_analytics_devices_total{site=\"katosalsahub\"})",
+          "legendFormat": "📱 {{device}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Urządzenia (Mobile vs Desktop)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Kraje odwiedzających rozpoznane na brzegu sieci Cloudflare (nagłówek CF-IPCountry, bez zapisu IP).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 13 },
+      "id": 312,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(8, sum by (country) (web_analytics_countries_total{site=\"katosalsahub\"}))",
+          "legendFormat": "🌍 {{country}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kraje Odwiedzających (GeoIP)",
+      "type": "bargauge"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["twojastronawww", "analytics", "seo", "katosalsahub"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "title": "TwojaStronaWWW - Analityka Ruchu WWW & SEO (Cookieless)",
+  "uid": "web-analytics-overview",
+  "version": 1
+}

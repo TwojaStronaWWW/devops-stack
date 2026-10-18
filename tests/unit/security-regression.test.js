@@ -438,5 +438,37 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const metricsText = await metricsRes.text();
       assert.match(metricsText, /ai_router_requests_total\{site="twojastronawww",outcome="security_blocked"\}\s+([5-9]|\d{2,})/);
     });
+
+    it('endpoint POST /analytics powinien rejestrować bezciasteczkowe odsłony, źródła wejść i wyszukiwane hasła (Cookieless RODO / Zero-PII)', async () => {
+      const visitorIp = '198.51.100.180';
+      const pvRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'CF-IPCountry': 'PL',
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'pageview',
+          path: '/salsopedia.html',
+          referrer: 'https://www.google.com/',
+          term: 'rueda de casino',
+        }),
+      });
+      assert.strictEqual(pvRes.status, 202);
+      const pvBody = await pvRes.json();
+      assert.strictEqual(pvBody.success, true);
+
+      const metricsRes = await fetch(`${baseUrl}/metrics`);
+      const metricsText = await metricsRes.text();
+      assert.match(metricsText, /web_analytics_unique_visitors_today\{site="katosalsahub"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/salsopedia\.html"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_sources_total\{site="katosalsahub",source="google"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_devices_total\{site="katosalsahub",device="mobile"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
+      assert.strictEqual(metricsText.includes(visitorIp), false, 'Wyciek IP odwiedzającego w metrykach web_analytics!');
+    });
   });
 });
