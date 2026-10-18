@@ -632,9 +632,23 @@ function aiRenderMetrics(): string
             $pvMap[$defPv] = 0;
         }
     }
+    $pathLabels = [
+        '/'                => '🏠 / (Strona główna)',
+        '/salsopedia.html' => '📖 /salsopedia.html (Słownik 179 haseł)',
+        '/privacy.html'    => '🔒 /privacy.html (Polityka prywatności)',
+        '/#szkoly'         => '🎓 /#szkoly (Szkoły tańca)',
+        '/#wydarzenia'     => '🎉 /#wydarzenia (Wydarzenia i imprezy)',
+        '/#radio'          => '📻 /#radio (Radio Salsa)',
+        '/#mapa'           => '🗺️ /#mapa (Mapa szkół i klubów)',
+        '/#style'          => '💃 /#style (Style taneczne)',
+        '/#artykuly'       => '📰 /#artykuly (Artykuły i poradniki)',
+        '/#slownik'        => '📚 /#slownik (Sekcja słownika)',
+        '/#faq'            => '❓ /#faq (Pytania FAQ)',
+    ];
     foreach ($pvMap as $pvKey => $pvCount) {
         [$pvSite, $pvPath] = array_pad(explode('|', (string)$pvKey, 2), 2, '/');
-        $o[] = 'web_analytics_pageviews_total{site="' . aiEsc($pvSite) . '",path="' . aiEsc($pvPath) . '"} ' . (int)$pvCount;
+        $pvLabel = $pathLabels[$pvPath] ?? ('📄 ' . $pvPath);
+        $o[] = 'web_analytics_pageviews_total{site="' . aiEsc($pvSite) . '",path="' . aiEsc($pvPath) . '",label="' . aiEsc($pvLabel) . '"} ' . (int)$pvCount;
     }
 
     $o[] = '# HELP web_analytics_sources_total Zrodla wejsc uzytkownikow (Google, Facebook, Instagram, Direct, Inne)';
@@ -646,9 +660,21 @@ function aiRenderMetrics(): string
             $srcMap[$sKey] = 0;
         }
     }
+    $sourceLabels = [
+        'direct'     => '🔗 Bezpośrednie (wpisany adres / zakładka / Messenger)',
+        'google'     => '🔍 Google (wyszukiwarka SEO)',
+        'facebook'   => '📘 Facebook',
+        'instagram'  => '📸 Instagram',
+        'bing'       => '🔍 Bing',
+        'duckduckgo' => '🦆 DuckDuckGo',
+        'youtube'    => '▶️ YouTube',
+        'tiktok'     => '🎵 TikTok',
+        'other'      => '🌐 Inna strona (link zewnętrzny)',
+    ];
     foreach ($srcMap as $sKey => $sCount) {
         [$sSite, $sSource] = array_pad(explode('|', (string)$sKey, 2), 2, 'direct');
-        $o[] = 'web_analytics_sources_total{site="' . aiEsc($sSite) . '",source="' . aiEsc($sSource) . '"} ' . (int)$sCount;
+        $sLabel = $sourceLabels[$sSource] ?? ('🌐 ' . $sSource);
+        $o[] = 'web_analytics_sources_total{site="' . aiEsc($sSite) . '",source="' . aiEsc($sSource) . '",label="' . aiEsc($sLabel) . '"} ' . (int)$sCount;
     }
 
     $o[] = '# HELP web_analytics_devices_total Urzadzenia odwiedzajacych (mobile vs desktop)';
@@ -660,31 +686,65 @@ function aiRenderMetrics(): string
             $devMap[$dKey] = 0;
         }
     }
+    $deviceLabels = [
+        'mobile'  => '📱 Smartfon / Telefon (mobile)',
+        'desktop' => '💻 Komputer / Laptop (desktop)',
+    ];
     foreach ($devMap as $dKey => $dCount) {
         [$dSite, $dDevice] = array_pad(explode('|', (string)$dKey, 2), 2, 'desktop');
-        $o[] = 'web_analytics_devices_total{site="' . aiEsc($dSite) . '",device="' . aiEsc($dDevice) . '"} ' . (int)$dCount;
+        $dLabel = $deviceLabels[$dDevice] ?? ('📱 ' . $dDevice);
+        $o[] = 'web_analytics_devices_total{site="' . aiEsc($dSite) . '",device="' . aiEsc($dDevice) . '",label="' . aiEsc($dLabel) . '"} ' . (int)$dCount;
     }
 
     $o[] = '# HELP web_analytics_countries_total Kraje odwiedzajacych wg naglowka Cloudflare CF-IPCountry';
     $o[] = '# TYPE web_analytics_countries_total counter';
     $cntMap = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
-    if (!isset($cntMap['katosalsahub|PL'])) {
-        $cntMap['katosalsahub|PL'] = 0;
+    foreach (['PL', 'DE', 'GB', 'CZ'] as $defCountry) {
+        if (!isset($cntMap['katosalsahub|' . $defCountry])) {
+            $cntMap['katosalsahub|' . $defCountry] = 0;
+        }
     }
+    $countryLabels = [
+        'PL' => '🇵🇱 Polska (PL)',
+        'DE' => '🇩🇪 Niemcy (DE)',
+        'GB' => '🇬🇧 Wielka Brytania (GB)',
+        'CZ' => '🇨🇿 Czechy (CZ)',
+        'US' => '🇺🇸 USA (US)',
+        'NL' => '🇳🇱 Holandia (NL)',
+        'NO' => '🇳🇴 Norwegia (NO)',
+        'SE' => '🇸🇪 Szwecja (SE)',
+        'ES' => '🇪🇸 Hiszpania (ES)',
+        'IT' => '🇮🇹 Włochy (IT)',
+        'FR' => '🇫🇷 Francja (FR)',
+        'AT' => '🇦🇹 Austria (AT)',
+        'UA' => '🇺🇦 Ukraina (UA)',
+        'SK' => '🇸🇰 Słowacja (SK)',
+        'IE' => '🇮🇪 Irlandia (IE)',
+        'BE' => '🇧🇪 Belgia (BE)',
+        'CH' => '🇨🇭 Szwajcaria (CH)',
+        'LT' => '🇱🇹 Litwa (LT)',
+        'XX' => '🌐 Nieznany (XX)',
+    ];
     foreach ($cntMap as $cKey => $cCount) {
         [$cSite, $cCountry] = array_pad(explode('|', (string)$cKey, 2), 2, 'PL');
-        $o[] = 'web_analytics_countries_total{site="' . aiEsc($cSite) . '",country="' . aiEsc($cCountry) . '"} ' . (int)$cCount;
+        $cLabel = $countryLabels[$cCountry] ?? ('🌍 Kraj: ' . $cCountry);
+        $o[] = 'web_analytics_countries_total{site="' . aiEsc($cSite) . '",country="' . aiEsc($cCountry) . '",label="' . aiEsc($cLabel) . '"} ' . (int)$cCount;
     }
 
     $o[] = '# HELP web_analytics_search_terms_total Wyszukiwane hasla i frazy kluczowe w Salsopedii oraz parametrach UTM';
     $o[] = '# TYPE web_analytics_search_terms_total counter';
     $termMap = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
-    foreach ($termMap as $tKey => $tCount) {
-        [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
-        if ($tTerm !== '') {
-            $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '"} ' . (int)$tCount;
+    if (empty($termMap)) {
+        $o[] = 'web_analytics_search_terms_total{site="katosalsahub",term="(brak wpisanych fraz — czekam na wyszukiwania w Salsopedii)"} 0';
+    } else {
+        foreach ($termMap as $tKey => $tCount) {
+            [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
+            if ($tTerm !== '') {
+                $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '"} ' . (int)$tCount;
+            }
         }
     }
 
     return implode("\n", $o) . "\n";
 }
+

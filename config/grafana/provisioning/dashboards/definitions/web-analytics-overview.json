@@ -85,7 +85,8 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_pageviews_total{site=\"katosalsahub\"}) or vector(0)",
+          "expr": "sum(web_analytics_pageviews_total{site=\"katosalsahub\",label!=\"\"}) or vector(0)",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -119,7 +120,8 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_sources_total{source=\"google\"}) or vector(0)",
+          "expr": "sum(web_analytics_sources_total{source=\"google\",label!=\"\"}) or vector(0)",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -153,7 +155,8 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_sources_total{source=~\"facebook|instagram\"}) or vector(0)",
+          "expr": "sum(web_analytics_sources_total{source=~\"facebook|instagram\",label!=\"\"}) or vector(0)",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -190,7 +193,8 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(web_analytics_devices_total{device=\"mobile\"}) / clamp_min(sum(web_analytics_devices_total), 1)",
+          "expr": "100 * sum(web_analytics_devices_total{device=\"mobile\",label!=\"\"}) / clamp_min(sum(web_analytics_devices_total{label!=\"\"}), 1)",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -225,6 +229,7 @@
       "targets": [
         {
           "expr": "sum(web_analytics_search_terms_total) or vector(0)",
+          "instant": true,
           "refId": "A"
         }
       ],
@@ -233,7 +238,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Skąd przychodzą użytkownicy? Podział wg źródła wejścia (Referer / UTM): Facebook, Instagram, Google, Direct.",
+      "description": "Skąd przychodzą użytkownicy? Bezpośrednie (direct) = wpisanie adresu w przeglądarkę, wejście z zakładek, ikony na telefonie lub linku z Messengera/WhatsAppa/SMS. Google = wejścia z wyszukiwarki.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -252,12 +257,14 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true,
         "sizing": "auto",
+        "textMode": "value_and_name",
         "valueMode": "color"
       },
       "targets": [
         {
-          "expr": "sum by (source) (web_analytics_sources_total{site=\"katosalsahub\"})",
-          "legendFormat": "🌐 {{source}}",
+          "expr": "sum by (label) (web_analytics_sources_total{site=\"katosalsahub\",label!=\"\"})",
+          "instant": true,
+          "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
@@ -285,12 +292,14 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true,
         "sizing": "auto",
+        "textMode": "value_and_name",
         "valueMode": "color"
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (path) (web_analytics_pageviews_total{site=\"katosalsahub\"}))",
-          "legendFormat": "📄 {{path}}",
+          "expr": "topk(10, sum by (label) (web_analytics_pageviews_total{site=\"katosalsahub\",label!=\"\"}))",
+          "instant": true,
+          "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
@@ -318,11 +327,13 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true,
         "sizing": "auto",
+        "textMode": "value_and_name",
         "valueMode": "color"
       },
       "targets": [
         {
           "expr": "topk(12, sum by (term) (web_analytics_search_terms_total))",
+          "instant": true,
           "legendFormat": "🔍 {{term}}",
           "refId": "A"
         }
@@ -354,7 +365,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (site, path) (increase(web_analytics_pageviews_total[1m]))",
+          "expr": "sum by (site, path) (increase(web_analytics_pageviews_total{label!=\"\"}[1m]))",
           "legendFormat": "{{site}} • {{path}}",
           "refId": "A"
         }
@@ -364,7 +375,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Podział ruchu wg typu urządzenia (Smartfony vs Komputery) oraz kraju (Cloudflare GeoIP).",
+      "description": "Podział ruchu wg typu urządzenia (Smartfony vs Komputery).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -383,16 +394,18 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true,
         "sizing": "auto",
+        "textMode": "value_and_name",
         "valueMode": "color"
       },
       "targets": [
         {
-          "expr": "sum by (device) (web_analytics_devices_total{site=\"katosalsahub\"})",
-          "legendFormat": "📱 {{device}}",
+          "expr": "sum by (label) (web_analytics_devices_total{site=\"katosalsahub\",label!=\"\"})",
+          "instant": true,
+          "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
-      "title": "Urządzenia (Mobile vs Desktop)",
+      "title": "Urządzenia (Smartfon vs Komputer)",
       "type": "bargauge"
     },
     {
@@ -416,12 +429,14 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true,
         "sizing": "auto",
+        "textMode": "value_and_name",
         "valueMode": "color"
       },
       "targets": [
         {
-          "expr": "topk(8, sum by (country) (web_analytics_countries_total{site=\"katosalsahub\"}))",
-          "legendFormat": "🌍 {{country}}",
+          "expr": "topk(8, sum by (label) (web_analytics_countries_total{site=\"katosalsahub\",label!=\"\"}))",
+          "instant": true,
+          "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
@@ -437,5 +452,5 @@
   "timezone": "browser",
   "title": "TwojaStronaWWW - Analityka Ruchu WWW & SEO (Cookieless)",
   "uid": "web-analytics-overview",
-  "version": 1
+  "version": 2
 }

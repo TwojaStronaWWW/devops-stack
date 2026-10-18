@@ -464,9 +464,10 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const metricsRes = await fetch(`${baseUrl}/metrics`);
       const metricsText = await metricsRes.text();
       assert.match(metricsText, /web_analytics_unique_visitors_today\{site="katosalsahub"\}\s+[1-9]/);
-      assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/salsopedia\.html"\}\s+[1-9]/);
-      assert.match(metricsText, /web_analytics_sources_total\{site="katosalsahub",source="google"\}\s+[1-9]/);
-      assert.match(metricsText, /web_analytics_devices_total\{site="katosalsahub",device="mobile"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/salsopedia\.html",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_sources_total\{site="katosalsahub",source="google",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_devices_total\{site="katosalsahub",device="mobile",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_countries_total\{site="katosalsahub",country="PL",label="[^"]*Polska \(PL\)"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
       assert.strictEqual(metricsText.includes(visitorIp), false, 'Wyciek IP odwiedzającego w metrykach web_analytics!');
     });
