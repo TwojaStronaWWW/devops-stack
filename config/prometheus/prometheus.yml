@@ -47,11 +47,11 @@ scrape_configs:
     static_configs:
       - targets: ['github-exporter:9504']
 
-  # 6. AI Router (metryki Prometheus / availability probe)
+  # 6. AI Router (metryki Prometheus / availability probe - odświeżanie 5s)
   - job_name: 'ai-router'
     metrics_path: '/metrics'
-    scrape_interval: 30s
-    scrape_timeout: 5s
+    scrape_interval: 5s
+    scrape_timeout: 4s
     static_configs:
       - targets: ['ai-router:8080']
         labels:
