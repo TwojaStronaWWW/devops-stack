@@ -303,8 +303,25 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'devops_backup_verified',
       'devops_backup_websites_db_verified',
       'devops_audit_status',
+      'devops_fail2ban_banned_total',
     ]) {
       assert.ok(kumaExprs.includes(metric), `Dashboard uptime-kuma-overview nie wizualizuje metryki ${metric}`);
+    }
+
+    const webDashPath = path.join(ROOT_DIR, 'config', 'grafana', 'provisioning', 'dashboards', 'definitions', 'web-analytics-overview.json');
+    const webDash = JSON.parse(fs.readFileSync(webDashPath, 'utf-8'));
+    const webIds = webDash.panels.map((p) => p.id);
+    assert.strictEqual(new Set(webIds).size, webIds.length, 'Zduplikowane ID paneli w dashboardzie web-analytics-overview');
+    const webExprs = JSON.stringify(webDash.panels);
+    for (const metric of [
+      'web_analytics_unique_visitors_today',
+      'web_analytics_pageviews_total',
+      'web_analytics_sources_total',
+      'web_analytics_devices_total',
+      'web_analytics_countries_total',
+      'web_analytics_search_terms_total',
+    ]) {
+      assert.ok(webExprs.includes(metric), `Dashboard web-analytics-overview nie wizualizuje metryki ${metric}`);
     }
   });
 

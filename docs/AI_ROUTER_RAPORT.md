@@ -114,10 +114,11 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 
 | Narzędzie | Do czego | Jak |
 |---|---|---|
-| **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada, błędy wg przyczyny (zainicjalizowane seriami `0`), zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch i leady per strona | `scripts\open-dashboard.cmd` |
+| **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada (modele + Cache RAG `<5ms`), błędy wg przyczyny, zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch i leady per strona | `scripts\open-dashboard.cmd` |
+| **Grafana** → *Analityka Ruchu WWW & SEO (Cookieless)* | Unikalni odwiedzający dziś, odsłony podstron, źródła wejść (Google, Bezpośrednie, FB, IG), urządzenia (Smartfon vs Komputer), kraje GeoIP z flagami, wyszukiwane hasła | `scripts\open-dashboard.cmd` |
 | **Raport CLI** | Pełny raport tekstowy (zasoby, providerzy, kaskada, statystyki cache RAG, pozyskane leady `ai_router_leads_total`, próby modeli, logi) | `.\scripts\ai-router-report.ps1` albo na VPS `scripts/ai-router-report.sh` |
-| **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `contact_lead_captured`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
-| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 13 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` z wysyłką pełnych opisów `summary` do **Ntfy.sh** | `npm run audit` |
+| **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `security_attack_blocked`, `contact_lead_captured`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
+| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 18 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` + poranny przegląd 08:00 **Claude Sonnet 4.6 Deep X-Ray** do **Ntfy.sh** | `npm run audit` |
 | **Uptime Kuma** | Dostępność `http://ai-router:8080/health` (z automatycznym odświeżaniem cache DNS `nscd -i hosts` po wdrożeniu) | `open-dashboard.cmd` → Uptime Kuma |
 
 ### Reguły Alertów Prometheusa (`config/prometheus/rules/ai-router.yml`)
@@ -129,14 +130,19 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 | `AIRouterPrimaryModelSuspended` | model pozycji 0 zawieszony >5 min | warning |
 | `AIRouterModelQuotaNearLimit` | >80 % dziennego limitu RPD | warning |
 | `AIRouterRateLimitSpike` | >20 blokad 429 / 10 min | warning |
+| `AIRouterSecurityAttackDetected` | ≥3 zablokowane ataki WAF (Prompt Injection / XSS / SQLi / LFI) w 10 min | warning |
+| `AIRouterModelDeprecated` | ≥1 błąd HTTP 404 (`not_found`) modelu w kaskadzie | warning |
 | `AIRouterFallbackInUse` | odpowiedzi z pozycji >0 w 15 min | info |
 | `AIRouterNoFallbackProvider` | brak skonfigurowanego Groq i OpenRouter >1 h | info |
 | `WebsiteOrServiceDown` | `monitor_status == 0` w Uptime Kuma przez 2 min | critical |
 | `SSLCertificateExpiringSoon` | `monitor_cert_days_remaining < 14` | warning |
 | `VPSHostDiskSpaceLow` | <20 % wolnego miejsca na `/` przez 5 min | warning |
 | `VPSHostMemoryLow` | <15 % dostępnej pamięci RAM na hoście przez 5 min | warning |
-| `VPSBackupFailedOrStale` | błąd backupu wolumenów, błąd `tar -tzf` / `PRAGMA quick_check` lub brak backupu >26 h | warning |
+| `VPSBackupFailedOrStale` | błąd backupu wolumenów, błąd `tar -tzf` / `PRAGMA quick_check` / Restore Drill lub brak backupu >26 h | warning |
 | `WebsitesBackupFailedOrStale` | błąd backupu stron LH.pl, błąd `tar -tzf` / `mysqldump` lub brak backupu >26 h | warning |
 | `CloudflareTunnelDown` | brak telemetrii `cloudflared:2000` przez 2 min | critical |
+| `VPSFail2BanAttackSpike` | ≥5 zbanowanych IP przez Fail2Ban w ciągu 15 min | warning |
+| `VPSSecurityBreachIoCDetected` | wykrycie śladów kompromitacji IoC (`devops_security_ioc_clean == 0`) | critical |
+
 
 

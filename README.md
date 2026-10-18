@@ -19,16 +19,16 @@
  │  [ Strefa 1: Sieć wewnętrzna `devops_internal_network` ]               │
  │  ┌─────────────────┐ ┌───────────────┐ ┌────────────────────────────┐  │
  │  │  Uptime Kuma    │ │  Prometheus   │ │  Grafana (Viewer PoLP)     │  │
- │  │  (10 monitorów) │ │  (TSDB 15d)   │ │  (2 Dashboardy & Alerting) │  │
+ │  │  (10 monitorów) │ │  (TSDB 15d)   │ │  (3 Dashboardy & Alerting) │  │
  │  │  127.0.0.1:3001 │ │ 127.0.0.1:9090│ │  127.0.0.1:3000           │  │
  │  └────────┬────────┘ └───────▲───────┘ └─────────────┬──────────────┘  │
  │           │                  │                       │                 │
  │           └────── metrics ───┤                       │                 │
  │                              │                       │                 │
  │  ┌─────────────────┐         │                       │                 │
- │  │  AI Router RAG  ├─────────┤ (/metrics & /health)  │                 │
- │  │  (Cache <5ms +  │         │                       │                 │
- │  │   7-Model Casc) │         │                       │                 │
+ │  │  AI Router RAG  ├─────────┤ (/metrics, /health,   │                 │
+ │  │  (Cache <5ms +  │         │  /analytics, WAF L7)  │                 │
+ │  │  11-Model Casc) │         │                       │                 │
  │  │  127.0.0.1:8085 │         │                       │                 │
  │  └─────────────────┘         │                       │                 │
  │  ┌─────────────────┐         │                       │                 │
@@ -40,9 +40,10 @@
  │  ┌─────────────────┐         │                       │                 │
  │  │ GitHub Exporter ├─────────┘ (CI/CD Actions)       │                 │
  │  └─────────────────┘         ┌───────────────────────┴──────────────┐  │
- │                              │ Dozzle: Logi Kontenerów w Przeglądarce│  │
- │                              │ 127.0.0.1:8888                       │  │
- │                              └──────────────────────────────────────┘  │
+ │  ┌─────────────────┐         │ Dozzle: Logi Kontenerów w Przeglądarce│  │
+ │  │ OCI Keepalive   │         │ 127.0.0.1:8888                       │  │
+ │  │ (+20% / 4.8 GB) │         └──────────────────────────────────────┘  │
+ │  └─────────────────┘                                                   │
  │                                                                        │
  │  [ Strefa 2: Odseparowana sieć CI/CD `devops_runners_network` ]        │
  │  ┌──────────────────────────────────────────────────────────────────┐  │
@@ -52,8 +53,8 @@
  │  └──────────────────────────────────────────────────────────────────┘  │
  │                                                                        │
  │  Trwałe wolumeny, Autonomiczny Strażnik 24/7 & Kopia Offsite:          │
- │  ├── devops-audit.timer (co 15 min) ──> audit.prom + Alerty Ntfy.sh    │
- │  ├── devops-backup.timer (03:00 UTC) ──> tar -tzf + AES-256 ──> R2/S3  │
+ │  ├── devops-audit.timer (co 15 min) ──> IoC/IPS + Claude 4.6 (08:00)   │
+ │  ├── devops-backup.timer (03:00 UTC) ──> AES-256 + Restore Drill ──> R2│
  │  └── backup-websites-lh.sh (FTPS TLS + mysqldump) ──> Cloudflare R2    │
  └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -66,17 +67,18 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 
 ### A. Automatyczne Aktualizacje Bezpieczeństwa (Unattended Upgrades)
 - **Codzienna instalacja łatek CVE**: System automatycznie pobiera i instaluje krytyczne poprawki bezpieczeństwa z oficjalnych repozytoriów (`security`), eliminując podatności typu zero-day bez konieczności ręcznego logowania administratora.
-- **Higiena pakietów**: Automatyczne usuwanie zbędnych zależności i przestarzałych wersji jądra Linuksa (`Remove-Unused-Kernel-Packages: true`).
+- **Higiena pakietów i logów**: Automatyczne usuwanie zbędnych zależności (`Remove-Unused-Kernel-Packages: true`) oraz twardy limit `SystemMaxUse=200M` na logi systemowe `systemd-journald`.
 
-### B. Ochrona Dostępu SSH (Brak Haseł & Blokada Roota)
+### B. Ochrona Dostępu SSH (Brak Haseł & Blokada Roota) + Kryminalistyczna Kontrola IoC
 - **Blokada konta root**: `PermitRootLogin no` uniemożliwia bezpośrednie logowanie na konto roota.
-- **Wyłączenie uwierzytelniania hasłem**: `PasswordAuthentication no` całkowicie eliminuje podatność na ataki słownikowe i zgadywanie haseł. Dozwolone są wyłącznie silne klucze asymetryczne (np. **Ed25519**).
+- **Wyłączenie uwierzytelniania hasłem**: `PasswordAuthentication no` całkowicie eliminuje podatność na ataki słownikowe i zgadywanie haseł. Dozwolone są wyłącznie silne klucze asymetryczne (**Ed25519**).
 - **Limit prób logowania**: `MaxAuthTries 3` – rozłączenie sesji po 3 nieudanych próbach.
-- **Wyłączenie X11 i niepotrzebnych kanałów**: `X11Forwarding no`.
+- **Wyłączenie zbędnych demonów sieciowych**: `X11Forwarding no` oraz całkowite zamaskowanie `rpcbind.service` / `rpcbind.socket` (port 111).
+- **Kryminalistyczna kontrola śladów włamania (IoC — `devops_security_ioc_clean`)**: Co 15 minut skrypt `audit-server.sh` weryfikuje dziennik `journalctl -u ssh` pod kątem zerowej liczby logowań hasłem/rootem, sprawdza brak obcych kont `UID 0` w `/etc/passwd` oraz kontroluje liczbę kluczy w `~/.ssh/authorized_keys`.
 
-### C. System Zapobiegania Włamaniom (Fail2Ban Intrusion Prevention System)
-- **Aktywne więzienie SSH**: Monitorowanie prób nieautoryzowanego dostępu w czasie rzeczywistym (`mode = aggressive`).
-- **Automatyczny Ban**: Po 4 nieudanych próbach logowania w oknie 10 minut adres IP agresora zostaje zablokowany na poziomie zapory sieciowej na okres **1 godziny** (`bantime = 1h`).
+### C. System Zapobiegania Włamaniom (Fail2Ban IPS) + WAF Warstwy 7 i IP Penalty Box
+- **Progresywny Ban SSH (Fail2Ban IPS)**: Po **3 nieudanych próbach** logowania w oknie 10 minut adres IP agresora zostaje zablokowany na zaporze UFW na **1 godzinę** (`bantime = 1h`), a dla recydywistów czas blokady rośnie wykładniczo (`bantime.increment = true`, `bantime.factor = 2`) aż do **7 dni (`7d`)**. Statystyki banów (`devops_fail2ban_banned_total`, `devops_fail2ban_currently_banned`) są wizualizowane na żywo w Grafanie.
+- **Strażnik WAF Warstwy 7 + 15-Minutowy IP Penalty Box (`chat-router.php`)**: Każde zapytanie do bramki AI jest skanowane przed wywołaniem modelu LLM pod kątem ataków **Prompt Injection**, **Jailbreak**, **XSS** (`<script>`), **SQL Injection** (`UNION SELECT`, `DROP TABLE`) oraz **Path Traversal / LFI** (`../etc/passwd`). Wykryty atak jest natychmiast odrzucany kodem `HTTP 403` (0 zużytych tokenów), a IP agresora trafia na **15 minut do Penalty Box** (`banClientIp`).
 
 ### D. Zapora Ogniowa UFW (Stateful Firewall & Rate Limiting)
 - **Polityka domyślna**: Całkowita blokada ruchu przychodzącego (`default deny incoming`) oraz zezwolenie na ruch wychodzący (`default allow outgoing`).
@@ -98,8 +100,9 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 - **PoLP (Zasada Najmniejszych Przywilejów)**:
   - Prometheus działa jako użytkownik `nobody` (UID `65534`).
   - Grafana działa jako użytkownik `grafana` (UID `472`) z domyślną rolą `Viewer` dla dostępu bez logowania przez tunel SSH (`GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`).
+  - Uptime Kuma ma wymuszone logowanie (`DISABLE_AUTH=false`) i jest dostępna przez tunel SSH (`127.0.0.1:3001`).
   - AI Router działa jako użytkownik `nobody` z 4 workerami PHP (`PHP_CLI_SERVER_WORKERS=4`).
-- **Flaga bezpieczeństwa**: `security_opt: [no-new-privileges:true]` uniemożliwia eskalację uprawnień z wnętrza kontenera.
+- **Flaga bezpieczeństwa**: `security_opt: [no-new-privileges:true]` uniemożliwia eskalację uprawnień z wnętrza któregokolwiek z 13 kontenerów.
 - **Pliki konfiguracyjne w trybie tylko do odczytu**: `prometheus.yml`, `rules/`, `provisioning/` oraz bazy wiedzy `data/` montowane z uprawnieniem `:ro`.
 - **Prewencja zapełnienia dysku**: Rotacja logów kontenerów w `/etc/docker/daemon.json` (`max-size: 10m`, `max-file: 3`).
 
@@ -120,50 +123,53 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── pre-commit                 # Git hook blokujący wycieki sekretów (.env, .env.bak*, *.pem, *.key)
 │   └── commit-msg                 # Git hook wymuszający format Conventional Commits
 ├── compose/
-│   ├── docker-compose.yml         # Stos (devops_internal_network): Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, AI Router, GitHub Exporter
+│   ├── docker-compose.yml         # Stos (devops_internal_network): Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, AI Router, GitHub Exporter, OCI Keepalive Buffer
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust (cloudflared)
 │   └── runners.yml                # Runnery GitHub Actions ARM64 w odseparowanej sieci (devops_runners_network)
 ├── config/
 │   ├── prometheus/
-│   │   ├── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter, AI Router (/metrics)
+│   │   ├── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter, AI Router (/metrics co 5s)
 │   │   └── rules/
-│   │       └── ai-router.yml      # Reguły alertów Prometheusa dla kaskady i limitów AI Routera
+│   │       └── ai-router.yml      # 18 reguł alertów Prometheusa (kaskada AI, WAF, Fail2Ban IPS, IoC, certyfikaty, dysk, RAM, backupy)
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/       # Automatyczne podpinanie Prometheus API (uid: prometheus)
-│           └── dashboards/        # 2 pulpity: Centrum Monitoringu Stron WWW & Usług + AI Router (Gemini Proxy Monitor)
+│           └── dashboards/        # 3 pulpity: Centrum Monitoringu + AI Router + Analityka Ruchu WWW & SEO (Cookieless)
 ├── docs/
-│   ├── AI_ROUTER_RAPORT.md        # Dokumentacja telemetrii, metryk, cache'u RAG i raportowania AI Routera
+│   ├── AI_ROUTER_RAPORT.md        # Dokumentacja telemetrii, metryk, cache'u RAG, WAF, Analityki WWW i raportowania AI Routera
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
-│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001) + auto-SWAP
+│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001, Fail2ban progresywny 1h->7d, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # 5-warstwowy audyt żywego serwera VPS + samonaprawa nscd + alerty Ntfy
-│   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + AES-256) do chmury R2/S3 z alertami Ntfy
+│   ├── audit-server.sh            # 5-warstwowy audyt żywego serwera VPS + kontrola IoC/IPS + poranny raport 08:00 (Claude Sonnet 4.6 Deep X-Ray)
+│   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do chmury R2
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z hostingu LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256)
 │   ├── restore-backup.sh          # Automatyczne odtwarzanie (Disaster Recovery) i test Restore Drill (--verify-only)
-│   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie przeglądarki)
+│   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie Grafany, Uptime Kuma i Dozzle)
 │   ├── preview-tunnel.ps1/.sh     # Quick Tunnel – natychmiastowy szyfrowany link HTTPS dla stagingu
 │   ├── setup-audit-timer.sh       # Idempotentna instalacja strażnika systemd 24/7 (devops-audit.timer co 15 min)
 │   ├── setup-backup-timer.sh      # Idempotentna instalacja harmonogramu backupów systemd (devops-backup.timer 03:00 UTC)
 │   ├── setup-kuma.js              # Idempotentna rejestracja 10 monitorowanych witryn i AI Routera w Uptime Kuma
 │   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
 │   ├── verify-remote.ps1/.cmd     # Zdalny wyzwalacz audytu VPS z poziomu Windows (npm run audit)
+│   ├── warm-ai-cache.sh           # Idempotentny pre-warming pamięci podręcznej RAG (Quick Prompts) po wdrożeniu
 │   └── runners/                   # Skrypty sterowania runnerami CI/CD
 ├── services/
-│   └── ai-router/                 # Scentralizowany mikro-router AI (PHP 8.3 Alpine, Multi-Provider RAG, Cache <5ms, Zero-Bloat)
+│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine, Multi-Provider RAG, Cache <5ms, WAF L7)
 │       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
 │       ├── src/
-│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, IP limiter, Cache RAG (<5ms), Ekstraktor Leadów (Tel/E-mail 1-Klik), 11-modelowa kaskada LLM
-│       │   └── ai-stats.php       # Moduł telemetrii Prometheus, Cooldownu modeli, domyślnych limitów RPD i wyzerowanych serii błędów
+│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, WAF L7 + 15m Penalty Box, Cache RAG (<5ms), Leady Ntfy 1-Klik, 11-modelowa kaskada LLM, /analytics
+│       │   ├── ai-stats.php       # Moduł telemetrii Prometheus (AI + Cookieless Web Analytics), Cooldownu modeli i limitów RPD
+│       │   └── widget.js          # Uniwersalny widget czatu AI serwowany przez GET /widget.js
 │       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua-knowledge.txt, katosalsahub-knowledge.txt, twojastronawww-knowledge.txt)
 │       ├── storage/               # Trwały wolumen na pliki rate-limit, cache RAG (/app/storage/cache) oraz ai_stats.json
 │       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
-│       └── repo-hygiene.test.js   # 24 natywne testy higieny repozytorium, telemetrii AI i bezpieczeństwa (node:test)
+│       ├── repo-hygiene.test.js   # 25 testów higieny repozytorium, walidacji 3 dashboardów JSON, telemetrii AI/WWW i kontraktu _site-template
+│       └── security-regression.test.js # 15 testów regresji bezpieczeństwa OWASP / ISO 27001 / Zero Trust / WAF / Analytics (łącznie 40 testów)
 ├── AGENTS.md / GEMINI.md          # Wytyczne architektoniczne dla modeli AI i rygor Always Free
 ├── DISASTER_RECOVERY.md           # Procedura odtworzenia środowiska z kopii w < 15 minut
 ├── README.md                      # Główna dokumentacja architektury i bezpieczeństwa
@@ -329,7 +335,7 @@ Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-D
 | **1. Sieciowa (WAN)** | Wszystkie porty aplikacji (3000, 3001, 8085, 8888, 9090) są powiązane wyłącznie z `127.0.0.1` (loopback). Brak mapowania na `0.0.0.0`. | Porty aplikacji są **niewidoczne i nieosiągalne** z internetu. Skany Nmap wskazują porty jako zamknięte/odfiltrowane. |
 | **2. Firewall (UFW & OCI)** | Porty 80 i 443 oraz wszystkie porty aplikacji są zablokowane na zaporze UFW i listach OCI Security Lists. | Nawet celowe zapytania pod publiczny adres IP `89.168.62.31` są natychmiast odrzucane na poziomie jądra (`DROP`). |
 | **3. Tożsamość & SSH** | Port 22 ma wyłączone uwierzytelnianie hasłem (`PasswordAuthentication no`) oraz zablokowane konto roota (`PermitRootLogin no`). | Zgadnięcie lub złamanie hasła jest niemożliwe. Wejście wymaga prywatnego klucza `id_ed25519`, który znajduje się wyłącznie na Twoim fizycznym dysku i **nigdy nie trafił do Git**. |
-| **4. Ochrona Brute-Force** | UFW rate-limiting (`limit 22/tcp`) + Fail2ban IPS (`mode = aggressive`, `bantime = 1h`). | Automatyczny ban na poziomie zapory ogniowej po 4 nieudanych próbach połączenia SSH. |
+| **4. Ochrona Brute-Force & WAF** | UFW rate-limiting (`limit 22/tcp`) + Fail2ban IPS (progresywny ban `1h -> 7d`) + WAF Warstwy 7 z 15-min IP Penalty Box. | Automatyczny ban na zaporze po 3 błędach SSH oraz natychmiastowa blokada `HTTP 403` prób Prompt Injection / XSS / SQLi / LFI. |
 | **5. Higiena Sekretów** | Rygor `.gitignore` wyklucza pliki `.env`, `.env.bak*`, klucze `*.pem`, `*.key`, `id_*`, certyfikaty oraz pliki haseł `kuma_password`. | W publicznym repozytorium znajdują się **wyłącznie zanonimizowane szablony** (`.env.example`). Zero realnych tokenów w historii gita. |
 | **6. Git Hooks (Pre-commit)** | Skrypt `.githooks/pre-commit` skanuje każdy commit i blokuje wysłanie plików o wrażliwych rozszerzeniach. | Ochrona przed przypadkowym wysłaniem klucza lub hasła przez administratora. |
 | **7. Separacja Sieci i PoLP** | Runnery CI/CD są odizolowane w `devops_runners_network`, a usługi działają z `no-new-privileges:true` (`nobody:65534`, `grafana:472`). | Nawet w hipotetycznym scenariuszu kompromitacji zadania CI/CD atakujący nie ma dostępu do wewnętrznej sieci usług ani roota hosta. |
@@ -340,20 +346,20 @@ Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-D
 
 Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla całej infrastruktury TwojaStronaWWW:
 
-### A. Backup Wolumenów Monitoringu i AI (`scripts/backup-offsite.sh`):
+### A. Backup Wolumenów Monitoringu i AI (`scripts/backup-offsite.sh`) + Nocny Restore Drill:
 - Tworzy spójne snapshoty wszystkich 7 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`) wraz z weryfikacją baz SQLite (`PRAGMA quick_check`).
 - Automatycznie weryfikuje integralność wygenerowanego archiwum (`tar -tzf`) przed dalszym przetwarzaniem i eksportuje metrykę `devops_backup_verified`.
-- Opcjonalnie szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z kroczącą retencją **30 dni** (zarówno lokalnie na VPS, jak i w chmurze R2 przez `rclone delete --min-age 30d`).
-- Odtwarzanie i testowanie spójności (*Restore Drill*) realizowane jest automatycznie przez skrypt [`scripts/restore-backup.sh`](file:///e:/Projekty/VPS/scripts/restore-backup.sh) (`--verify-only` lub `--from-r2 --yes`).
+- Szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z kroczącą retencją **30 dni lokalnie na VPS** oraz **14 dni w chmurze R2** (`rclone delete --min-age 14d`, mieszcząc się w 100% w darmowym limicie 10 GB R2).
+- **Automatyczny Nocny Restore Drill (`restore-backup.sh --verify-only`)**: Po wysłaniu kopii do R2 skrypt automatycznie pobiera paczkę z chmury, odszyfrowuje ją w izolowanym katalogu tymczasowym i testuje odtwarzalność archiwów oraz spójność baz SQLite, wystawiając metrykę `devops_backup_restore_drill_verified`.
 
 ### B. Backup Stron WWW z Hostingu LH.pl (`scripts/backup-websites-lh.sh`):
 - Łączy się ze zdalnym hostingiem LH.pl przez szyfrowany kanał **FTPS TLS** (`ftp:ssl-allow true`, `ftp:ssl-protect-data true`).
-- Pobiera strukturę plików witryn (`public_html`) z normalizacją uprawnień (`--no-perms` + `chown`), oraz opcjonalnie wykonuje zrzut bazy MySQL (`mysqldump --single-transaction`).
-- Weryfikuje integralność archiwum (`tar -tzf`, metryka `devops_backup_websites_verified`), opcjonalnie szyfruje **AES-256-CBC** i przesyła do Cloudflare R2 (`${S3_BUCKET}/websites/`) z automatyczną rotacją **30 dni** lokalnie oraz w R2.
+- Pobiera strukturę plików witryn (`public_html`) z normalizacją uprawnień (`--no-perms` + `chown`), oraz wykonuje zrzut baz MySQL (`mysqldump --single-transaction`).
+- Weryfikuje integralność archiwum (`tar -tzf`, metryki `devops_backup_websites_verified` oraz `devops_backup_websites_db_verified`), szyfruje **AES-256-CBC** i przesyła do Cloudflare R2 (`${S3_BUCKET}/websites/`) z automatyczną rotacją **30 dni lokalnie** oraz **14 dni w R2**.
 
-### C. Automatyzacja Harmonogramów Systemd (Backup & Strażnik 24/7):
-- **`devops-backup.timer`** ([`scripts/setup-backup-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-backup-timer.sh)): Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów i stron LH.pl.
-- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa.
+### C. Automatyzacja Harmonogramów Systemd (Backup, Strażnik 24/7 & Poranny Audytor AI):
+- **`devops-backup.timer`** ([`scripts/setup-backup-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-backup-timer.sh)): Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów, stron LH.pl oraz automatyczny *Restore Drill*.
+- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`), kontroluje ślady włamań IoC (`devops_security_ioc_clean`) i statystyki Fail2Ban (`devops_fail2ban_banned_total`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport stanu infrastruktury wzbogacony o głęboki przegląd **Claude Sonnet 4.6 Deep X-Ray** (z licznikiem tokenów i budżetu USD).
 
 ---
 
@@ -371,13 +377,15 @@ W celu zapewnienia bezwzględnej zgodności z normą **ISO 27001** oraz uniknię
 
 ---
 
-## 11. Centralna Bramka AI & Multi-Provider RAG Router (`services/ai-router`)
+## 11. Centralna Bramka AI, WAF L7 & Bezciasteczkowa Analityka WWW (`services/ai-router`)
 
-Serwer VPS udostępnia scentralizowany mikro-router AI ([`services/ai-router/src/chat-router.php`](file:///e:/Projekty/VPS/services/ai-router/src/chat-router.php)) obsługujący asystentów czatowych dla witryn platformy (**Fuego Lingua**, **Kato Salsa Hub**, **TwojaStronaWWW**) pod adresem `https://ai.twojastronawww.pl/chat-router.php`.
+Serwer VPS udostępnia scentralizowany mikro-router AI oraz kolektor bezciasteczkowej analityki WWW ([`services/ai-router/src/chat-router.php`](file:///e:/Projekty/VPS/services/ai-router/src/chat-router.php)) obsługujący witryny platformy (**Fuego Lingua**, **Kato Salsa Hub**, **TwojaStronaWWW**) pod adresem `https://ai.twojastronawww.pl`.
 
-### A. Klasyfikacja Rozwiązania, Cache RAG (`< 5 ms`), Pre-warming i Detektor Leadów
+### A. Klasyfikacja Rozwiązania, Cache RAG (`< 5 ms`), WAF L7, Analityka WWW i Detektor Leadów
 - **Obszar 3 (AI z bazą wiedzy firmy RAG) + Enterprise High-Availability:** Dynamiczny dobór bazy wiedzy po parametrze `site_id` (`services/ai-router/data/<site_id>-knowledge.txt` montowane w trybie `:ro`), pamięć konwersacji Multi-Turn (`history` do 8 wiadomości) oraz twarde reguły anty-halucynacyjne (Guardrails).
-- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache normalizuje interpunkcję i wielkość liter oraz uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
+- **WAF Warstwy 7 + 15-Minutowy IP Penalty Box (`security_blocked`):** Blokuje próby Prompt Injection, Jailbreak, XSS, SQLi oraz Path Traversal kodem `HTTP 403` przed wywołaniem modelu AI i nakłada 15-minutową blokadę na IP agresora.
+- **Bezciasteczkowa Analityka Ruchu WWW & SEO (`POST /analytics` & `/collect` — 100% Cookieless RODO / Zero-PII):** Rejestruje unikalnych odwiedzających dziś (anonimowy dzienny skrót SHA-256 bez zapisu IP i bez ciasteczek), odsłony podstron, źródła wejść (`Google`, `Bezpośrednie`, `Facebook`, `Instagram`), urządzenia (`Smartfon` vs `Komputer`), kraje (`CF-IPCountry` z flagami) oraz wyszukiwane hasła w Salsopedii, prezentując je na 3. dashboardzie Grafany (`web-analytics-overview.json`).
+- **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache normalizuje interpunkcji i wielkość liter oraz uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
 - **Ochrona przed ucinaniem zdań i ukrytymi tokenami myślenia (`thoughtsTokenCount` / `reasoning_tokens`):** Router wymusza `maxOutputTokens: 2048`, przekazuje `'thinkingLevel' => 'MINIMAL'` dla `gemini-3.5-*` (lub `'LOW'` dla `gemini-3.7/3.8`), `'reasoning_effort' => 'low'` / `'disable_reasoning' => true` dla Cerebras WSE, `'reasoning' => ['effort' => 'none']` dla OpenRoutera, wykorzystuje domyślnie wyłączone *Extended Thinking* + *Prompt Caching* (`ephemeral` `-90%`) w Claude Haiku 4.5 oraz odrzuca odpowiedzi z `finishReason === 'MAX_TOKENS'` (`length` / `max_tokens`).
 - **Detektor „Gorącego Leada” i Natychmiastowa Ekstrakcja Telefonu / E-maila (Zero-PII na dysku):** Gdy klient poda w rozmowie numer telefonu lub adres e-mail (`event=contact_lead_captured`), router automatycznie wyciąga i formatuje numer (`📞 TELEFON: +48 ...`) oraz adres (`✉️ E-MAIL: ...`), umieszcza je bezpośrednio w tytule powiadomienia i w pierwszych linijkach wiadomości Ntfy.sh (wraz z wcześniejszymi pytaniami z sesji) oraz dodaje natywne przyciski akcji 1-Klik (`Zadzwoń tel:...` / `Napisz e-mail mailto:...`). Przy 4. pytaniu klienta w jednej sesji (`count($sanitizedHistory) === 6`) wysyła ponadto sygnał `event=hot_lead_detected`.
 - **0 MB wag modeli na serwerze VPS:** Wszystkie 11 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~14 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
@@ -400,9 +408,12 @@ Router posiada skonfigurowanych **6 niezależnych kluczy API**, nakłada wydłu�
 | **10 (Bezpiecznik)** | Anthropic Claude (`ANTHROPIC_API_KEY`) | `claude-haiku-4-5` | `1 000` / doba | Ostatni bezpiecznik Pre-paid $5 (`~0.9 s`, `0` myśli, Prompt Cache `-90%`) |
 
 ### C. Pełna Obserwowalność, Alerting i Raportowanie CLI (ISO 27001 Zero-PII)
-1. **Endpoint Prometheus (`GET /metrics`):** Eksportuje metryki zapytań, trafień cache (`ai_router_cache_hits_total`, `ai_router_cache_entries`), skuteczności kaskady, prób per model, aktywnych cooldownów, limitów dziennych RPD oraz wyzerowanych serii błędów. Zgodnie z **ISO 27001** moduł [`ai-stats.php`](file:///e:/Projekty/VPS/services/ai-router/src/ai-stats.php) **nigdy nie loguje treści pytań klientów, adresów IP ani kluczy API**.
-2. **Dashboard Grafany (`uid: ai-router-overview`):** Pulpit **AI Router - Gemini Proxy Monitor** ([`ai-router-overview.json`](file:///e:/Projekty/VPS/config/grafana/provisioning/dashboards/definitions/ai-router-overview.json)) prezentujący ruch, paski dziennego limitu RPD, błędy i zdrowie wszystkich 11 modeli per strona (`fuegolingua`, `katosalsahub`, `twojastronawww`).
-3. **Reguły Alertów Prometheusa + Push Ntfy.sh:** Plik [`config/prometheus/rules/ai-router.yml`](file:///e:/Projekty/VPS/config/prometheus/rules/ai-router.yml) monitoruje warunki krytyczne, a `devops-audit.timer` co 15 minut weryfikuje stan alarmów `firing` w Prometheusie i natychmiast wysyła powiadomienia Push na telefon.
+1. **Endpoint Prometheus (`GET /metrics` co 5 s):** Eksportuje metryki zapytań, zablokowanych ataków WAF (`security_blocked`), trafień cache (`ai_router_cache_hits_total`, `ai_router_cache_entries`), bezciasteczkowej analityki WWW (`web_analytics_*`), skuteczności kaskady, prób per model, aktywnych cooldownów, limitów dziennych RPD oraz wyzerowanych serii błędów. Zgodnie z **ISO 27001** moduł [`ai-stats.php`](file:///e:/Projekty/VPS/services/ai-router/src/ai-stats.php) **nigdy nie loguje treści pytań klientów, adresów IP ani kluczy API**.
+2. **3 Dashboardy Grafany:**
+   - **Centrum Monitoringu Stron WWW & Usług** (`uptime-kuma-overview.json`): Status 10 witryn, podwójne zegary RAM (Realny vs Sztuczny +20% OCI Buffer), liczniki zablokowanych ataków WAF/Fail2Ban IPS oraz status integralności systemu IoC.
+   - **AI Router - Gemini Proxy Monitor** (`ai-router-overview.json`): Ruch czatu, trafienia Cache RAG `<5ms`, paski dziennego limitu RPD, błędy i zdrowie wszystkich 11 modeli oraz pozyskane leady.
+   - **Analityka Ruchu WWW & SEO (Cookieless)** (`web-analytics-overview.json`): Unikalni odwiedzający dziś, odsłony podstron, źródła wejść (Google, Bezpośrednie, FB, IG), urządzenia (Smartfon vs Komputer), kraje GeoIP z flagami oraz wyszukiwane hasła w Salsopedii.
+3. **18 Reguł Alertów Prometheusa + Push Ntfy.sh:** Plik [`config/prometheus/rules/ai-router.yml`](file:///e:/Projekty/VPS/config/prometheus/rules/ai-router.yml) monitoruje warunki krytyczne, a `devops-audit.timer` co 15 minut weryfikuje stan alarmów `firing` w Prometheusie i natychmiast wysyła powiadomienia Push na telefon.
 4. **Raporty CLI na żądanie:** Skrypty [`scripts/ai-router-report.sh`](file:///e:/Projekty/VPS/scripts/ai-router-report.sh) oraz [`scripts/ai-router-report.ps1`](file:///e:/Projekty/VPS/scripts/ai-router-report.ps1) (szczegóły w [`docs/AI_ROUTER_RAPORT.md`](file:///e:/Projekty/VPS/docs/AI_ROUTER_RAPORT.md)).
 
 ### D. Checklista Podpięcia Czatu AI pod Kolejną Stronę WWW (Standard `_site-template` v2.2)
@@ -414,6 +425,7 @@ Router posiada skonfigurowanych **6 niezależnych kluczy API**, nakłada wydłu�
    - W `<head>` każdego pliku HTML dodaj `<link rel="preconnect" href="https://ai.twojastronawww.pl" crossorigin>`,
    - Przed `</body>` dodaj `<script type="module" src="assets/js/ai-widget.js" data-site-id="<site_id>" data-title="Asystent ..."></script>`,
    - Jeśli strona posiada pływający przycisk telefonu (`.sticky-call-btn`), przesuń go na mobile na `bottom: 96px; right: 28px`, aby nie kolidował z przyciskiem czatu (`.tsw-ai-btn` na `bottom: 24px; right: 24px`).
+
 
 
 
