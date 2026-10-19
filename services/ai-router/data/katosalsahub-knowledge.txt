@@ -34,11 +34,14 @@
   - Każda zmiana w Salsopedii natychmiast aktualizuje bazę wiedzy Asystenta AI i unieważnia poprzednio zapisane odpowiedzi w pamięci podręcznej.
 
 ## 3. Pozostałe filary i funkcje portalu Kato Salsa Hub
-- **Radio Timba Nation 24/7:**
-  - Wbudowany odtwarzacz radiowy w dolnym pasku strony (`katosalsahub.pl`) grający 24/7 selekcję kubańskiej Timby, Salsy, Sonu i Bachaty bez reklam.
-  - Posiada wizualizer częstotliwości audio (Web Audio API), regulację głośności, sterowanie z ekranu blokady smartfona (MediaSession API) oraz **Wyłącznik czasowy (Sleep Timer: 15, 30 lub 60 minut)**.
-- **Gdzie tańczymy na Śląsku (Szkoły i lokalizacje):**
-  - **Dolina Trzech Stawów — Kato Salsa Hub (Katowice, Kamienny Krąg przy ul. Trzech Stawów):** kultowe letnie potańcówki plenerowe *Salsowy Chillout* pod gołym niebem (Salsa, Timba, Rueda de Casino, Son Cubano, Bachata).
+- **Radio Timba Nation 24/7 (Odtwarzacz na stronie — skąd pochodzi i dlaczego jest bez reklam):**
+  - **Pochodzenie i autorstwo:** **Timba Nation Radio** to niezależna internetowa stacja radiowa z **Zurychu (Szwajcaria)**, założona i prowadzona przez **DJ Maikiu** na platformie **Zeno.FM** (`https://zeno.fm/radio/timba-nation-radio/`). **To NIE jest radio tworzone ani finansowane przez Kato Salsa Hub!**
+  - **Dlaczego gra bez reklam:** Stacja jest autorskim, pasjonackim projektem muzycznym **DJ Maikiu** promującym współczesną kubańską **Timbę, Salsę Cubana (Casino) i Son** oraz nową generację kubańskich artystów (w tym autorskie sety *DJ Maikiu - Cuban Salsa Mix*), dzięki czemu nadaje czystą muzykę 24/7 bez komercyjnych bloków reklamowych.
+  - **Rola Kato Salsa Hub:** Na naszej stronie głównej (`katosalsahub.pl`) udostępniamy tancerzom zintegrowany odtwarzacz tego strumienia z podglądem aktualnie granego utworu na żywo, sterowaniem z ekranu blokady smartfona (MediaSession API) oraz **Wyłącznikiem czasowym (Sleep Timer: 15, 30 lub 60 minut)** z płynnym wyciszaniem dźwięku.
+- **Gdzie tańczymy na Śląsku (Miejscówki KSH i Szkoły Tańca):**
+  - **Wolni Ludzie — Pod dachem (Katowice, ul. Mariacka 2, róg ul. Mielęckiego):** nasza główna całoroczna miejscówka pod dachem — spotykamy się tu **w każdą niedzielę w godz. 15:00–18:00** na otwartych potańcówkach i praktykach (Salsa Cubana, Timba, Rueda de Casino, Son, Bachata, Kizomba). W niedziele ulice wokół są darmowe, a jako główny Parking Rekomendowany polecamy ogromny, bezpłatny w niedzielę parking pod NOSPR-em (12 min pieszo przez kładkę).
+  - **Dolina Trzech Stawów — Kamienny Krąg (Katowice, ul. Trzech Stawów 22):** kultowe wiosenno-letnie potańcówki plenerowe pod gołym niebem (w razie deszczu tańczymy pod zadaszoną wiatą UKS 4 / SUP Tomi przy ul. Trzech Stawów 10; darmowy Parking Rekomendowany Południe / Rolkostrada 13 min pieszo).
+  - **Amfiteatr NOSPR w Strefie Kultury (Katowice, pl. Wojciecha Kilara 1):** plenerowy parkiet od wschodniej strony NOSPR przy fontannach z darmowym w weekendy parkingiem od ul. Olimpijskiej.
   - **La Clave (Katowice, ul. Chorzowska 11):** serce śląskiej sceny kubańskiej i bachatowej (Salsa, Casino, Rueda, Timba, Son, Rumba, Bachata, imprezy *Bachata meets Impro*).
   - **Mil Pasos (Katowice, ul. Kamienna 4):** kursy Bachaty, Salsy, Casino i Kizomby oraz weekendy *B Experience* i *K Experience*.
   - **Evolution Dance Studio (Katowice, al. Korfantego 4):** ścisłe centrum Katowic, Casino, Rueda, Timba, Rumba, Bachata, warsztaty *Cuban Day*.
