@@ -69,7 +69,7 @@ now = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
 header = b64url(json.dumps({"alg": "RS256", "typ": "JWT"}).encode("utf-8"))
 claim = b64url(json.dumps({
     "iss": client_email,
-    "scope": "https://www.googleapis.com/auth/webmasters.readonly",
+    "scope": "https://www.googleapis.com/auth/webmasters",
     "aud": token_uri,
     "iat": now,
     "exp": now + 3600
@@ -122,6 +122,7 @@ except Exception as e:
 
 end_date = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 start_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+indexnow_key = "4f8b9d2e7a1c6f3b5e0d8a9c2b4f7e1a"
 
 for pair in sites_cfg.split(","):
     pair = pair.strip()
@@ -146,6 +147,19 @@ for pair in sites_cfg.split(","):
         if visible_urls and prop_candidate not in visible_urls:
             continue
         encoded_prop = urllib.parse.quote(prop_candidate, safe="")
+
+        # Automatyczne odświeżenie sitemap.xml w Google Search Console API
+        try:
+            sm_feed = urllib.parse.quote(f"https://{base_domain}/sitemap.xml", safe="")
+            sm_req = urllib.request.Request(
+                f"https://searchconsole.googleapis.com/webmasters/v3/sites/{encoded_prop}/sitemaps/{sm_feed}",
+                method="PUT",
+                headers={"Authorization": f"Bearer {access_token}", "Content-Length": "0"}
+            )
+            urllib.request.urlopen(sm_req, timeout=8).close()
+        except Exception:
+            pass
+
         api_url = f"https://searchconsole.googleapis.com/webmasters/v3/sites/{encoded_prop}/searchAnalytics/query"
         payload = json.dumps({
             "startDate": start_date,
@@ -183,6 +197,32 @@ for pair in sites_cfg.split(","):
                 break
         except Exception:
             continue
+
+    # Automatyczny ping IndexNow (Bing / ChatGPT Search / Yandex / Seznam)
+    try:
+        in_urls = [f"https://{base_domain}/", f"https://{base_domain}/llms.txt"]
+        if site_id == "katosalsahub":
+            in_urls.append(f"https://{base_domain}/salsopedia.html")
+        elif site_id == "fuegolingua":
+            in_urls.append(f"https://{base_domain}/cennik.html")
+        elif site_id == "raricart":
+            in_urls.append(f"https://{base_domain}/pakiety.php")
+        in_body = json.dumps({
+            "host": base_domain,
+            "key": indexnow_key,
+            "keyLocation": f"https://{base_domain}/{indexnow_key}.txt",
+            "urlList": in_urls
+        }).encode("utf-8")
+        in_req = urllib.request.Request(
+            "https://api.indexnow.org/indexnow",
+            data=in_body,
+            headers={"Content-Type": "application/json; charset=utf-8"}
+        )
+        with urllib.request.urlopen(in_req, timeout=8) as in_resp:
+            print(f"[INDEXNOW] Wysłano ping indeksacji dla {base_domain} ({len(in_urls)} URL) -> HTTP {in_resp.status}")
+    except Exception:
+        pass
+
     if not synced:
         sync_payload = json.dumps({
             "type": "gsc_sync",
