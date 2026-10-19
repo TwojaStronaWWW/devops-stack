@@ -206,7 +206,7 @@ for pair in sites_cfg.split(","):
         elif site_id == "fuegolingua":
             in_urls.append(f"https://{base_domain}/cennik.html")
         elif site_id == "raricart":
-            in_urls.append(f"https://{base_domain}/pakiety.php")
+            in_urls.append(f"https://{base_domain}/pakiety")
         in_body = json.dumps({
             "host": base_domain,
             "key": indexnow_key,
