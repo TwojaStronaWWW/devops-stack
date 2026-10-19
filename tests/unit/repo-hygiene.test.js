@@ -252,7 +252,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(composeMain, /dev\.dozzle\.name:\s*"uptime-kuma • Monitoring Stron WWW"/);
     assert.match(composeMain, /dev\.dozzle\.name:\s*"prometheus • Baza Metryk TSDB"/);
     assert.match(composeMain, /dev\.dozzle\.name:\s*"grafana • Dashboardy i Wykresy"/);
-    assert.match(composeMain, /dev\.dozzle\.name:\s*"ai-router • Czatbot AI & Gemini"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"ai-router • Czatbot AI & AMMS"/);
     assert.match(composeExt, /dev\.dozzle\.name:\s*"cloudflared • Tunel Zero Trust"/);
     assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-twojastronawww • CI\/CD TwojaStronaWWW"/);
     assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-zeslownikiem • CI\/CD ZeSłownikiem"/);

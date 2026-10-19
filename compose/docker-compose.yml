@@ -291,8 +291,8 @@ services:
     image: twojastronawww/ai-router:1.0.0
     container_name: ai-router
     labels:
-      dev.dozzle.name: "ai-router • Czatbot AI & Gemini"
-      org.opencontainers.image.description: "Scentralizowana bramka AI (Gemini Proxy + RAG) dla czatbotów na stronach WWW"
+      dev.dozzle.name: "ai-router • Czatbot AI & AMMS"
+      org.opencontainers.image.description: "Scentralizowana bramka AI (11 modeli + Asystent AMMS & Oracle FTS5) dla TwojaStronaWWW"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
