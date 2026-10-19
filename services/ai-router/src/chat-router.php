@@ -189,18 +189,19 @@ function getClientIp(): string {
 //     100% Cookieless RODO, Zero-PII (dzienny skrót SHA-256 bez zapisu IP)
 // -----------------------------------------------------------------------------
 if ($requestUri === '/analytics' || $requestUri === '/collect') {
-    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-    if (preg_match('/(bot|crawler|spider|lighthouse|headless|uptime-kuma|curl|python)/i', $ua)) {
-        http_response_code(202);
-        echo json_encode(['success' => true, 'skipped' => 'bot']);
-        exit;
-    }
-
     $rawBeacon = file_get_contents('php://input');
     $beacon = $rawBeacon ? json_decode($rawBeacon, true) : null;
     if (!is_array($beacon)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Bad Request: Invalid JSON']);
+        exit;
+    }
+
+    $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+    $rawType = strtolower(trim((string)($beacon['type'] ?? 'pageview')));
+    if ($rawType !== 'gsc_sync' && preg_match('/(bot|crawler|spider|lighthouse|headless|uptime-kuma|curl|python)/i', $ua)) {
+        http_response_code(202);
+        echo json_encode(['success' => true, 'skipped' => 'bot']);
         exit;
     }
 
