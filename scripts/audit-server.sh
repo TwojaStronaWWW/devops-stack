@@ -988,7 +988,7 @@ sys_prompt_cross = (
     "potwierdź spójność wskaźników IoC/WAF/Backupów lub wskaż choćby najmniejszy ślad ryzyka."
 )
 
-UA = "TwojaStronaWWW-SecurityAuditor/2.0"
+UA = "Mozilla/5.0 (compatible; TwojaStronaWWW-AIRouter/2.0)"
 primary_answer = ""
 primary_label = ""
 primary_think_tok = 0
@@ -1002,7 +1002,7 @@ if groq_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_completion_tokens": 3072
+        "max_tokens": 2048
     }))
 if cerebras_key:
     primary_candidates.append(("Cerebras GPT-OSS-120B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
@@ -1010,13 +1010,13 @@ if cerebras_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_completion_tokens": 3072
+        "max_tokens": 2048
     }))
     primary_candidates.append(("Cerebras Qwen-3.8-27B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
         "model": "qwen-3.8-27b",
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "temperature": 0.2,
-        "max_completion_tokens": 2048
+        "max_tokens": 2048
     }))
 
 for label, url, api_key, body in primary_candidates:
