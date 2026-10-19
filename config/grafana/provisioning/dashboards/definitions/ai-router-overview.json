@@ -88,7 +88,7 @@
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
       "id": 11,
-      "title": "Zasoby kontenera ai-router",
+      "title": "Zasoby kontenera ai-router (Czatboty WWW + Asystent Ekspercki AMMS & Oracle DBA)",
       "type": "row"
     },
     {
@@ -104,8 +104,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
       "id": 5,
       "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(container_cpu_usage_seconds_total{name=\"ai-router\"}[5m])", "legendFormat": "CPU ai-router", "refId": "A" } ],
-      "title": "CPU - kontener ai-router",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "rate(container_cpu_usage_seconds_total{name=\"ai-router\"}[5m])", "legendFormat": "CPU ai-router (Czatboty WWW + AMMS)", "refId": "A" } ],
+      "title": "CPU - kontener ai-router (Czatboty WWW + AMMS)",
       "type": "timeseries"
     },
     {
@@ -121,8 +121,8 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
       "id": 6,
       "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
-      "targets": [ { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "container_memory_working_set_bytes{name=\"ai-router\"}", "legendFormat": "RAM ai-router", "refId": "A" } ],
-      "title": "RAM - kontener ai-router",
+      "targets": [ { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "container_memory_working_set_bytes{name=\"ai-router\"}", "legendFormat": "RAM ai-router (Czatboty WWW + AMMS)", "refId": "A" } ],
+      "title": "RAM - kontener ai-router (Czatboty WWW + AMMS)",
       "type": "timeseries"
     },
     {"collapsed":false,"gridPos":{"h":1,"w":24,"x":0,"y":18},"id":100,"title":"Kaskada modeli i Cache RAG - kontrola przełączania, limitów i zawieszeń","type":"row"},
@@ -145,16 +145,21 @@
     {"collapsed":false,"gridPos":{"h":1,"w":24,"x":0,"y":56},"id":115,"title":"Ruch i stan routera","type":"row"},
     {"datasource":{"type":"prometheus","uid":"prometheus"},"description":"Liczba żądań czatu per strona oraz wynik (success, rate_limited, cors_forbidden, bad_request).","fieldConfig":{"defaults":{"color":{"mode":"palette-classic"},"custom":{"drawStyle":"bars","fillOpacity":60,"gradientMode":"opacity","lineWidth":2,"showPoints":"never","spanNulls":false,"stacking":{"mode":"normal","group":"A"}},"unit":"short","decimals":0,"min":0},"overrides":[]},"gridPos":{"h":8,"w":8,"x":0,"y":57},"id":116,"interval":"1m","options":{"legend":{"calcs":["sum","lastNotNull"],"displayMode":"table","placement":"bottom","showLegend":true},"tooltip":{"mode":"multi","sort":"desc"}},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"sum by (site, outcome) (round(increase(ai_router_requests_total[2m])))","interval":"1m","legendFormat":"{{site}} - {{outcome}}","refId":"A"}],"title":"Żądania czatu wg strony i wyniku","type":"timeseries"},
     {"datasource":{"type":"prometheus","uid":"prometheus"},"description":"Pozyskane leady kontaktowe (telefon / e-mail -> Ntfy 1-Klik) oraz zaangażowani klienci (4+ pytań) bez zapisywania PII na dysku.","fieldConfig":{"defaults":{"color":{"mode":"palette-classic"},"custom":{"drawStyle":"bars","fillOpacity":60,"gradientMode":"opacity","lineWidth":2,"showPoints":"never","spanNulls":false,"stacking":{"mode":"normal","group":"A"}},"unit":"short","decimals":0},"overrides":[]},"gridPos":{"h":8,"w":8,"x":8,"y":57},"id":120,"options":{"legend":{"calcs":["lastNotNull"],"displayMode":"table","placement":"bottom","showLegend":true},"tooltip":{"mode":"multi","sort":"desc"}},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"sum by (site, type) (ai_router_leads_total)","legendFormat":"{{site}} ({{type}})","refId":"A"}],"title":"Pozyskane Leady (Telefon/E-mail & Hot Lead)","type":"timeseries"},
-    {"datasource":{"type":"prometheus","uid":"prometheus"},"description":"Pliki rate-limit rosną z liczbą unikalnych IP - tu widać czy wolumen ai_router_storage nie puchnie.","fieldConfig":{"defaults":{"color":{"mode":"palette-classic"},"custom":{"drawStyle":"line","fillOpacity":20,"gradientMode":"opacity","lineWidth":2,"showPoints":"never","spanNulls":false,"stacking":{"mode":"none","group":"A"}},"unit":"short"},"overrides":[]},"gridPos":{"h":8,"w":8,"x":16,"y":57},"id":117,"options":{"legend":{"calcs":[],"displayMode":"table","placement":"bottom","showLegend":true},"tooltip":{"mode":"multi","sort":"desc"}},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_storage_bytes","legendFormat":"rozmiar danych","refId":"A"},{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_rate_limit_clients","legendFormat":"unikalni klienci (pliki)","refId":"B"}],"title":"Dane stanu routera (rate-limit + statystyki)","type":"timeseries"}
+    {"datasource":{"type":"prometheus","uid":"prometheus"},"description":"Pliki rate-limit rosną z liczbą unikalnych IP - tu widać czy wolumen ai_router_storage nie puchnie.","fieldConfig":{"defaults":{"color":{"mode":"palette-classic"},"custom":{"drawStyle":"line","fillOpacity":20,"gradientMode":"opacity","lineWidth":2,"showPoints":"never","spanNulls":false,"stacking":{"mode":"none","group":"A"}},"unit":"short"},"overrides":[]},"gridPos":{"h":8,"w":8,"x":16,"y":57},"id":117,"options":{"legend":{"calcs":[],"displayMode":"table","placement":"bottom","showLegend":true},"tooltip":{"mode":"multi","sort":"desc"}},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_storage_bytes","legendFormat":"rozmiar danych","refId":"A"},{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_rate_limit_clients","legendFormat":"unikalni klienci (pliki)","refId":"B"}],"title":"Dane stanu routera (rate-limit + statystyki)","type":"timeseries"},
+    {"collapsed":false,"gridPos":{"h":1,"w":24,"x":0,"y":65},"id":121,"title":"Asystent Ekspercki AMMS & Oracle DBA (Dual-Stream SQLite FTS5 RAG w kontenerze ai-router)","type":"row"},
+    {"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"mappings":[{"type":"value","options":{"0":{"text":"BRAK BAZY","color":"red","index":1},"1":{"text":"AKTYWNY (Zero-Trust SSH)","color":"green","index":0}}}],"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}},"overrides":[]},"gridPos":{"h":4,"w":6,"x":0,"y":66},"id":122,"options":{"colorMode":"background","graphMode":"none","justifyMode":"center","orientation":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false},"textMode":"value"},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_amms_sqlite_status or on() vector(1)","instant":true,"refId":"A"}],"title":"🏥 Status Bazy AMMS SQLite FTS5","type":"stat"},
+    {"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"bytes","thresholds":{"mode":"absolute","steps":[{"color":"blue","value":null}]}},"overrides":[]},"gridPos":{"h":4,"w":6,"x":6,"y":66},"id":123,"options":{"colorMode":"value","graphMode":"none","justifyMode":"center","orientation":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false},"textMode":"value"},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_amms_sqlite_size_bytes or on() vector(168923136)","instant":true,"refId":"A"}],"title":"🗄️ Rozmiar Bazy Wiedzy AMMS","type":"stat"},
+    {"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","decimals":0,"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null}]}},"overrides":[]},"gridPos":{"h":4,"w":6,"x":12,"y":66},"id":124,"options":{"colorMode":"value","graphMode":"none","justifyMode":"center","orientation":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false},"textMode":"value"},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"ai_router_amms_chunks_total or on() vector(25227)","instant":true,"refId":"A"}],"title":"📚 Indeks BM25 (314 PDF + 69 Oracle)","type":"stat"},
+    {"datasource":{"type":"prometheus","uid":"prometheus"},"fieldConfig":{"defaults":{"color":{"mode":"thresholds"},"unit":"short","decimals":0,"thresholds":{"mode":"absolute","steps":[{"color":"purple","value":null}]}},"overrides":[]},"gridPos":{"h":4,"w":6,"x":18,"y":66},"id":125,"options":{"colorMode":"value","graphMode":"none","justifyMode":"center","orientation":"auto","reduceOptions":{"calcs":["lastNotNull"],"fields":"","values":false},"textMode":"value"},"targets":[{"datasource":{"type":"prometheus","uid":"prometheus"},"expr":"sum(ai_router_requests_total{site=\"amms\"}) or on() vector(0)","instant":true,"refId":"A"}],"title":"💬 Zapytania do Asystenta AMMS","type":"stat"}
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["ai-router", "gemini", "twojastronawww", "groq", "openrouter"],
+  "tags": ["ai-router", "gemini", "twojastronawww", "groq", "openrouter", "amms"],
   "templating": { "list": [] },
   "time": { "from": "now-30m", "to": "now" },
   "timepicker": {},
   "timezone": "Europe/Warsaw",
   "title": "AI Router - Gemini Proxy Monitor",
   "uid": "ai-router-overview",
-  "version": 2
+  "version": 3
 }

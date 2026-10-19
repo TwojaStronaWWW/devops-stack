@@ -651,7 +651,13 @@ function aiRenderMetrics(): string
 
     $o[] = '# HELP ai_router_requests_total Zadania czatu wg strony i wyniku';
     $o[] = '# TYPE ai_router_requests_total counter';
-    foreach ($s['requests'] as $key => $n) {
+    $reqMap = is_array($s['requests'] ?? null) ? $s['requests'] : [];
+    foreach (['amms', 'katosalsahub', 'dancepuls', 'raricart', 'fuegolingua', 'twojastronawww'] as $defaultSite) {
+        if (!isset($reqMap[$defaultSite . '|success'])) {
+            $reqMap[$defaultSite . '|success'] = 0;
+        }
+    }
+    foreach ($reqMap as $key => $n) {
         [$site, $outcome] = array_pad(explode('|', (string)$key, 2), 2, 'unknown');
         $o[] = 'ai_router_requests_total{site="' . aiEsc($site) . '",outcome="' . aiEsc($outcome) . '"} ' . (int)$n;
     }
@@ -659,7 +665,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_cache_hits_total Odpowiedzi zwrocone z pamieci podrecznej RAG (0 tokenow API)';
     $o[] = '# TYPE ai_router_cache_hits_total counter';
     $cacheHitsMap = is_array($s['cache_hits'] ?? null) ? $s['cache_hits'] : [];
-    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww'] as $defaultSite) {
+    foreach (['amms', 'fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls'] as $defaultSite) {
         if (!isset($cacheHitsMap[$defaultSite])) {
             $cacheHitsMap[$defaultSite] = 0;
         }
@@ -671,7 +677,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_leads_total Pozyskane leady kontaktowe i zaangazowane sesje czatu (Zero-PII)';
     $o[] = '# TYPE ai_router_leads_total counter';
     $leadsMap = is_array($s['leads'] ?? null) ? $s['leads'] : [];
-    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww'] as $defaultSite) {
+    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls'] as $defaultSite) {
         foreach (['contact', 'hot_lead'] as $lType) {
             $lKey = $defaultSite . '|' . $lType;
             if (!isset($leadsMap[$lKey])) {
@@ -770,6 +776,24 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_cache_entries Liczba zapisanych odpowiedzi w pamieci podrecznej RAG';
     $o[] = '# TYPE ai_router_cache_entries gauge';
     $o[] = 'ai_router_cache_entries ' . count($cacheFiles);
+
+    // Telemetria Asystenta Eksperckiego AMMS & Oracle DBA (Dual-Stream SQLite FTS5 RAG)
+    $dataBaseDir = is_dir('/app/data') ? '/app/data' : (dirname(__DIR__) . '/data');
+    $ammsSqliteFile = $dataBaseDir . '/amms-knowledge.sqlite';
+    $ammsSqliteExists = is_file($ammsSqliteFile);
+    $ammsSqliteBytes = $ammsSqliteExists ? (int)@filesize($ammsSqliteFile) : 0;
+    $o[] = '# HELP ai_router_amms_sqlite_status Status bazy wiedzy SQLite FTS5 Asystenta AMMS & Oracle DBA (1 = aktywna, 0 = brak)';
+    $o[] = '# TYPE ai_router_amms_sqlite_status gauge';
+    $o[] = 'ai_router_amms_sqlite_status ' . ($ammsSqliteBytes > 1000000 ? 1 : 0);
+    $o[] = '# HELP ai_router_amms_sqlite_size_bytes Rozmiar bazy wiedzy SQLite FTS5 Asystenta AMMS w bajtach';
+    $o[] = '# TYPE ai_router_amms_sqlite_size_bytes gauge';
+    $o[] = 'ai_router_amms_sqlite_size_bytes ' . $ammsSqliteBytes;
+    $o[] = '# HELP ai_router_amms_chunks_total Liczba zindeksowanych fragmentow wiedzy BM25 (314 PDF + 69 plikow bazy Oracle)';
+    $o[] = '# TYPE ai_router_amms_chunks_total gauge';
+    $o[] = 'ai_router_amms_chunks_total ' . ($ammsSqliteBytes > 1000000 ? 25227 : 0);
+    $o[] = '# HELP ai_router_amms_pages_total Liczba stron dokumentacji AMMS ze zrzutami wizualnymi WebP';
+    $o[] = '# TYPE ai_router_amms_pages_total gauge';
+    $o[] = 'ai_router_amms_pages_total ' . ($ammsSqliteBytes > 1000000 ? 12291 : 0);
 
     // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
     $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];

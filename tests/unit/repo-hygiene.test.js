@@ -298,6 +298,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'ai_router_cache_hits_total',
       'ai_router_cache_entries',
       'ai_router_leads_total',
+      'ai_router_amms_sqlite_status',
+      'ai_router_amms_sqlite_size_bytes',
     ]) {
       assert.ok(exprs.includes(metric), `Dashboard ai-router-overview nie wizualizuje metryki ${metric}`);
     }
@@ -313,6 +315,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'devops_backup_websites_db_verified',
       'devops_audit_status',
       'devops_fail2ban_banned_total',
+      'ai_router_amms_sqlite_status',
+      'ai_router_amms_sqlite_size_bytes',
     ]) {
       assert.ok(kumaExprs.includes(metric), `Dashboard uptime-kuma-overview nie wizualizuje metryki ${metric}`);
     }

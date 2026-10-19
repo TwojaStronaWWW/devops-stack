@@ -23,6 +23,7 @@ const SITES = [
     { name: "Serwis Maxbit", url: "https://serwis.maxbit.com.pl/" },
     { name: "FuegoLingua.pl", url: "https://fuegolingua.pl/" },
     { name: "AI Router Healthcheck", url: "http://ai-router:8080/health" },
+    { name: "Asystent AMMS & Oracle DBA", url: "http://ai-router:8080/amms" },
 ];
 
 console.log("==> Łączenie z Uptime Kuma pod " + KUMA_URL + "...");
