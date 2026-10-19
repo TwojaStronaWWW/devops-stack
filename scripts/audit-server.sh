@@ -925,7 +925,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|HEAD /|Listening for Jobs|Connected to GitHub)' \
+                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|container factory failed|GET /health|GET /metrics|HEAD /|Listening for Jobs|Connected to GitHub)' \
                             | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|ban|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
@@ -1174,8 +1174,8 @@ ${AI_AUDIT_INSIGHT}"
             fi
 
             curl -s --max-time 5 \
-                -H "Title: Poranny Audyt AI VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL ($0.00)" \
-                -H "Priority: low" \
+                -H "Title: Poranny Audyt AI VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL (\$0.00)" \
+                -H "Priority: default" \
                 -H "Tags: sunny,robot" \
                 -d "${MORNING_BODY}" \
                 "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
