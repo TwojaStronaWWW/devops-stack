@@ -53,7 +53,7 @@
  │  └──────────────────────────────────────────────────────────────────┘  │
  │                                                                        │
  │  Trwałe wolumeny, Autonomiczny Strażnik 24/7 & Kopia Offsite:          │
- │  ├── devops-audit.timer (co 15 min) ──> IoC/IPS + Claude 4.6 (08:00)   │
+ │  ├── devops-audit.timer (co 15 min) ──> IoC/WAF + Dual-AI 120B (08:00)  │
  │  ├── devops-backup.timer (03:00 UTC) ──> AES-256 + Restore Drill ──> R2│
  │  └── backup-websites-lh.sh (FTPS TLS + mysqldump) ──> Cloudflare R2    │
  └────────────────────────────────────────────────────────────────────────┘
@@ -74,7 +74,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 - **Wyłączenie uwierzytelniania hasłem**: `PasswordAuthentication no` całkowicie eliminuje podatność na ataki słownikowe i zgadywanie haseł. Dozwolone są wyłącznie silne klucze asymetryczne (**Ed25519**).
 - **Limit prób logowania**: `MaxAuthTries 3` – rozłączenie sesji po 3 nieudanych próbach.
 - **Wyłączenie zbędnych demonów sieciowych**: `X11Forwarding no` oraz całkowite zamaskowanie `rpcbind.service` / `rpcbind.socket` (port 111).
-- **Kryminalistyczna kontrola śladów włamania (IoC — `devops_security_ioc_clean`)**: Co 15 minut skrypt `audit-server.sh` weryfikuje dziennik `journalctl -u ssh` pod kątem zerowej liczby logowań hasłem/rootem, sprawdza brak obcych kont `UID 0` w `/etc/passwd` oraz kontroluje liczbę kluczy w `~/.ssh/authorized_keys`.
+- **Kryminalistyczna kontrola śladów włamania (IoC — `devops_security_ioc_clean`)**: Co 15 minut skrypt `audit-server.sh` weryfikuje dziennik `journalctl -u ssh` pod kątem zerowej liczby logowań hasłem/rootem, sprawdza brak obcych kont `UID 0` w `/etc/passwd`, brak procesów uruchomionych z `/tmp` i `/dev/shm`, integralność `/etc/cron*` oraz kontroluje liczbę kluczy w `~/.ssh/authorized_keys`.
 
 ### C. System Zapobiegania Włamaniom (Fail2Ban IPS) + WAF Warstwy 7 i IP Penalty Box
 - **Progresywny Ban SSH (Fail2Ban IPS)**: Po **3 nieudanych próbach** logowania w oknie 10 minut adres IP agresora zostaje zablokowany na zaporze UFW na **1 godzinę** (`bantime = 1h`), a dla recydywistów czas blokady rośnie wykładniczo (`bantime.increment = true`, `bantime.factor = 2`) aż do **7 dni (`7d`)**. Statystyki banów (`devops_fail2ban_banned_total`, `devops_fail2ban_currently_banned`) są wizualizowane na żywo w Grafanie.
@@ -142,7 +142,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001, Fail2ban progresywny 1h->7d, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # 5-warstwowy audyt żywego serwera VPS + kontrola IoC/IPS + poranny raport 08:00 (Claude Sonnet 4.6 Deep X-Ray)
+│   ├── audit-server.sh            # 5-warstwowy audyt (67 testów, IoC/IPS/WAF, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do chmury R2
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z hostingu LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256)
@@ -359,7 +359,7 @@ Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla
 
 ### C. Automatyzacja Harmonogramów Systemd (Backup, Strażnik 24/7 & Poranny Audytor AI):
 - **`devops-backup.timer`** ([`scripts/setup-backup-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-backup-timer.sh)): Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów, stron LH.pl oraz automatyczny *Restore Drill*.
-- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`), kontroluje ślady włamań IoC (`devops_security_ioc_clean`) i statystyki Fail2Ban (`devops_fail2ban_banned_total`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport stanu infrastruktury wzbogacony o głęboki przegląd **Claude Sonnet 4.6 Deep X-Ray** (z licznikiem tokenów i budżetu USD).
+- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** (0 zapytań AI w rutynowych przebiegach) — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`, 67 testów), kontroluje ślady włamań IoC (`devops_security_ioc_clean`), blokady WAF L7 (`devops_waf_blocked_total`), skaner wyjątków 24h (`devops_log_critical_24h_total`) i statystyki Fail2Ban (`devops_fail2ban_banned_total`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport stanu infrastruktury wzbogacony o **24-godzinny Rentgen (`--since 24h`)** weryfikowany krzyżowo przez **dwa darmowe modele w trybie głębokiego myślenia (`Groq/Cerebras GPT-OSS-120B reasoning: HIGH` + `Gemini 3.5 Flash thinking: HIGH`, koszt `$0.00`)**, z automatyczną eskalacją do **`Claude Sonnet 4.6`** wyłącznie w razie wykrycia anomalii/błędów.
 
 ---
 

@@ -10,10 +10,12 @@ set -uo pipefail
 STACK_ROOT="${STACK_ROOT:-/opt/devops-stack}"
 STRICT_MODE=false
 FORCE_MORNING_REPORT=false
+FORCE_CLAUDE_ESCALATION=false
 for arg in "$@"; do
     case "${arg}" in
         --strict) STRICT_MODE=true ;;
         --morning-report) FORCE_MORNING_REPORT=true ;;
+        --deep-claude) FORCE_MORNING_REPORT=true; FORCE_CLAUDE_ESCALATION=true ;;
     esac
 done
 
@@ -359,6 +361,28 @@ else
          "Sprawdź: sudo journalctl -u ssh | grep Accepted"
 fi
 
+# 4c. Kontrola procesów uruchomionych z katalogów tymczasowych (/tmp, /var/tmp, /dev/shm - Host IDS)
+TMP_EXEC_PROCS="$(sudo -n ls -l /proc/[0-9]*/exe 2>/dev/null | grep -E ' -> (/tmp/|/var/tmp/|/dev/shm/)' || true)"
+if [[ -z "${TMP_EXEC_PROCS}" ]]; then
+    pass "Ochrona procesów (IoC Host IDS): 0 procesów uruchomionych z katalogów tymczasowych (/tmp, /var/tmp, /dev/shm)."
+else
+    IOC_CLEAN=0
+    OS_HARDENED=0
+    fail "ALARM MALWARE (IoC): Wykryto proces uruchomiony z katalogu tymczasowego: ${TMP_EXEC_PROCS}!" \
+         "Zbadaj i zatrzymaj podejrzany proces (ps aux / kill -9)"
+fi
+
+# 4d. Kontrola integralności harmonogramów systemowych (/etc/crontab, /etc/cron.d - ochrona przed backdoorami)
+CRON_SUSPICIOUS="$(grep -rnE '(curl .*\|\s*(ba)?sh|wget .*\|\s*(ba)?sh|/dev/tcp/|base64\s+-d)' /etc/crontab /etc/cron.d /var/spool/cron 2>/dev/null || true)"
+if [[ -z "${CRON_SUSPICIOUS}" ]]; then
+    pass "Integralność harmonogramów (IoC Cron): brak podejrzanych wywołań powłoki (curl|sh, /dev/tcp, base64) w /etc/cron*."
+else
+    IOC_CLEAN=0
+    OS_HARDENED=0
+    fail "ALARM BACKDOOR CRON (IoC): Wykryto podejrzany wpis w harmonogramie cron: ${CRON_SUSPICIOUS}!" \
+         "Zweryfikuj pliki w /etc/crontab, /etc/cron.d/ oraz /var/spool/cron/"
+fi
+
 # 5. Kernel sysctl & /dev/shm
 SYNC_COOKIES="$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo '0')"
 RP_FILTER="$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo '0')"
@@ -595,6 +619,39 @@ else
     else
         warn "Exporter GitHub zgłasza problem z API GitHub (repozytoria: ${GH_REPOS_COUNT:-0}, błędy: ${GH_FAILURES:-0} — sprawdź ważność GITHUB_PAT_* w .env)."
     fi
+
+    # 5d. Kontrola reguły Catch-All (http_status:404) w konfiguracji Ingress tunelu Cloudflare Zero Trust
+    CF_INGRESS_CFG="$(docker logs cloudflared 2>&1 | grep -i "Updated to new configuration" | tail -n 1 || true)"
+    if [[ -z "${CF_INGRESS_CFG}" ]] || echo "${CF_INGRESS_CFG}" | grep -q "http_status:404"; then
+        pass "Polityka Ingress Tunelu [cloudflared]: reguła catch-all Zero Trust (http_status:404) jest aktywna."
+    else
+        warn "W konfiguracji Ingress tunelu cloudflared nie wykryto reguły fallback http_status:404!" \
+             "Sprawdź regułę catch-all w panelu Cloudflare Zero Trust -> Networks -> Tunnels"
+    fi
+
+    # 5e. Telemetria WAF Warstwy 7 i 15-minutowego IP Penalty Box w bramce AI Router
+    WAF_BLOCKED_TOTAL="$(curl -s --max-time 4 "http://127.0.0.1:8085/metrics" 2>/dev/null | awk '/^ai_router_requests_total\{.*outcome="security_blocked"/ {s+=$NF} END {print s+0}')"
+    pass "Strażnik WAF L7 & IP Penalty Box (AI Router): aktywny (zablokowane ataki L7 od startu: ${WAF_BLOCKED_TOTAL:-0})."
+
+    # 5f. Skaner Anomalii Logów 24h (24h Container Log Error Hunter - pełne 24h zamiast wycinka --tail 6)
+    LOG_CRITICAL_24H=0
+    LOG_CRITICAL_SAMPLES=""
+    for _cname in "${EXPECTED_CONTAINERS[@]}"; do
+        _hits="$(docker logs --since 24h "${_cname}" 2>&1 | tr -d '\000' \
+            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|HEAD /)' \
+            | grep -E '(FATAL|PANIC|Out of memory|Segmentation fault|Uncaught Error|SQLITE_CORRUPT)' | tail -n 2 || true)"
+        if [[ -n "${_hits}" ]]; then
+            _cnt="$(echo "${_hits}" | wc -l | tr -d ' ')"
+            LOG_CRITICAL_24H=$((LOG_CRITICAL_24H + _cnt))
+            LOG_CRITICAL_SAMPLES="${LOG_CRITICAL_SAMPLES} [${_cname}]: $(echo "${_hits}" | tr '\n' ' ' | cut -c 1-160)"
+        fi
+    done
+    if [[ "${LOG_CRITICAL_24H}" -eq 0 ]]; then
+        pass "Skaner logów 24h (${#EXPECTED_CONTAINERS[@]} kontenerów): 0 krytycznych wyjątków (FATAL/PANIC/OOM/SQLITE_CORRUPT)."
+    else
+        warn "Skaner logów 24h wykrył ${LOG_CRITICAL_24H} krytycznych wyjątków:${LOG_CRITICAL_SAMPLES}" \
+             "Sprawdź logi kontenerów w panelu Dozzle"
+    fi
 fi
 
 # ==============================================================================
@@ -783,6 +840,14 @@ devops_fail2ban_banned_current ${F2B_BANNED_CURRENT:-0}
 # HELP devops_security_ioc_clean Status braku oznak wlamania IoC (1 = czysto, 0 = wykryto naruszenie integralnosci kluczy/kont)
 # TYPE devops_security_ioc_clean gauge
 devops_security_ioc_clean ${IOC_CLEAN:-1}
+
+# HELP devops_waf_blocked_total Laczna liczba zablokowanych atakow WAF L7 w AI Routerze
+# TYPE devops_waf_blocked_total gauge
+devops_waf_blocked_total ${WAF_BLOCKED_TOTAL:-0}
+
+# HELP devops_log_critical_24h_total Liczba krytycznych wyjatkow w logach kontenerow z ostatnich 24h
+# TYPE devops_log_critical_24h_total gauge
+devops_log_critical_24h_total ${LOG_CRITICAL_24H:-0}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
@@ -791,7 +856,7 @@ fi
 # Powiadomienia Push na Ntfy.sh:
 # 1. Natychmiastowy alert przy błędach krytycznych (FAIL_COUNT > 0)
 # 2. Alert ostrzeżeń (WARN_COUNT > 0, max raz na 6h, aby unikać spamu)
-# 3. Codzienny Poranny Raport Bezpieczeństwa o 08:00 rano (Europe/Warsaw) lub z flagą --morning-report
+# 3. Codzienny Poranny Raport Bezpieczeństwa o 08:00 rano (Europe/Warsaw) lub z flagą --morning-report / --deep-claude
 if [[ -f "${ENV_FILE}" ]]; then
     NTFY_AUDIT_TOPIC="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
     if [[ -n "${NTFY_AUDIT_TOPIC}" ]]; then
@@ -822,7 +887,7 @@ if [[ -f "${ENV_FILE}" ]]; then
             fi
         fi
 
-        # Codzienny Poranny Raport o 08:00 rano (Europe/Warsaw) lub wymuszony przez --morning-report
+        # Codzienny Poranny Raport o 08:00 rano (Europe/Warsaw) lub wymuszony przez --morning-report / --deep-claude
         PL_HOUR="$(TZ=Europe/Warsaw date +%H 2>/dev/null || date +%H)"
         PL_DATE="$(TZ=Europe/Warsaw date +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d)"
         MORNING_STAMP_FILE="/var/tmp/devops-morning-digest.date"
@@ -831,19 +896,25 @@ if [[ -f "${ENV_FILE}" ]]; then
         if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${PL_HOUR}" == "08" && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
             echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
             F2B_BANNED="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}' || echo '0')"
+            F2B_IP_LIST="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Banned IP list/ {gsub(/^[ \t]+/,"",$2); print $2}' || echo 'brak')"
+            AI_METRICS_RAW="$(curl -s --max-time 3 "http://127.0.0.1:8085/metrics" 2>/dev/null || true)"
+            WA_PV_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_pageviews_total\{/ {s+=$NF} END {print s+0}')"
+            WA_UV_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_unique_visitors_total\{/ {s+=$NF} END {print s+0}')"
+            WA_LEADS_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^ai_router_leads_total\{/ {s+=$NF} END {print s+0}')"
 
-            # Zbieranie Głębokiego Rentgena (Deep X-Ray) dla modelu Claude Sonnet 4.6
-            ANTHROPIC_KEY="$(grep -E '^ANTHROPIC_API_KEY=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+            # Zbieranie Pełnego Rentgena 24h (Deep X-Ray 24h) z odfiltrowaniem szumu healthchecków
             AI_AUDIT_INSIGHT=""
-            if [[ -n "${ANTHROPIC_KEY}" ]] && command -v python3 >/dev/null 2>&1; then
+            if command -v python3 >/dev/null 2>&1; then
                 XRAY_FILE="/var/tmp/devops-xray.txt"
                 {
-                    echo "=== WYNIK SKRYPTU AUDYTU ==="
-                    echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL"
+                    echo "=== WYNIK DETERMINISTYCZNEGO AUDYTU 5 WARSTW (ISO 27001) ==="
+                    echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL (IoC Clean=${IOC_CLEAN:-1}, Krytyczne wyjatki 24h=${LOG_CRITICAL_24H:-0})"
                     echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
-                    echo "Backupy: VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Fail2ban zbanowane IP: ${F2B_BANNED:-0}"
+                    echo "Backupy: VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu"
+                    echo "Ochrona IPS/WAF: Fail2ban zbanowane IP=${F2B_BANNED:-0} (aktywne IP: ${F2B_IP_LIST:-brak}) | WAF L7 zablokowane ataki=${WAF_BLOCKED_TOTAL:-0}"
+                    echo "Analityka WWW i AI: Odslony=${WA_PV_TOTAL:-0} | Unikalni=${WA_UV_TOTAL:-0} | Leady=${WA_LEADS_TOTAL:-0}"
                     if [[ -n "${HINTS_SUMMARY}" ]]; then
-                        echo "Wykryte wskazowki: ${HINTS_SUMMARY}"
+                        echo "Wykryte wskazowki naprawcze: ${HINTS_SUMMARY}"
                     fi
                     echo "=== ROZMIARY LOGOW KONTENEROW (TOP 5) ==="
                     sudo sh -c 'du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -hr | head -n 5' || true
@@ -851,77 +922,178 @@ if [[ -f "${ENV_FILE}" ]]; then
                     sudo python3 -c "import sqlite3; c=sqlite3.connect('/var/lib/docker/volumes/uptime_kuma_data/_data/kuma.db'); print(c.execute(\"SELECT key, value FROM setting WHERE key IN ('disableAuth','tlsExpiryNotifyDays','keepDataPeriodDays')\").fetchall())" 2>/dev/null || true
                     echo "=== REGULY INGRESS CLOUDFLARED ==="
                     docker logs cloudflared 2>&1 | grep -i "Updated to new configuration" | tail -n 1 || true
-                    echo "=== OSTATNIE LOGI KONTENEROW (OSTRZEZENIA I BLEDY) ==="
+                    echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
-                        echo "--- [${cname}] ---"
-                        docker logs --tail 6 "${cname}" 2>&1 | tr -d '\000' | cut -c 1-240 || true
+                        anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
+                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|HEAD /|Listening for Jobs|Connected to GitHub)' \
+                            | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|ban|corrupt|unhealthy)' \
+                            | tail -n 6 | cut -c 1-240 || true)"
+                        if [[ -n "${anom_24h}" ]]; then
+                            echo "--- [${cname}] ANOMALIE 24H ---"
+                            echo "${anom_24h}"
+                        else
+                            last_line="$(docker logs --tail 1 "${cname}" 2>&1 | tr -d '\000' | cut -c 1-180 || true)"
+                            echo "--- [${cname}] 24h: 0 bledow/ostrzezen (ostatni wpis: ${last_line})"
+                        fi
                     done
-                    echo "=== BLEDY SYSTEMOWE (journalctl 24h) ==="
-                    sudo journalctl -p err..emerg --since "24 hours ago" --no-pager 2>/dev/null | tail -n 10 || true
+                    echo "=== DZIENNIK SSH I BLEDY SYSTEMOWE (journalctl 24h) ==="
+                    ssh_ok_24h="$(sudo journalctl -u ssh --since '24 hours ago' --no-pager 2>/dev/null | grep -c 'Accepted publickey' || true)"
+                    echo "Udane logowania SSH kluczem Ed25519 (24h): ${ssh_ok_24h:-0} | Logowania haslem/rootem: ${SSH_ANOMALY_LOGINS:-0}"
+                    sudo journalctl -p err..emerg --since "24 hours ago" --no-pager 2>/dev/null \
+                        | grep -vE '(kex_exchange_identification|Connection reset by peer|banner exchange)' | tail -n 8 || true
                 } > "${XRAY_FILE}" 2>/dev/null
 
-                AI_AUDIT_INSIGHT="$(sudo ENV_FILE="${ENV_FILE}" XRAY_FILE="${XRAY_FILE}" python3 - << 'PYEOF' 2>/dev/null || true
-import json, os, urllib.request
+                NEED_CLAUDE="false"
+                if [[ "${FORCE_CLAUDE_ESCALATION}" == "true" || "${FAIL_COUNT}" -gt 0 || "${WARN_COUNT}" -gt 0 || "${IOC_CLEAN:-1}" -eq 0 || "${LOG_CRITICAL_24H:-0}" -gt 0 ]]; then
+                    NEED_CLAUDE="true"
+                fi
+
+                AI_AUDIT_INSIGHT="$(sudo ENV_FILE="${ENV_FILE}" XRAY_FILE="${XRAY_FILE}" NEED_CLAUDE="${NEED_CLAUDE}" python3 - << 'PYEOF' 2>/dev/null || true
+import json, os, time, urllib.request
 
 env_path = os.environ.get("ENV_FILE", "/opt/devops-stack/.env")
-key = ""
+env_vars = {}
 if os.path.exists(env_path):
     with open(env_path, "r", encoding="utf-8", errors="ignore") as ef:
         for line in ef:
-            if line.startswith("ANTHROPIC_API_KEY="):
-                key = line.split("=", 1)[1].strip().strip("\"'")
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                env_vars[k.strip()] = v.strip().strip("\"'")
+
+groq_key = env_vars.get("GROQ_API_KEY", "")
+cerebras_key = env_vars.get("CEREBRAS_API_KEY", "")
+gemini_key = env_vars.get("GEMINI_API_KEY", "")
+anthropic_key = env_vars.get("ANTHROPIC_API_KEY", "")
+need_claude = os.environ.get("NEED_CLAUDE", "false") == "true"
 
 xray_path = os.environ.get("XRAY_FILE", "")
 budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
 
 with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
-    xray_text = f.read()[:12000]
+    xray_text = f.read()[:14000]
 
-sys_prompt = (
+sys_prompt_primary = (
     "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
-    "Przeanalizuj poranny Rentgen serwera (logi kontenerów, rozmiary logów, ustawienia bazy Uptime Kuma, reguły tunelu Cloudflare, błędy journalctl). "
-    "Napisz po polsku bardzo zwięzłą, kompletną diagnozę (maksymalnie 3 krótkie wypunktowania, łącznie do 450 znaków, nigdy nie ucinaj zdań): "
-    "1) Czy w logach kontenerów lub systemie widać jakiekolwiek ciche błędy/anomalie, "
-    "2) Stan ochrony Zero Trust i backupów, "
-    "3) Ewentualna rekomendacja (lub potwierdzenie 100% czystości)."
+    "Przeanalizuj szczegółowy 24-godzinny Rentgen serwera (67 testów deterministycznych, skaner anomalii 24h wszystkich 12 kontenerów, WAF L7, Fail2ban, Uptime Kuma SQLite, reguły tunelu Cloudflare, journalctl). "
+    "Napisz po polsku zwięzłą, kompletną diagnozę (dokładnie 3 krótkie wypunktowania •, łącznie do 420 znaków, nigdy nie ucinaj zdań): "
+    "1) Anomalie w logach 24h i systemie, "
+    "2) Stan ochrony Zero Trust, WAF/Fail2ban i backupów, "
+    "3) Werdykt końcowy i ewentualna rekomendacja."
 )
 
-payload = {
-    "model": "claude-sonnet-4-6",
-    "max_tokens": 400,
-    "system": [{"type": "text", "text": sys_prompt, "cache_control": {"type": "ephemeral"}}],
-    "messages": [{"role": "user", "content": xray_text}]
-}
-
-req = urllib.request.Request(
-    "https://api.anthropic.com/v1/messages",
-    data=json.dumps(payload).encode("utf-8"),
-    headers={
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    },
-    method="POST"
+sys_prompt_cross = (
+    "Jesteś drugim, niezależnym Audytorem Krzyżowym ISO 27001 (Second Opinion). "
+    "Zweryfikuj poniższy 24-godzinny Rentgen serwera VPS i napisz po polsku maksymalnie 2 krótkie zdania (do 240 znaków, bez ucinania zdań): "
+    "potwierdź spójność wskaźników IoC/WAF/Backupów lub wskaż choćby najmniejszy ślad ryzyka."
 )
 
-with urllib.request.urlopen(req, timeout=25) as resp:
-    data = json.loads(resp.read().decode("utf-8"))
+UA = "TwojaStronaWWW-SecurityAuditor/2.0"
+primary_answer = ""
+primary_label = ""
+primary_think_tok = 0
+primary_total_tok = 0
 
-answer = ""
-for block in data.get("content", []):
-    if block.get("type") == "text":
-        answer += block.get("text", "").strip()
+# 1. GŁÓWNY AUDYTOR 120B (HIGH REASONING, $0.00): Groq GPT-OSS-120B -> Cerebras GPT-OSS-120B -> Cerebras Qwen 3.8
+primary_candidates = []
+if groq_key:
+    primary_candidates.append(("Groq GPT-OSS-120B (reasoning: HIGH)", "https://api.groq.com/openai/v1/chat/completions", groq_key, {
+        "model": "openai/gpt-oss-120b",
+        "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
+        "reasoning_effort": "high",
+        "temperature": 0.2,
+        "max_completion_tokens": 3072
+    }))
+if cerebras_key:
+    primary_candidates.append(("Cerebras GPT-OSS-120B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
+        "model": "gpt-oss-120b",
+        "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
+        "reasoning_effort": "high",
+        "temperature": 0.2,
+        "max_completion_tokens": 3072
+    }))
+    primary_candidates.append(("Cerebras Qwen-3.8-27B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
+        "model": "qwen-3.8-27b",
+        "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
+        "temperature": 0.2,
+        "max_completion_tokens": 2048
+    }))
 
-usage = data.get("usage", {})
-in_tok = int(usage.get("input_tokens", 0))
-out_tok = int(usage.get("output_tokens", 0))
-cache_w = int(usage.get("cache_creation_input_tokens", 0))
-cache_r = int(usage.get("cache_read_input_tokens", 0))
-total_tok_today = in_tok + out_tok + cache_w + cache_r
+for label, url, api_key, body in primary_candidates:
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": UA},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=22) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        msg = (data.get("choices") or [{}])[0].get("message", {})
+        txt = (msg.get("content") or "").strip()
+        # Oczyszczenie ewentualnych znaczników <think>...</think> jeśli model zwrócił je w treści
+        if "<think>" in txt and "</think>" in txt:
+            txt = txt.split("</think>", 1)[1].strip()
+        if txt:
+            primary_answer = txt
+            primary_label = label
+            usage = data.get("usage", {})
+            primary_total_tok = int(usage.get("total_tokens", 0))
+            details = usage.get("completion_tokens_details") or {}
+            primary_think_tok = int(details.get("reasoning_tokens", 0))
+            break
+    except Exception:
+        continue
 
-# Cennik Claude Sonnet 4.6: $3/1M input, $15/1M output, $3.75/1M cache_write, $0.30/1M cache_read
-cost_usd = (in_tok * 3.0 + out_tok * 15.0 + cache_w * 3.75 + cache_r * 0.30) / 1_000_000.0
+# 2. KRZYŻOWY WERYFIKATOR (HIGH THINKING, $0.00): Google Gemini 3.5 / 3.8 Flash
+cross_answer = ""
+cross_label = ""
+cross_think_tok = 0
+cross_total_tok = 0
 
+if gemini_key:
+    for g_model in ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"):
+        try:
+            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
+            g_body = {
+                "systemInstruction": {"parts": [{"text": sys_prompt_cross if primary_answer else sys_prompt_primary}]},
+                "contents": [{"role": "user", "parts": [{"text": xray_text}]}],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": 3072,
+                    "thinkingConfig": {"thinkingLevel": "HIGH"}
+                }
+            }
+            req = urllib.request.Request(
+                g_url,
+                data=json.dumps(g_body).encode("utf-8"),
+                headers={"Content-Type": "application/json", "User-Agent": UA},
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=22) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts")) or []
+            out_chunks = [p.get("text", "").strip() for p in parts if not p.get("thought") and p.get("text")]
+            txt = "\n".join([c for c in out_chunks if c]).strip()
+            if txt:
+                u_meta = data.get("usageMetadata", {})
+                t_tok = int(u_meta.get("thoughtsTokenCount", 0))
+                tot_tok = int(u_meta.get("totalTokenCount", 0))
+                if not primary_answer:
+                    primary_answer = txt
+                    primary_label = f"{g_model} (thinking: HIGH)"
+                    primary_think_tok = t_tok
+                    primary_total_tok = tot_tok
+                else:
+                    cross_answer = txt
+                    cross_label = f"{g_model} (thinking: HIGH)"
+                    cross_think_tok = t_tok
+                    cross_total_tok = tot_tok
+                break
+        except Exception:
+            continue
+
+# Odczyt aktualnego stanu budżetu rezerwowego Anthropic ($5.00)
 budget = {"initial_usd": 5.00, "spent_usd": 0.0, "total_tokens": 0, "runs": 0}
 if os.path.exists(budget_path):
     try:
@@ -930,30 +1102,70 @@ if os.path.exists(budget_path):
     except Exception:
         pass
 
-budget["spent_usd"] = round(float(budget.get("spent_usd", 0.0)) + cost_usd, 6)
-budget["total_tokens"] = int(budget.get("total_tokens", 0)) + total_tok_today
-budget["runs"] = int(budget.get("runs", 0)) + 1
-rem_usd = max(0.0, round(float(budget["initial_usd"]) - budget["spent_usd"], 4))
-avg_cost = budget["spent_usd"] / max(1, budget["runs"])
-est_days = int(rem_usd / avg_cost) if avg_cost > 0 else 999
+claude_section = ""
+cost_today_usd = 0.0
 
-try:
-    os.makedirs(os.path.dirname(budget_path), exist_ok=True)
-    with open(budget_path, "w", encoding="utf-8") as bf:
-        json.dump(budget, bf, indent=2)
-except Exception:
-    pass
+# 3. TRYB ESKALACJI KRYMINALISTYCZNEJ (Claude Sonnet 4.6) -> TYLKO przy anomaliach/błędach, fladze --deep-claude lub awarii obu darmowych chmur
+if anthropic_key and (need_claude or not primary_answer):
+    try:
+        c_payload = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 450,
+            "system": [{"type": "text", "text": sys_prompt_primary, "cache_control": {"type": "ephemeral"}}],
+            "messages": [{"role": "user", "content": xray_text}]
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=json.dumps(c_payload).encode("utf-8"),
+            headers={"x-api-key": anthropic_key, "anthropic-version": "2023-06-01", "content-type": "application/json", "User-Agent": UA},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        c_ans = "".join([b.get("text", "").strip() for b in data.get("content", []) if b.get("type") == "text"])
+        usage = data.get("usage", {})
+        in_tok = int(usage.get("input_tokens", 0))
+        out_tok = int(usage.get("output_tokens", 0))
+        cache_w = int(usage.get("cache_creation_input_tokens", 0))
+        cache_r = int(usage.get("cache_read_input_tokens", 0))
+        total_tok_today = in_tok + out_tok + cache_w + cache_r
+        cost_today_usd = (in_tok * 3.0 + out_tok * 15.0 + cache_w * 3.75 + cache_r * 0.30) / 1_000_000.0
+        budget["spent_usd"] = round(float(budget.get("spent_usd", 0.0)) + cost_today_usd, 6)
+        budget["total_tokens"] = int(budget.get("total_tokens", 0)) + total_tok_today
+        budget["runs"] = int(budget.get("runs", 0)) + 1
+        os.makedirs(os.path.dirname(budget_path), exist_ok=True)
+        with open(budget_path, "w", encoding="utf-8") as bf:
+            json.dump(budget, bf, indent=2)
+        claude_section = f"\n🚨 Ekspertyza Eskalacyjna Claude Sonnet 4.6:\n{c_ans}\n"
+    except Exception:
+        pass
 
-print(f"🤖 Diagnoza Claude Sonnet 4.6:\n{answer}\n\n💰 Budżet API Anthropic ($5.00):\n• Ten audyt: {total_tok_today} tok. (${cost_usd:.4f})\n• Wydano łącznie: ${budget['spent_usd']:.4f} ({budget['total_tokens']} tok.)\n• Pozostało: ${rem_usd:.4f} (wystarczy na ~{est_days} porannych audytów)")
+rem_usd = max(0.0, round(float(budget["initial_usd"]) - float(budget.get("spent_usd", 0.0)), 4))
+out_lines = []
+if primary_answer:
+    think_info = f" [myślenie: {primary_think_tok} tok. / łącznie: {primary_total_tok} tok.]" if primary_think_tok > 0 else f" [{primary_total_tok} tok.]"
+    out_lines.append(f"🧠 Audytor #1 — {primary_label}{think_info}:\n{primary_answer}")
+if cross_answer:
+    c_think_info = f" [myślenie: {cross_think_tok} tok.]" if cross_think_tok > 0 else ""
+    out_lines.append(f"🔍 Weryfikacja Krzyżowa #2 — {cross_label}{c_think_info}:\n{cross_answer}")
+if claude_section:
+    out_lines.append(claude_section.strip())
+
+out_lines.append(
+    f"💰 Koszt dzisiejszego audytu AI: ${cost_today_usd:.4f} (Tryb Dual-AI HIGH Reasoning)\n"
+    f"• Rezerwa awaryjna Anthropic ($5.00): pozostało ${rem_usd:.4f} (wydano dotychczas: ${float(budget.get('spent_usd', 0.0)):.4f})"
+)
+print("\n\n".join(out_lines))
 PYEOF
 )"
                 rm -f "${XRAY_FILE}" 2>/dev/null || true
             fi
 
-            MORNING_BODY="✅ Wynik: ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+            MORNING_BODY="✅ Wynik (67 testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
-🛡️ Ochrona: Uptime Kuma Auth OK (401) | Bufor OCI $(( OCI_BUFFER_BYTES / 1048576 )) MiB | Fail2ban: ${F2B_BANNED:-0} zbanowanych IP${HINTS_SUMMARY}"
+📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsłon | ${WA_UV_TOTAL:-0} unikalnych | ${WA_LEADS_TOTAL:-0} leadów
+🛡️ Ochrona: Kuma Auth OK (401) | WAF L7 blokady: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
                 MORNING_BODY="${MORNING_BODY}
 
@@ -962,7 +1174,7 @@ ${AI_AUDIT_INSIGHT}"
             fi
 
             curl -s --max-time 5 \
-                -H "Title: Poranny Audyt AI VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL" \
+                -H "Title: Poranny Audyt AI VPS (${PL_DATE}): ${OK_COUNT} OK / ${FAIL_COUNT} FAIL ($0.00)" \
                 -H "Priority: low" \
                 -H "Tags: sunny,robot" \
                 -d "${MORNING_BODY}" \

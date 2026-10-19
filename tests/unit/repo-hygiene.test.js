@@ -312,14 +312,19 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const webDash = JSON.parse(fs.readFileSync(webDashPath, 'utf-8'));
     const webIds = webDash.panels.map((p) => p.id);
     assert.strictEqual(new Set(webIds).size, webIds.length, 'Zduplikowane ID paneli w dashboardzie web-analytics-overview');
+    assert.ok(Array.isArray(webDash.templating?.list) && webDash.templating.list.some((v) => v.name === 'site'), 'Brak zmiennej $site w web-analytics-overview.json');
     const webExprs = JSON.stringify(webDash.panels);
     for (const metric of [
       'web_analytics_unique_visitors_today',
+      'web_analytics_unique_visitors_total',
+      'web_analytics_engaged_visits_total',
       'web_analytics_pageviews_total',
       'web_analytics_sources_total',
       'web_analytics_devices_total',
       'web_analytics_countries_total',
       'web_analytics_search_terms_total',
+      'web_analytics_events_total',
+      'web_analytics_cwv_lcp_seconds_sum',
     ]) {
       assert.ok(webExprs.includes(metric), `Dashboard web-analytics-overview nie wizualizuje metryki ${metric}`);
     }
@@ -446,6 +451,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(auditSh, /docker image prune -f/);
     assert.match(auditSh, /devops_oci_keepalive_buffer_bytes/);
     assert.match(auditSh, /github_request_failures_total/);
+    assert.match(auditSh, /devops_waf_blocked_total/);
+    assert.match(auditSh, /devops_log_critical_24h_total/);
+    assert.match(auditSh, /"reasoning_effort":\s*"high"/);
+    assert.match(auditSh, /"thinkingLevel":\s*"HIGH"/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);
