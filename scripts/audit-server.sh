@@ -971,7 +971,7 @@ xray_path = os.environ.get("XRAY_FILE", "")
 budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
 
 with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
-    xray_text = f.read()[:8500]
+    xray_text = f.read()[:6500]
 
 sys_prompt_primary = (
     "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
@@ -1002,7 +1002,7 @@ if groq_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 4096
+        "max_tokens": 2500
     }))
 if cerebras_key:
     primary_candidates.append(("Cerebras GPT-OSS-120B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
@@ -1010,13 +1010,13 @@ if cerebras_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 4096
+        "max_tokens": 2500
     }))
     primary_candidates.append(("Cerebras Qwen-3.8-27B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
         "model": "qwen-3.8-27b",
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "temperature": 0.2,
-        "max_tokens": 4096
+        "max_tokens": 2500
     }))
 
 for label, url, api_key, body in primary_candidates:
