@@ -439,8 +439,23 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(metricsText, /ai_router_requests_total\{site="twojastronawww",outcome="security_blocked"\}\s+([5-9]|\d{2,})/);
     });
 
-    it('endpoint POST /analytics powinien rejestrować bezciasteczkowe odsłony, źródła wejść i wyszukiwane hasła (Cookieless RODO / Zero-PII)', async () => {
+    it('endpoint POST /analytics powinien rejestrować bezciasteczkowe odsłony, źródła wejść (w tym AI Search), konwersje CTA, sesje zaangażowane, LCP i blokować nieznane site_id (Cookieless RODO / Zero-PII)', async () => {
       const visitorIp = '198.51.100.180';
+      trackIpRateFile(visitorIp);
+
+      // 1. Odrzucenie nieautoryzowanego site_id spoza białej listy (ochrona przed zatruciem kardynalności)
+      const badSiteRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+        body: JSON.stringify({ site_id: 'fake_spam_site', type: 'pageview', path: '/' }),
+      });
+      assert.strictEqual(badSiteRes.status, 400);
+
+      // 2. Odsłona z Google + wyszukiwana fraza + pomiar Core Web Vitals LCP (1200 ms)
       const pvRes = await fetch(`${baseUrl}/analytics`, {
         method: 'POST',
         headers: {
@@ -455,21 +470,129 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
           path: '/salsopedia.html',
           referrer: 'https://www.google.com/',
           term: 'rueda de casino',
+          lcp_ms: 1200,
         }),
       });
       assert.strictEqual(pvRes.status, 202);
       const pvBody = await pvRes.json();
       assert.strictEqual(pvBody.success, true);
 
+      // 3. Wejście z wyszukiwarki AI (ChatGPT -> ai_search) na fuegolingua
+      const aiRefRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'CF-IPCountry': 'ES',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)',
+        },
+        body: JSON.stringify({
+          site_id: 'fuegolingua',
+          type: 'pageview',
+          path: '/#kursy',
+          referrer: 'https://chatgpt.com/',
+        }),
+      });
+      assert.strictEqual(aiRefRes.status, 202);
+
+      // 4. Zdarzenie konwersji CTA (kliknięcie w numer telefonu) oraz zaangażowana sesja (>=15s)
+      const evRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'event',
+          event: 'cta_phone_click',
+        }),
+      });
+      assert.strictEqual(evRes.status, 202);
+
+      const engRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148',
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'engaged',
+        }),
+      });
+      assert.strictEqual(engRes.status, 202);
+
+      // 5. Synchronizacja Google Search Console (gsc_sync) z WAN (Cloudflare) musi być zablokowana (HTTP 403)
+      const wanGscRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'gsc_sync',
+          rows: [{ query: 'salsa katowice', clicks: 42, impressions: 510, position: 2.3 }],
+        }),
+      });
+      assert.strictEqual(wanGscRes.status, 403);
+
+      // Natomiast wewnętrzna synchronizacja GSC (z localhosta VPS bez CF-Connecting-IP) musi zadziałać (HTTP 202)
+      const localGscRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'gsc_sync',
+          rows: [
+            { query: 'salsa katowice', clicks: 42, impressions: 510, position: 2.3 },
+            { query: 'kurs salsy katowice', clicks: 19, impressions: 280, position: 3.8 },
+          ],
+        }),
+      });
+      assert.strictEqual(localGscRes.status, 202);
+
+      // 6. Automatyczna ekstrakcja tematów pytań i słów kluczowych z czatu AI (Zero-PII)
+      const chatTopicIp = '198.51.100.181';
+      trackIpRateFile(chatTopicIp);
+      await fetch(`${baseUrl}/chat-router.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': chatTopicIp,
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          question: 'Czym jest Salsopedia i co to jest Enchufla? PrywatneHasloKlienta777',
+        }),
+      });
+
       const metricsRes = await fetch(`${baseUrl}/metrics`);
       const metricsText = await metricsRes.text();
       assert.match(metricsText, /web_analytics_unique_visitors_today\{site="katosalsahub"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_unique_visitors_total\{site="katosalsahub"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_engaged_visits_total\{site="katosalsahub"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/salsopedia\.html",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_sources_total\{site="katosalsahub",source="google",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_sources_total\{site="fuegolingua",source="ai_search",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_devices_total\{site="katosalsahub",device="mobile",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_countries_total\{site="katosalsahub",country="PL",label="[^"]*Polska \(PL\)"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_events_total\{site="katosalsahub",event="cta_phone_click",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_cwv_lcp_seconds_count\{site="katosalsahub"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_gsc_configured\s+1/);
+      assert.match(metricsText, /web_analytics_gsc_keyword_clicks_total\{site="katosalsahub",query="salsa katowice"\}\s+42/);
+      assert.match(metricsText, /web_analytics_gsc_keyword_impressions_total\{site="katosalsahub",query="salsa katowice"\}\s+510/);
+      assert.match(metricsText, /web_analytics_gsc_keyword_position\{site="katosalsahub",query="salsa katowice"\}\s+2\.3/);
+      assert.match(metricsText, /ai_router_question_topics_total\{site="katosalsahub",topic="salsopedia",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /ai_router_question_topics_total\{site="katosalsahub",topic="figures",label="[^"]+"\}\s+[1-9]/);
+      assert.strictEqual(metricsText.includes('PrywatneHasloKlienta777'), false, 'Surowa treść pytania nie może wyciekać do etykiet tematów AI!');
       assert.strictEqual(metricsText.includes(visitorIp), false, 'Wyciek IP odwiedzającego w metrykach web_analytics!');
+      assert.strictEqual(metricsText.includes('fake_spam_site'), false, 'Nieautoryzowany site_id przedostał się do metryk!');
     });
   });
 });
+

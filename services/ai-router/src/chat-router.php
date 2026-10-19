@@ -204,14 +204,77 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
         exit;
     }
 
+    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'];
     $bSite = strtolower(trim((string)($beacon['site_id'] ?? '')));
-    if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite)) {
+    if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite) || !in_array($bSite, $allowedAnalyticsSites, true)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Bad Request: Invalid site_id']);
         exit;
     }
 
-    $bType = (($beacon['type'] ?? '') === 'search') ? 'search' : 'pageview';
+    // Ochrona Penalty Box i lekki Rate Limiter dla beaconów analityki (max 30 zdarzeń / 60s per IP)
+    $bIp = getClientIp();
+    $bRateDir = is_dir('/app/storage/rate_limits')
+        ? '/app/storage/rate_limits'
+        : (dirname(__DIR__) . '/storage/rate_limits');
+    if (!is_dir($bRateDir)) {
+        @mkdir($bRateDir, 0755, true);
+    }
+    $bRateFile = $bRateDir . '/' . hash('sha256', $bIp) . '.json';
+    $bFp = @fopen($bRateFile, 'c+');
+    if ($bFp) {
+        if (flock($bFp, LOCK_EX)) {
+            $bRaw = stream_get_contents($bFp);
+            $bData = $bRaw ? json_decode($bRaw, true) : [];
+            if (!is_array($bData)) {
+                $bData = [];
+            }
+            $bNow = time();
+            if (((int)($bData['blocked_until'] ?? 0)) > $bNow) {
+                $retryAfter = (int)$bData['blocked_until'] - $bNow;
+                flock($bFp, LOCK_UN);
+                fclose($bFp);
+                header("Retry-After: {$retryAfter}");
+                http_response_code(403);
+                echo json_encode(['success' => false, 'error' => 'Forbidden: IP in Penalty Box']);
+                exit;
+            }
+            $aTimestamps = is_array($bData['analytics_timestamps'] ?? null) ? $bData['analytics_timestamps'] : [];
+            $aTimestamps = array_values(array_filter($aTimestamps, fn($ts) => is_int($ts) && $ts > ($bNow - 60)));
+            if (count($aTimestamps) >= 30) {
+                flock($bFp, LOCK_UN);
+                fclose($bFp);
+                header('Retry-After: 30');
+                http_response_code(429);
+                echo json_encode(['success' => false, 'error' => 'Too Many Analytics Beacons']);
+                exit;
+            }
+            $aTimestamps[] = $bNow;
+            $bData['analytics_timestamps'] = $aTimestamps;
+            ftruncate($bFp, 0);
+            rewind($bFp);
+            fwrite($bFp, json_encode($bData));
+            fflush($bFp);
+            flock($bFp, LOCK_UN);
+        }
+        fclose($bFp);
+    }
+
+    $rawType = strtolower(trim((string)($beacon['type'] ?? 'pageview')));
+    if ($rawType === 'gsc_sync') {
+        if ($isFromCloudflare) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'error' => 'Forbidden: GSC sync allowed only from internal network']);
+            exit;
+        }
+        $gscRows = is_array($beacon['rows'] ?? null) ? $beacon['rows'] : [];
+        aiRecordGscKeywords($bSite, $gscRows);
+        http_response_code(202);
+        echo json_encode(['success' => true, 'synced' => count($gscRows)]);
+        exit;
+    }
+
+    $bType = in_array($rawType, ['pageview', 'search', 'event', 'engaged'], true) ? $rawType : 'pageview';
     $rawPath = trim((string)($beacon['path'] ?? '/'));
     $bPath = substr(preg_replace('/[^a-zA-Z0-9_\/#.-]/', '', $rawPath) ?: '/', 0, 48);
     if (!str_starts_with($bPath, '/')) {
@@ -223,25 +286,38 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
     $bSource   = 'direct';
     $sourceProbe = $utmSource !== '' ? $utmSource : $referrer;
     if ($sourceProbe !== '') {
-        if (preg_match('/(facebook|fb\.com|fbclid|messenger)/', $sourceProbe)) {
+        if (preg_match('/(chatgpt\.com|openai\.com|perplexity\.ai|claude\.ai|gemini\.google\.com|copilot\.microsoft\.com|you\.com)/', $sourceProbe)) {
+            $bSource = 'ai_search';
+        } elseif (preg_match('/(facebook|fb\.com|fbclid|messenger)/', $sourceProbe)) {
             $bSource = 'facebook';
         } elseif (preg_match('/(instagram|ig\b)/', $sourceProbe)) {
             $bSource = 'instagram';
-        } elseif (preg_match('/(google\.|bing\.|duckduckgo\.|yahoo\.|ecosia\.)/', $sourceProbe)) {
-            $bSource = 'google';
+        } elseif (preg_match('/(tiktok|ttclid)/', $sourceProbe)) {
+            $bSource = 'tiktok';
         } elseif (preg_match('/(youtube\.|youtu\.be)/', $sourceProbe)) {
             $bSource = 'youtube';
+        } elseif (preg_match('/(duckduckgo\.)/', $sourceProbe)) {
+            $bSource = 'duckduckgo';
+        } elseif (preg_match('/(bing\.|msn\.com)/', $sourceProbe)) {
+            $bSource = 'bing';
+        } elseif (preg_match('/(google\.|gclid|yahoo\.|ecosia\.)/', $sourceProbe)) {
+            $bSource = 'google';
         } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|localhost|127\.0\.0\.1)/', $sourceProbe)) {
             $bSource = 'other';
         }
     }
 
-    $bDevice = preg_match('/(Mobile|Android|iPhone|iPad|Windows Phone)/i', $ua) ? 'mobile' : 'desktop';
+    if (preg_match('/(iPad|Tablet|PlayBook|Silk)|(Android(?!.*Mobile))/i', $ua)) {
+        $bDevice = 'tablet';
+    } elseif (preg_match('/(Mobile|Android|iPhone|Windows Phone)/i', $ua)) {
+        $bDevice = 'mobile';
+    } else {
+        $bDevice = 'desktop';
+    }
     $rawCountry = strtoupper(trim((string)($_SERVER['HTTP_CF_IPCOUNTRY'] ?? 'PL')));
     $bCountry = (preg_match('/^[A-Z]{2}$/', $rawCountry) && $rawCountry !== 'XX') ? $rawCountry : 'PL';
 
-    $bIp = getClientIp();
-    $visitorHash = substr(hash('sha256', gmdate('Y-m-d') . '|' . $bSite . '|' . $bIp . '|' . $ua), 0, 16);
+    $visitorHash = substr(hash('sha256', aiAnalyticsDay() . '|' . $bSite . '|' . $bIp . '|' . $ua), 0, 16);
 
     $rawTerm = trim((string)($beacon['term'] ?? $beacon['utm_term'] ?? ''));
     $bTerm = mb_substr(trim((string)preg_replace('/[^a-ząćęłńóśźż0-9 _-]/iu', '', mb_strtolower($rawTerm))), 0, 40);
@@ -249,7 +325,12 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
         $bTerm = '';
     }
 
-    aiRecordWebAnalytics($bSite, $bType, $bPath, $bSource, $bDevice, $bCountry, $visitorHash, $bTerm);
+    $rawEvent = strtolower(trim((string)($beacon['event'] ?? '')));
+    $bEvent = substr(preg_replace('/[^a-z0-9_-]/', '', $rawEvent) ?: '', 0, 32);
+
+    $bLcpMs = isset($beacon['lcp_ms']) && is_numeric($beacon['lcp_ms']) ? (float)$beacon['lcp_ms'] : 0.0;
+
+    aiRecordWebAnalytics($bSite, $bType, $bPath, $bSource, $bDevice, $bCountry, $visitorHash, $bTerm, $bEvent, $bLcpMs);
     if ($bType === 'pageview' && $bTerm !== '') {
         aiRecordWebAnalytics($bSite, 'search', $bPath, $bSource, $bDevice, $bCountry, $visitorHash, $bTerm);
     }
@@ -615,6 +696,9 @@ foreach ($rawPhones as $rawPh) {
 $hasEmail = !empty($extractedEmails);
 $hasPhone = !empty($extractedPhones);
 $contactChannel = $hasEmail && $hasPhone ? 'email+phone' : ($hasEmail ? 'email' : ($hasPhone ? 'phone' : 'none'));
+
+// Automatyczna ekstrakcja tematów pytań i kanonicznych słów kluczowych z czatu AI (100% Zero-PII)
+aiExtractAndRecordTopics($aiSite, $question, $hasContactLead);
 
 // Klucz pamięci podręcznej zależny od witryny, mtime pliku wiedzy, wersji dynamicznej bazy, kontekstu i znormalizowanego pytania (Fuzzy Punctuation Normalization)
 $normalizedQ = trim((string)preg_replace('/[\p{P}\p{S}\s]+/u', ' ', mb_strtolower(trim($question))));

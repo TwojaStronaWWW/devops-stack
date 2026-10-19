@@ -20,12 +20,12 @@
     {
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 300,
-      "title": "📊 Analityka Ruchu WWW & SEO (100% Cookieless RODO / Zero-PII)",
+      "title": "📊 Analityka Ruchu WWW, Konwersji CTA & SEO (100% Cookieless RODO / Zero-PII)",
       "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Unikalni odwiedzający dziś na katosalsahub.pl (anonimowy dzienny skrót SHA-256 bez zapisu IP i bez ciasteczek).",
+      "description": "Unikalni odwiedzający dziś w wybranym serwisie (anonimowy dzienny skrót SHA-256 w strefie Europe/Warsaw, bez zapisu IP i bez ciasteczek).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -50,17 +50,17 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_unique_visitors_today{site=\"katosalsahub\"}) or vector(0)",
-          "legendFormat": "KatoSalsaHub dziś",
+          "expr": "sum(web_analytics_unique_visitors_today{site=~\"$site\"}) or vector(0)",
+          "legendFormat": "Unikalni dziś",
           "refId": "A"
         }
       ],
-      "title": "Unikalni Dziś (KSH)",
+      "title": "Unikalni Dziś (UV)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Łączna liczba odsłon podstron i sekcji SPA w serwisie katosalsahub.pl.",
+      "description": "Łączna liczba odsłon podstron i sekcji SPA w wybranych serwisach WWW.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -85,17 +85,17 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_pageviews_total{site=\"katosalsahub\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Odsłony KSH (Łącznie)",
+      "title": "Odsłony (Pageviews)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Wejścia organiczne z wyszukiwarek (Google, Bing, DuckDuckGo).",
+      "description": "Wejścia organiczne z wyszukiwarek (Google, Bing, DuckDuckGo) oraz wyszukiwarek AI (ChatGPT, Perplexity, Claude, Gemini).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -120,17 +120,17 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_sources_total{source=\"google\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_sources_total{site=~\"$site\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Wejścia z Google (SEO)",
+      "title": "SEO & AI Search (GEO)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Wejścia z mediów społecznościowych (Facebook + Instagram).",
+      "description": "Liczba zaangażowanych sesji, w których użytkownik aktywnie przeglądał stronę przez co najmniej 15 sekund (brak natychmiastowego odrzucenia / Non-Bounce).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -155,17 +155,17 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_sources_total{source=~\"facebook|instagram\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_engaged_visits_total{site=~\"$site\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Social Media (FB + IG)",
+      "title": "Zaangażowane Sesje (≥15s)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Odsetek użytkowników odwiedzających portal ze smartfonów.",
+      "description": "Odsetek użytkowników odwiedzających serwisy ze smartfonów i tabletów.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -193,7 +193,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(web_analytics_devices_total{device=\"mobile\",label!=\"\"}) / clamp_min(sum(web_analytics_devices_total{label!=\"\"}), 1)",
+          "expr": "100 * sum(web_analytics_devices_total{site=~\"$site\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_devices_total{site=~\"$site\",label!=\"\"}), 1)",
           "instant": true,
           "refId": "A"
         }
@@ -203,42 +203,44 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Łączna liczba wyszukiwań haseł w Salsopedii oraz wejść z parametrem frazy.",
+      "description": "Średni rzeczywisty czas ładowania największego elementu strony u użytkowników (Core Web Vitals LCP - Real User Monitoring). Norma Google: < 2.5s (zielony).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
+          "decimals": 2,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "yellow", "value": null },
-              { "color": "green", "value": 1 }
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2.5 },
+              { "color": "red", "value": 4.0 }
             ]
           },
-          "unit": "short"
+          "unit": "s"
         }
       },
       "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
       "id": 306,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
+        "graphMode": "none",
         "justifyMode": "center",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_search_terms_total) or vector(0)",
+          "expr": "sum(web_analytics_cwv_lcp_seconds_sum{site=~\"$site\"}) / clamp_min(sum(web_analytics_cwv_lcp_seconds_count{site=~\"$site\"}), 1)",
           "instant": true,
           "refId": "A"
         }
       ],
-      "title": "Wyszukiwania Haseł",
+      "title": "Core Web Vitals (Śr. LCP)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Skąd przychodzą użytkownicy? Bezpośrednie (direct) = wpisanie adresu w przeglądarkę, wejście z zakładek, ikony na telefonie lub linku z Messengera/WhatsAppa/SMS. Google = wejścia z wyszukiwarki.",
+      "description": "Skąd przychodzą użytkownicy? Bezpośrednie (direct), Google/Bing/DuckDuckGo (SEO), AI Search (ChatGPT/Perplexity/Claude/Gemini) oraz Social Media (FB/IG/TikTok/YT).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -262,18 +264,18 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (web_analytics_sources_total{site=\"katosalsahub\",label!=\"\"})",
+          "expr": "sum by (label) (web_analytics_sources_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
-      "title": "Skąd wchodzą ludzie? (Źródła Ruchu - KatoSalsaHub)",
+      "title": "Skąd wchodzą ludzie? (Źródła Ruchu: SEO, AI, Social)",
       "type": "bargauge"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Najczęściej odwiedzane podstrony i sekcje SPA na katosalsahub.pl (np. /, /salsopedia.html, /#radio, /#mapa, /#style).",
+      "description": "Najczęściej odwiedzane podstrony i sekcje SPA (np. /, /salsopedia.html, /#radio, /#mapa, /#cennik).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -297,18 +299,18 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (label) (web_analytics_pageviews_total{site=\"katosalsahub\",label!=\"\"}))",
+          "expr": "topk(10, sum by (label) (web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
-      "title": "Najpopularniejsze podstrony i sekcje (katosalsahub.pl)",
+      "title": "Najpopularniejsze podstrony i sekcje SPA",
       "type": "bargauge"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Jakich haseł i pojęć szukają tancerze w Salsopedii oraz po jakich frazach UTM wchodzą na stronę.",
+      "description": "Jakich haseł i pojęć szukają użytkownicy w Salsopedii oraz po jakich frazach UTM wchodzą na stronę.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -332,7 +334,7 @@
       },
       "targets": [
         {
-          "expr": "topk(12, sum by (term) (web_analytics_search_terms_total))",
+          "expr": "topk(12, sum by (term) (web_analytics_search_terms_total{site=~\"$site\"}))",
           "instant": true,
           "legendFormat": "🔍 {{term}}",
           "refId": "A"
@@ -343,7 +345,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Odsłony stron w czasie (przyrosty na minutę).",
+      "description": "Odsłony stron oraz nowi unikalni odwiedzający w czasie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -365,17 +367,22 @@
       },
       "targets": [
         {
-          "expr": "sum by (site, path) (increase(web_analytics_pageviews_total{label!=\"\"}[1m]))",
+          "expr": "sum by (site, path) (increase(web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}[1m]))",
           "legendFormat": "{{site}} • {{path}}",
           "refId": "A"
+        },
+        {
+          "expr": "sum by (site) (increase(web_analytics_unique_visitors_total{site=~\"$site\"}[5m]))",
+          "legendFormat": "👤 Nowi unikalni ({{site}})",
+          "refId": "B"
         }
       ],
-      "title": "Odsłony na żywo (ruch w czasie wg podstrony)",
+      "title": "Odsłony i Unikalni na żywo (ruch w czasie)",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Podział ruchu wg typu urządzenia (Smartfony vs Komputery).",
+      "description": "Podział ruchu wg typu urządzenia (Smartfony, Tablety, Komputery).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -399,13 +406,13 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (web_analytics_devices_total{site=\"katosalsahub\",label!=\"\"})",
+          "expr": "sum by (label) (web_analytics_devices_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
         }
       ],
-      "title": "Urządzenia (Smartfon vs Komputer)",
+      "title": "Urządzenia (Smartfon / Tablet / Komputer)",
       "type": "bargauge"
     },
     {
@@ -434,7 +441,7 @@
       },
       "targets": [
         {
-          "expr": "topk(8, sum by (label) (web_analytics_countries_total{site=\"katosalsahub\",label!=\"\"}))",
+          "expr": "topk(8, sum by (label) (web_analytics_countries_total{site=~\"$site\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -442,15 +449,226 @@
       ],
       "title": "Kraje Odwiedzających (GeoIP)",
       "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Śledzenie mikro-konwersji i interakcji: otwarcia czatu AI, kliknięcia w szybkie podpowiedzi, kliknięcia w numer telefonu/e-mail oraz uruchomienia Radia Salsa.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "id": 313,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "textMode": "value_and_name",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "sum by (label) (web_analytics_events_total{site=~\"$site\",label!=\"\"})",
+          "instant": true,
+          "legendFormat": "{{label}}",
+          "refId": "A"
+        }
+      ],
+      "title": "🎯 Konwersje CTA i Lejek Czatbota AI (Zdarzenia Biznesowe)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Porównanie łącznej liczby odsłon pomiędzy wszystkimi serwisami platformy TwojaStronaWWW.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "id": 314,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "textMode": "value_and_name",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "sum by (site) (web_analytics_pageviews_total{label!=\"\"})",
+          "instant": true,
+          "legendFormat": "🌐 {{site}} (odsłony)",
+          "refId": "A"
+        }
+      ],
+      "title": "🌐 Porównanie Ruchu wg Serwisu WWW (Multi-Site)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Automatyczna kategoryzacja tematów pytań zadawanych czatbotowi AI (Zero-PII — bez logowania surowych wiadomości klientów).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 28 },
+      "id": 315,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "textMode": "value_and_name",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "sum by (label) (ai_router_question_topics_total{site=~\"$site\",label!=\"\"})",
+          "instant": true,
+          "legendFormat": "{{label}}",
+          "refId": "A"
+        }
+      ],
+      "title": "🤖 O co pytają klienci? Tematy Pytań do Czatbota AI (Zero-PII)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Prawdziwe organiczne słowa kluczowe z wyszukiwarki Google pobrane po stronie serwera z Google Search Console API (0 KB JS na stronie).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "min": 0,
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 28 },
+      "id": 316,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "textMode": "value_and_name",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(12, sum by (query) (web_analytics_gsc_keyword_clicks_total{site=~\"$site\"}))",
+          "instant": true,
+          "legendFormat": "🖱️ {{query}} (kliknięcia)",
+          "refId": "A"
+        },
+        {
+          "expr": "topk(8, sum by (query) (web_analytics_gsc_keyword_impressions_total{site=~\"$site\"}))",
+          "instant": true,
+          "legendFormat": "👁️ {{query}} (wyświetlenia)",
+          "refId": "B"
+        }
+      ],
+      "title": "🔍 Słowa Kluczowe z Google Search Console (GSC API — Kliknięcia i Wyświetlenia)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Średnia pozycja organiczna fraz w Google wg Google Search Console (1.0 = 1. miejsce w Google).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "min": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 4 },
+              { "color": "orange", "value": 10 },
+              { "color": "red", "value": 20 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 28 },
+      "id": 317,
+      "options": {
+        "displayMode": "lcd",
+        "minVizHeight": 16,
+        "minVizWidth": 75,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "textMode": "value_and_name",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(15, avg by (query) (web_analytics_gsc_keyword_position{site=~\"$site\"}))",
+          "instant": true,
+          "legendFormat": "🎯 {{query}} (pozycja)",
+          "refId": "A"
+        }
+      ],
+      "title": "🎯 Średnia Pozycja Fraz w Google wg GSC (1 = TOP 1)",
+      "type": "bargauge"
     }
   ],
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": ["twojastronawww", "analytics", "seo", "katosalsahub"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Serwis WWW",
+        "multi": false,
+        "name": "site",
+        "options": [
+          { "selected": true, "text": "All", "value": "$__all" },
+          { "selected": false, "text": "katosalsahub", "value": "katosalsahub" },
+          { "selected": false, "text": "dancepuls", "value": "dancepuls" },
+          { "selected": false, "text": "fuegolingua", "value": "fuegolingua" },
+          { "selected": false, "text": "twojastronawww", "value": "twojastronawww" }
+        ],
+        "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww",
+        "type": "custom"
+      }
+    ]
+  },
   "time": { "from": "now-24h", "to": "now" },
   "timezone": "browser",
   "title": "TwojaStronaWWW - Analityka Ruchu WWW & SEO (Cookieless)",
   "uid": "web-analytics-overview",
-  "version": 2
+  "version": 3
 }

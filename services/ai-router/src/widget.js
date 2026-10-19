@@ -412,16 +412,48 @@
       chip.className = 'tsw-ai-chip';
       chip.textContent = promptText;
       chip.addEventListener('click', function() {
+        sendAnalyticsBeacon({ type: 'event', event: 'quick_prompt_click' });
         sendQuestion(promptText);
       });
       chipsContainer.appendChild(chip);
     });
   }
 
+  const ANALYTICS_URL = ROUTER_URL.replace(/\/chat-router\.php.*$/, '/analytics');
+
+  function sendAnalyticsBeacon(extra) {
+    try {
+      const loc = window.location || {};
+      const params = new URLSearchParams(loc.search || '');
+      const rawPath = (loc.pathname || '/') + (loc.hash || '');
+      const payload = Object.assign({
+        site_id: SITE_ID,
+        type: 'pageview',
+        path: rawPath || '/',
+        referrer: document.referrer || '',
+        utm_source: params.get('utm_source') || '',
+        utm_term: params.get('utm_term') || params.get('q') || ''
+      }, extra || {});
+      const body = JSON.stringify(payload);
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon(ANALYTICS_URL, blob);
+      } else if (typeof fetch === 'function') {
+        fetch(ANALYTICS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true
+        }).catch(function() {});
+      }
+    } catch (_) {}
+  }
+
   function toggleChat() {
     chatWindow.classList.toggle('tsw-open');
     if (chatWindow.classList.contains('tsw-open')) {
       chatInput.focus();
+      sendAnalyticsBeacon({ type: 'event', event: 'chat_open' });
     }
   }
 
@@ -495,4 +527,61 @@
   });
 
   renderInitialView();
+
+  // Automatyczny Cookieless Web Analytics & Core Web Vitals (Zero-PII)
+  if (!window.__TSW_ANALYTICS_ACTIVE__) {
+    window.__TSW_ANALYTICS_ACTIVE__ = true;
+    let lcpMeasured = 0;
+    try {
+      if (typeof PerformanceObserver !== 'undefined') {
+        const po = new PerformanceObserver(function(list) {
+          const entries = list.getEntries();
+          if (entries && entries.length > 0) {
+            lcpMeasured = Math.round(entries[entries.length - 1].startTime || 0);
+          }
+        });
+        po.observe({ type: 'largest-contentful-paint', buffered: true });
+      }
+    } catch (_) {}
+
+    setTimeout(function() {
+      sendAnalyticsBeacon(lcpMeasured > 0 ? { type: 'pageview', lcp_ms: lcpMeasured } : { type: 'pageview' });
+    }, 600);
+
+    window.addEventListener('hashchange', function() {
+      sendAnalyticsBeacon({ type: 'pageview' });
+    });
+
+    setTimeout(function() {
+      if (document.visibilityState !== 'hidden') {
+        sendAnalyticsBeacon({ type: 'engaged' });
+      }
+    }, 15000);
+
+    document.addEventListener('click', function(e) {
+      const target = e.target && e.target.closest ? e.target : null;
+      if (!target) return;
+      const link = target.closest('a[href]');
+      if (link) {
+        const href = String(link.getAttribute('href') || '');
+        if (href.startsWith('tel:')) {
+          sendAnalyticsBeacon({ type: 'event', event: 'cta_phone_click' });
+        } else if (href.startsWith('mailto:')) {
+          sendAnalyticsBeacon({ type: 'event', event: 'cta_email_click' });
+        }
+      }
+      const radioBtn = target.closest('#radio-toggle, .radio-toggle, [data-radio-toggle], #radioPlayBtn');
+      if (radioBtn) {
+        sendAnalyticsBeacon({ type: 'event', event: 'radio_play' });
+      }
+    });
+
+    document.addEventListener('submit', function(e) {
+      const form = e.target;
+      if (form && form.id !== 'tsw-ai-form' && (form.id === 'contactForm' || (form.classList && form.classList.contains('contact-form')))) {
+        sendAnalyticsBeacon({ type: 'event', event: 'contact_form_submit' });
+      }
+    });
+  }
 })();
+

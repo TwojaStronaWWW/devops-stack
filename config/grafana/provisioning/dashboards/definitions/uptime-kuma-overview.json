@@ -18,7 +18,18 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": ["twojastronawww"],
+      "targetBlank": false,
+      "title": "Dashboardy TwojaStronaWWW",
+      "type": "dashboards"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -2172,6 +2183,7 @@
   "refresh": "5s",
   "schemaVersion": 39,
   "tags": [
+    "twojastronawww",
     "devops",
     "uptime-kuma",
     "cadvisor",

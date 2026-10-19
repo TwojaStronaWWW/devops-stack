@@ -53,6 +53,7 @@ if (-not (Test-PortOpen "127.0.0.1" 3000) -or -not (Test-PortOpen "127.0.0.1" 30
 
 Write-Host ">> Otwieranie paneli monitoringu w przeglądarce..." -ForegroundColor Green
 Start-Process "http://localhost:3000/d/uptime-kuma-overview?refresh=5s"
+Start-Process "http://localhost:3000/d/web-analytics-overview?refresh=10s"
 Start-Process "http://localhost:8888"
 Start-Process "http://localhost:3001/dashboard"
 

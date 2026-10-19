@@ -97,6 +97,12 @@ function aiQuotaDay(): string
     return (new DateTime('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d');
 }
 
+/** Doba analityczna dla polskich serwisów WWW (reset o północy czasu Europe/Warsaw). */
+function aiAnalyticsDay(): string
+{
+    return (new DateTime('now', new DateTimeZone('Europe/Warsaw')))->format('Y-m-d');
+}
+
 function aiSecondsToQuotaReset(): int
 {
     $tz = new DateTimeZone('America/Los_Angeles');
@@ -116,13 +122,20 @@ function aiStatsDefault(): array
         'depth'         => [],  // pozycja modelu, który odpowiedział => n
         'models'        => [],  // model => dane
         'web_analytics' => [
-            'day'             => '',
-            'pageviews'       => [], // "site|path" => n
-            'sources'         => [], // "site|source" => n
-            'devices'         => [], // "site|device" => n
-            'countries'       => [], // "site|country" => n
-            'search_terms'    => [], // "site|term" => n
-            'unique_visitors' => [], // site => [hash => 1]
+            'day'                   => '',
+            'pageviews'             => [], // "site|path" => n
+            'sources'               => [], // "site|source" => n
+            'devices'               => [], // "site|device" => n
+            'countries'             => [], // "site|country" => n
+            'search_terms'          => [], // "site|term" => n
+            'unique_visitors'       => [], // site => [hash => 1]
+            'unique_visitors_total' => [], // site => n (monotoniczny counter unikalnych wizyt dziennych)
+            'events'                => [], // "site|event" => n (konwersje CTA, otwarcia czatu, radio, itp.)
+            'engaged_visits'        => [], // site => n (sesje zaangażowane >= 15s)
+            'lcp_sum_ms'            => [], // site => suma czasów LCP (Core Web Vitals) w ms
+            'lcp_cnt'               => [], // site => liczba pomiarów LCP
+            'ai_topics'             => [], // "site|topic" => n (automatyczna ekstrakcja tematów z pytań AI, Zero-PII)
+            'gsc_keywords'          => [], // site => lista wierszy z Google Search Console API (query, clicks, impressions, position)
         ],
     ];
 }
@@ -314,6 +327,36 @@ function aiRecordLead(string $site, string $type): void
 }
 
 /**
+ * Inkrementuje licznik w słowniku z ochroną przed zatruciem kardynalności (Cardinality Poisoning).
+ * Gdy słownik osiągnie $maxSize, wypycha najstarszy wpis o najniższym liczniku (LFU/LRU).
+ */
+function aiBoundedIncrement(array &$map, string $key, int $maxSize): void
+{
+    if (isset($map[$key])) {
+        $map[$key] = (int)$map[$key] + 1;
+        return;
+    }
+    if (count($map) >= $maxSize) {
+        $victimKey = null;
+        $minVal = PHP_INT_MAX;
+        foreach ($map as $k => $v) {
+            $iv = (int)$v;
+            if ($iv < $minVal) {
+                $minVal = $iv;
+                $victimKey = $k;
+                if ($iv <= 1) {
+                    break;
+                }
+            }
+        }
+        if ($victimKey !== null) {
+            unset($map[$victimKey]);
+        }
+    }
+    $map[$key] = 1;
+}
+
+/**
  * Rejestruje zdarzenie bezciasteczkowej analityki ruchu WWW (Cookieless RODO / Zero-PII).
  */
 function aiRecordWebAnalytics(
@@ -324,33 +367,59 @@ function aiRecordWebAnalytics(
     string $device,
     string $country,
     string $visitorHash,
-    string $searchTerm = ''
+    string $searchTerm = '',
+    string $eventName = '',
+    float $lcpMs = 0.0
 ): void {
-    aiStatsMutate(function (array &$s) use ($site, $eventType, $path, $source, $device, $country, $visitorHash, $searchTerm): void {
+    aiStatsMutate(function (array &$s) use ($site, $eventType, $path, $source, $device, $country, $visitorHash, $searchTerm, $eventName, $lcpMs): void {
         if (!isset($s['web_analytics']) || !is_array($s['web_analytics'])) {
             $s['web_analytics'] = aiStatsDefault()['web_analytics'];
         }
         $wa = &$s['web_analytics'];
-        $today = gmdate('Y-m-d');
+        $today = aiAnalyticsDay();
         if (($wa['day'] ?? '') !== $today) {
             $wa['day'] = $today;
             $wa['unique_visitors'] = [];
         }
 
+        if ($visitorHash !== '') {
+            if (!isset($wa['unique_visitors'][$site]) || !is_array($wa['unique_visitors'][$site])) {
+                $wa['unique_visitors'][$site] = [];
+            }
+            if (!isset($wa['unique_visitors'][$site][$visitorHash]) && count($wa['unique_visitors'][$site]) < 5000) {
+                $wa['unique_visitors'][$site][$visitorHash] = 1;
+                $wa['unique_visitors_total'] = is_array($wa['unique_visitors_total'] ?? null) ? $wa['unique_visitors_total'] : [];
+                $wa['unique_visitors_total'][$site] = (int)($wa['unique_visitors_total'][$site] ?? 0) + 1;
+            }
+        }
+
+        if ($lcpMs >= 50.0 && $lcpMs <= 30000.0) {
+            $wa['lcp_sum_ms'] = is_array($wa['lcp_sum_ms'] ?? null) ? $wa['lcp_sum_ms'] : [];
+            $wa['lcp_cnt'] = is_array($wa['lcp_cnt'] ?? null) ? $wa['lcp_cnt'] : [];
+            $wa['lcp_sum_ms'][$site] = (float)($wa['lcp_sum_ms'][$site] ?? 0.0) + $lcpMs;
+            $wa['lcp_cnt'][$site] = (int)($wa['lcp_cnt'][$site] ?? 0) + 1;
+        }
+
         if ($eventType === 'search' && $searchTerm !== '') {
             $wa['search_terms'] = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
-            $tKey = $site . '|' . $searchTerm;
-            if (isset($wa['search_terms'][$tKey]) || count($wa['search_terms']) < 80) {
-                $wa['search_terms'][$tKey] = (int)($wa['search_terms'][$tKey] ?? 0) + 1;
-            }
+            aiBoundedIncrement($wa['search_terms'], $site . '|' . $searchTerm, 80);
+            return;
+        }
+
+        if ($eventType === 'engaged') {
+            $wa['engaged_visits'] = is_array($wa['engaged_visits'] ?? null) ? $wa['engaged_visits'] : [];
+            $wa['engaged_visits'][$site] = (int)($wa['engaged_visits'][$site] ?? 0) + 1;
+            return;
+        }
+
+        if ($eventType === 'event' && $eventName !== '') {
+            $wa['events'] = is_array($wa['events'] ?? null) ? $wa['events'] : [];
+            aiBoundedIncrement($wa['events'], $site . '|' . $eventName, 60);
             return;
         }
 
         $wa['pageviews'] = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
-        $pKey = $site . '|' . $path;
-        if (isset($wa['pageviews'][$pKey]) || count($wa['pageviews']) < 60) {
-            $wa['pageviews'][$pKey] = (int)($wa['pageviews'][$pKey] ?? 0) + 1;
-        }
+        aiBoundedIncrement($wa['pageviews'], $site . '|' . $path, 60);
 
         $wa['sources'] = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
         $sKey = $site . '|' . $source;
@@ -361,19 +430,109 @@ function aiRecordWebAnalytics(
         $wa['devices'][$dKey] = (int)($wa['devices'][$dKey] ?? 0) + 1;
 
         $wa['countries'] = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
-        $cKey = $site . '|' . $country;
-        if (isset($wa['countries'][$cKey]) || count($wa['countries']) < 40) {
-            $wa['countries'][$cKey] = (int)($wa['countries'][$cKey] ?? 0) + 1;
-        }
+        aiBoundedIncrement($wa['countries'], $site . '|' . $country, 40);
+    });
+}
 
-        if ($visitorHash !== '') {
-            if (!isset($wa['unique_visitors'][$site]) || !is_array($wa['unique_visitors'][$site])) {
-                $wa['unique_visitors'][$site] = [];
-            }
-            if (count($wa['unique_visitors'][$site]) < 5000) {
-                $wa['unique_visitors'][$site][$visitorHash] = 1;
+/**
+ * Automatyczna, deterministyczna ekstrakcja tematów i słów kluczowych z pytań do czatbota AI (100% Zero-PII).
+ * Klasyfikuje pytanie wyłącznie do kanonicznych pojęć ze słownika domenowego (nigdy nie zapisuje surowego tekstu ani PII).
+ */
+function aiExtractAndRecordTopics(string $site, string $question, bool $hasContactLead = false): void
+{
+    $asciiMap = [
+        'ą' => 'a', 'ć' => 'c', 'ę' => 'e', 'ł' => 'l', 'ń' => 'n', 'ó' => 'o', 'ś' => 's', 'ź' => 'z', 'ż' => 'z',
+        'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+    ];
+    $qNorm = strtr(mb_strtolower($question), $asciiMap);
+
+    // Słownik reguł: [kod_tematu, regex_dopasowania, opcjonalna_kanoniczna_fraza_do_search_terms]
+    $rules = [
+        ['salsopedia',    '/\b(salsopedi|hasl[oa]|slownik|definicj)/u',                           '🤖 AI: salsopedia'],
+        ['figures',       '/\b(enchufl|dile\s*que\s*no|guapea|vacilala|setenta|sombrero|exhibel)/u', '🤖 AI: enchufla / dile que no'],
+        ['rueda',         '/\b(rued[ay]|casino|cantante|komend)/u',                               '🤖 AI: rueda de casino'],
+        ['music_clave',   '/\b(timb[ay]|clave|cong[ai]|bongo|muzyk|rytm|instrument)/u',           '🤖 AI: muzyka salsa / clave'],
+        ['dance_styles',  '/\b(bachat|kizomb|cuban|liniow|on1|on2|styl\b|style\b)/u',             '🤖 AI: style tańca (salsa/bachata)'],
+        ['radio',         '/\b(radi[ou]|timba\s*nation|slucha)/u',                                '🤖 AI: radio salsa'],
+        ['events_party',  '/\b(potancow|imprez|wydarzen|gdzie\s*tancz|party)/u',                  '🤖 AI: gdzie tańczymy / potańcówki'],
+        ['schools',       '/\b(szkol[ay]|instruktor|katowic|slask)/u',                            '🤖 AI: szkoły tańca katowice'],
+        ['spanish_trial', '/\b(probn[ae]|darmow[ae]\s*lekcj|pierwsz[ae]\s*lekcj)/u',              '🤖 AI: bezpłatna lekcja próbna'],
+        ['spanish_course','/\b(hiszpan|kurs|lekcj|nauk[ai]\s*jezyk|dele\b|siele\b)/u',            '🤖 AI: kurs hiszpańskiego'],
+        ['spanish_mode',  '/\b(indywidual|grupow|1\s*na\s*1|konwersacj)/u',                       '🤖 AI: zajęcia indywidualne vs grupowe'],
+        ['spanish_biz',   '/\b(biznes|branzow|firm|korporac)/u',                                  '🤖 AI: hiszpański w biznesie'],
+        ['code_vs_wp',    '/\b(wordpress|czysty\s*kod|szybkos|pagespeed|lighthouse|szablon)/u',   '🤖 AI: kod zamiast wordpressa'],
+        ['ai_rag_bot',    '/\b(czatbot|chatbot|rag\b|wirtualn\w*\s*doradc|wdrozen\w*\s*ai)/u',    '🤖 AI: wdrożenie czatbota ai (rag)'],
+        ['seo_google',    '/\b(seo\b|pozycjon|widocznos\w*\s*w\s*google)/u',                      '🤖 AI: pozycjonowanie seo'],
+        ['pricing',       '/\b(cen[ay]|cennik|koszt|ile\s*kosztuj|wycen|pakiet|stawk)/u',         '🤖 AI: cennik i koszty'],
+        ['cooperation',   '/\b(wspolprac|jak\s*wyglada|czas\s*realizac|umow\b|zapis[ay])/u',      '🤖 AI: jak wygląda współpraca'],
+    ];
+
+    $matchedTopics = [];
+    $matchedCanonicalTerms = [];
+
+    if ($hasContactLead) {
+        $matchedTopics[] = 'contact_lead';
+    }
+
+    foreach ($rules as [$topicCode, $pattern, $canonicalTerm]) {
+        if (preg_match($pattern, $qNorm)) {
+            $matchedTopics[] = $topicCode;
+            if ($canonicalTerm !== '') {
+                $matchedCanonicalTerms[] = $canonicalTerm;
             }
         }
+    }
+
+    if (empty($matchedTopics)) {
+        $matchedTopics[] = 'general_inquiry';
+    }
+
+    $matchedTopics = array_slice(array_values(array_unique($matchedTopics)), 0, 3);
+    $matchedCanonicalTerms = array_slice(array_values(array_unique($matchedCanonicalTerms)), 0, 2);
+
+    aiStatsMutate(function (array &$s) use ($site, $matchedTopics, $matchedCanonicalTerms): void {
+        if (!isset($s['web_analytics']) || !is_array($s['web_analytics'])) {
+            $s['web_analytics'] = aiStatsDefault()['web_analytics'];
+        }
+        $wa = &$s['web_analytics'];
+        $wa['ai_topics'] = is_array($wa['ai_topics'] ?? null) ? $wa['ai_topics'] : [];
+        foreach ($matchedTopics as $tCode) {
+            aiBoundedIncrement($wa['ai_topics'], $site . '|' . $tCode, 60);
+        }
+        $wa['search_terms'] = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
+        foreach ($matchedCanonicalTerms as $cTerm) {
+            aiBoundedIncrement($wa['search_terms'], $site . '|' . $cTerm, 80);
+        }
+    });
+}
+
+/**
+ * Zapisuje zaimportowane słowa kluczowe SEO z Google Search Console API dla danego serwisu.
+ */
+function aiRecordGscKeywords(string $site, array $rows): void
+{
+    $cleanRows = [];
+    foreach ($rows as $r) {
+        if (!is_array($r)) continue;
+        $rawQuery = trim((string)($r['query'] ?? ''));
+        $q = mb_substr(trim((string)preg_replace('/[^a-ząćęłńóśźżáéíóúüñ0-9 _-]/iu', '', mb_strtolower($rawQuery))), 0, 48);
+        if (mb_strlen($q) < 2) continue;
+        $cleanRows[] = [
+            'query'       => $q,
+            'clicks'      => max(0, (int)($r['clicks'] ?? 0)),
+            'impressions' => max(0, (int)($r['impressions'] ?? 0)),
+            'position'    => round(max(1.0, (float)($r['position'] ?? 1.0)), 1),
+        ];
+        if (count($cleanRows) >= 30) break;
+    }
+
+    aiStatsMutate(function (array &$s) use ($site, $cleanRows): void {
+        if (!isset($s['web_analytics']) || !is_array($s['web_analytics'])) {
+            $s['web_analytics'] = aiStatsDefault()['web_analytics'];
+        }
+        $wa = &$s['web_analytics'];
+        $wa['gsc_keywords'] = is_array($wa['gsc_keywords'] ?? null) ? $wa['gsc_keywords'] : [];
+        $wa['gsc_keywords'][$site] = $cleanRows;
     });
 }
 
@@ -614,14 +773,31 @@ function aiRenderMetrics(): string
 
     // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
     $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];
-    $waSameDay = (($wa['day'] ?? '') === gmdate('Y-m-d'));
+    $waSameDay = (($wa['day'] ?? '') === aiAnalyticsDay());
+    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'];
 
-    $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO)';
+    $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO, Europe/Warsaw)';
     $o[] = '# TYPE web_analytics_unique_visitors_today gauge';
     $uvMap = ($waSameDay && is_array($wa['unique_visitors'] ?? null)) ? $wa['unique_visitors'] : [];
-    foreach (['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'] as $defSite) {
+    foreach ($knownSites as $defSite) {
         $uvCount = isset($uvMap[$defSite]) && is_array($uvMap[$defSite]) ? count($uvMap[$defSite]) : 0;
         $o[] = 'web_analytics_unique_visitors_today{site="' . aiEsc($defSite) . '"} ' . $uvCount;
+    }
+
+    $o[] = '# HELP web_analytics_unique_visitors_total Laczna historyczna liczba unikalnych dziennych wizyt wg strony (Cookieless counter)';
+    $o[] = '# TYPE web_analytics_unique_visitors_total counter';
+    $uvTotalMap = is_array($wa['unique_visitors_total'] ?? null) ? $wa['unique_visitors_total'] : [];
+    foreach ($knownSites as $defSite) {
+        $uvTodayFallback = isset($uvMap[$defSite]) && is_array($uvMap[$defSite]) ? count($uvMap[$defSite]) : 0;
+        $uvTotalVal = max((int)($uvTotalMap[$defSite] ?? 0), $uvTodayFallback);
+        $o[] = 'web_analytics_unique_visitors_total{site="' . aiEsc($defSite) . '"} ' . $uvTotalVal;
+    }
+
+    $o[] = '# HELP web_analytics_engaged_visits_total Liczba zaangazowanych sesji uzytkownikow (aktywnosc >= 15s na stronie)';
+    $o[] = '# TYPE web_analytics_engaged_visits_total counter';
+    $engMap = is_array($wa['engaged_visits'] ?? null) ? $wa['engaged_visits'] : [];
+    foreach ($knownSites as $defSite) {
+        $o[] = 'web_analytics_engaged_visits_total{site="' . aiEsc($defSite) . '"} ' . (int)($engMap[$defSite] ?? 0);
     }
 
     $o[] = '# HELP web_analytics_pageviews_total Laczna liczba odslon podstron i sekcji SPA (Cookieless)';
@@ -644,6 +820,9 @@ function aiRenderMetrics(): string
         '/#artykuly'       => '📰 /#artykuly (Artykuły i poradniki)',
         '/#slownik'        => '📚 /#slownik (Sekcja słownika)',
         '/#faq'            => '❓ /#faq (Pytania FAQ)',
+        '/#cennik'         => '💰 /#cennik (Oferta i cennik)',
+        '/#kontakt'        => '📞 /#kontakt (Sekcja kontaktu)',
+        '/#kursy'          => '🇪🇸 /#kursy (Kursy językowe)',
     ];
     foreach ($pvMap as $pvKey => $pvCount) {
         [$pvSite, $pvPath] = array_pad(explode('|', (string)$pvKey, 2), 2, '/');
@@ -651,10 +830,10 @@ function aiRenderMetrics(): string
         $o[] = 'web_analytics_pageviews_total{site="' . aiEsc($pvSite) . '",path="' . aiEsc($pvPath) . '",label="' . aiEsc($pvLabel) . '"} ' . (int)$pvCount;
     }
 
-    $o[] = '# HELP web_analytics_sources_total Zrodla wejsc uzytkownikow (Google, Facebook, Instagram, Direct, Inne)';
+    $o[] = '# HELP web_analytics_sources_total Zrodla wejsc uzytkownikow (Google, AI Search, Facebook, Instagram, TikTok, Direct, Inne)';
     $o[] = '# TYPE web_analytics_sources_total counter';
     $srcMap = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
-    foreach (['direct', 'google', 'facebook', 'instagram'] as $defSrc) {
+    foreach (['direct', 'google', 'ai_search', 'facebook', 'instagram'] as $defSrc) {
         $sKey = 'katosalsahub|' . $defSrc;
         if (!isset($srcMap[$sKey])) {
             $srcMap[$sKey] = 0;
@@ -663,6 +842,7 @@ function aiRenderMetrics(): string
     $sourceLabels = [
         'direct'     => '🔗 Bezpośrednie (wpisany adres / zakładka / Messenger)',
         'google'     => '🔍 Google (wyszukiwarka SEO)',
+        'ai_search'  => '🤖 AI Search (ChatGPT / Perplexity / Claude / Gemini)',
         'facebook'   => '📘 Facebook',
         'instagram'  => '📸 Instagram',
         'bing'       => '🔍 Bing',
@@ -677,7 +857,7 @@ function aiRenderMetrics(): string
         $o[] = 'web_analytics_sources_total{site="' . aiEsc($sSite) . '",source="' . aiEsc($sSource) . '",label="' . aiEsc($sLabel) . '"} ' . (int)$sCount;
     }
 
-    $o[] = '# HELP web_analytics_devices_total Urzadzenia odwiedzajacych (mobile vs desktop)';
+    $o[] = '# HELP web_analytics_devices_total Urzadzenia odwiedzajacych (mobile, tablet, desktop)';
     $o[] = '# TYPE web_analytics_devices_total counter';
     $devMap = is_array($wa['devices'] ?? null) ? $wa['devices'] : [];
     foreach (['mobile', 'desktop'] as $defDev) {
@@ -688,6 +868,7 @@ function aiRenderMetrics(): string
     }
     $deviceLabels = [
         'mobile'  => '📱 Smartfon / Telefon (mobile)',
+        'tablet'  => '📲 Tablet (iPad / Android)',
         'desktop' => '💻 Komputer / Laptop (desktop)',
     ];
     foreach ($devMap as $dKey => $dCount) {
@@ -745,6 +926,121 @@ function aiRenderMetrics(): string
         }
     }
 
+    $o[] = '# HELP web_analytics_events_total Zdarzenia biznesowe, konwersje CTA i interakcje z widzetem AI (Cookieless)';
+    $o[] = '# TYPE web_analytics_events_total counter';
+    $evMap = is_array($wa['events'] ?? null) ? $wa['events'] : [];
+    foreach (['chat_open', 'quick_prompt_click', 'cta_phone_click', 'radio_play'] as $defEv) {
+        $eKey = 'katosalsahub|' . $defEv;
+        if (!isset($evMap[$eKey])) {
+            $evMap[$eKey] = 0;
+        }
+    }
+    $eventLabels = [
+        'chat_open'          => '💬 Otwarcie okna czatu AI',
+        'quick_prompt_click' => '⚡ Kliknięcie podpowiedzi pytania (Quick Prompt)',
+        'local_cache_hit'    => '🧠 Trafienie w lokalny cache przeglądarki (0ms)',
+        'cta_phone_click'     => '📞 Kliknięcie w numer telefonu (tel:)',
+        'cta_email_click'     => '✉️ Kliknięcie w adres e-mail (mailto:)',
+        'contact_form_submit' => '📝 Wysłanie formularza kontaktowego',
+        'radio_play'          => '📻 Uruchomienie odtwarzacza Radio Salsa',
+        'outbound_click'      => '↗️ Kliknięcie w link zewnętrzny (szkoła / wydarzenie)',
+    ];
+    foreach ($evMap as $eKey => $eCount) {
+        [$eSite, $eName] = array_pad(explode('|', (string)$eKey, 2), 2, 'chat_open');
+        $eLabel = $eventLabels[$eName] ?? ('🎯 ' . $eName);
+        $o[] = 'web_analytics_events_total{site="' . aiEsc($eSite) . '",event="' . aiEsc($eName) . '",label="' . aiEsc($eLabel) . '"} ' . (int)$eCount;
+    }
+
+    $o[] = '# HELP web_analytics_cwv_lcp_seconds Czas renderowania najwiekszego elementu strony (Core Web Vitals LCP - Real User Monitoring)';
+    $o[] = '# TYPE web_analytics_cwv_lcp_seconds summary';
+    $lcpSumMap = is_array($wa['lcp_sum_ms'] ?? null) ? $wa['lcp_sum_ms'] : [];
+    $lcpCntMap = is_array($wa['lcp_cnt'] ?? null) ? $wa['lcp_cnt'] : [];
+    foreach ($knownSites as $defSite) {
+        $sumSec = round(((float)($lcpSumMap[$defSite] ?? 0.0)) / 1000.0, 3);
+        $cntVal = (int)($lcpCntMap[$defSite] ?? 0);
+        $o[] = 'web_analytics_cwv_lcp_seconds_sum{site="' . aiEsc($defSite) . '"} ' . $sumSec;
+        $o[] = 'web_analytics_cwv_lcp_seconds_count{site="' . aiEsc($defSite) . '"} ' . $cntVal;
+    }
+
+    $o[] = '# HELP ai_router_question_topics_total Automatycznie wyekstrahowane tematy i intencje pytan do czatbota AI (Zero-PII)';
+    $o[] = '# TYPE ai_router_question_topics_total counter';
+    $topicsMap = is_array($wa['ai_topics'] ?? null) ? $wa['ai_topics'] : [];
+    $topicLabels = [
+        'salsopedia'      => '📖 Salsopedia (słownik pojęć)',
+        'figures'         => '💃 Figury taneczne (Enchufla / Dile Que No)',
+        'rueda'           => '🔄 Rueda de Casino i komendy',
+        'music_clave'     => '🥁 Muzyka Salsa / Timba / Rytm Clave',
+        'dance_styles'    => '🕺 Style tańca (Cubana / Bachata / Kizomba)',
+        'radio'           => '📻 Radio Salsa / Timba Nation',
+        'events_party'    => '🎉 Potańcówki i wydarzenia taneczne',
+        'schools'         => '🎓 Szkoły tańca i instruktorzy',
+        'spanish_trial'   => '🇪🇸 Bezpłatna lekcja próbna hiszpańskiego',
+        'spanish_course'  => '📚 Kurs hiszpańskiego i nauka języka',
+        'spanish_mode'    => '👥 Zajęcia indywidualne vs grupowe',
+        'spanish_biz'     => '💼 Hiszpański w biznesie / branżowy',
+        'code_vs_wp'      => '⚡ Czysty kod vs WordPress (PageSpeed)',
+        'ai_rag_bot'      => '🤖 Wdrożenie czatbota AI (RAG)',
+        'seo_google'      => '🔍 Pozycjonowanie SEO i widoczność w Google',
+        'pricing'         => '💰 Cennik i wycena (Ile kosztuje?)',
+        'cooperation'     => '🤝 Współpraca, zapisy i czas realizacji',
+        'contact_lead'    => '📞 Pozyskany namiar kontaktowy (Telefon / E-mail)',
+        'general_inquiry' => '💬 Inne pytanie ogólne o ofertę',
+    ];
+    foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'fuegolingua|spanish_course', 'twojastronawww|pricing'] as $defTop) {
+        if (!isset($topicsMap[$defTop])) {
+            $topicsMap[$defTop] = 0;
+        }
+    }
+    foreach ($topicsMap as $topKey => $topCount) {
+        [$tSite, $tCode] = array_pad(explode('|', (string)$topKey, 2), 2, 'general_inquiry');
+        $tLabel = $topicLabels[$tCode] ?? ('💬 ' . $tCode);
+        $o[] = 'ai_router_question_topics_total{site="' . aiEsc($tSite) . '",topic="' . aiEsc($tCode) . '",label="' . aiEsc($tLabel) . '"} ' . (int)$topCount;
+    }
+
+    $gscMap = is_array($wa['gsc_keywords'] ?? null) ? $wa['gsc_keywords'] : [];
+    $hasGscData = !empty($gscMap) || (getenv('GSC_SERVICE_ACCOUNT_JSON') ?: '') !== '';
+    $o[] = '# HELP web_analytics_gsc_configured Status integracji z Google Search Console API (1 = aktywna, 0 = oczekuje na klucz)';
+    $o[] = '# TYPE web_analytics_gsc_configured gauge';
+    $o[] = 'web_analytics_gsc_configured ' . ($hasGscData ? 1 : 0);
+
+    $o[] = '# HELP web_analytics_gsc_keyword_clicks_total Liczba klikniec w Google dla frazy wg Google Search Console API (okno 28 dni)';
+    $o[] = '# TYPE web_analytics_gsc_keyword_clicks_total gauge';
+    $o[] = '# HELP web_analytics_gsc_keyword_impressions_total Liczba wyswietlen w Google (Impressions) wg Google Search Console API (okno 28 dni)';
+    $o[] = '# TYPE web_analytics_gsc_keyword_impressions_total gauge';
+    $o[] = '# HELP web_analytics_gsc_keyword_position Srednia pozycja frazy w wynikach wyszukiwania Google wg GSC API';
+    $o[] = '# TYPE web_analytics_gsc_keyword_position gauge';
+
+    $gscClicksLines = [];
+    $gscImprLines   = [];
+    $gscPosLines    = [];
+    foreach ($gscMap as $gSite => $gRows) {
+        if (!is_array($gRows)) continue;
+        foreach ($gRows as $row) {
+            if (!is_array($row) || empty($row['query'])) continue;
+            $qEsc = aiEsc((string)$row['query']);
+            $sEsc = aiEsc((string)$gSite);
+            $gscClicksLines[] = 'web_analytics_gsc_keyword_clicks_total{site="' . $sEsc . '",query="' . $qEsc . '"} ' . (int)($row['clicks'] ?? 0);
+            $gscImprLines[]   = 'web_analytics_gsc_keyword_impressions_total{site="' . $sEsc . '",query="' . $qEsc . '"} ' . (int)($row['impressions'] ?? 0);
+            $gscPosLines[]    = 'web_analytics_gsc_keyword_position{site="' . $sEsc . '",query="' . $qEsc . '"} ' . round((float)($row['position'] ?? 1.0), 1);
+        }
+    }
+    if (empty($gscClicksLines)) {
+        $gscClicksLines[] = 'web_analytics_gsc_keyword_clicks_total{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
+        $gscImprLines[]   = 'web_analytics_gsc_keyword_impressions_total{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
+        $gscPosLines[]    = 'web_analytics_gsc_keyword_position{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
+    }
+    foreach ($gscClicksLines as $l) {
+        $o[] = $l;
+    }
+    foreach ($gscImprLines as $l) {
+        $o[] = $l;
+    }
+    foreach ($gscPosLines as $l) {
+        $o[] = $l;
+    }
+
     return implode("\n", $o) . "\n";
 }
+
+
 

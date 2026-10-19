@@ -8,7 +8,18 @@
   "editable": false,
   "graphTooltip": 0,
   "id": null,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": ["twojastronawww"],
+      "targetBlank": false,
+      "title": "Dashboardy TwojaStronaWWW",
+      "type": "dashboards"
+    }
+  ],
   "panels": [
     {
       "collapsed": false,

@@ -90,6 +90,41 @@ sum="$(met ai_router_request_duration_seconds_sum | awk '{print $NF}')"; cnt="$(
 awk -v s="${sum:-0}" -v c="${cnt:-0}" 'BEGIN { if (c > 0) printf "  Sredni czas udanej odpowiedzi: %.2f s (n=%d)\n", s/c, c; else print "  Brak udanych odpowiedzi w statystykach." }'
 
 # ------------------------------------------------------------------------------
+hr "4b. ANALITYKA RUCHU WWW & SEO (COOKIELESS RODO / ZERO-PII)"
+echo "  Unikalni odwiedzajacy dzis (Europe/Warsaw) / lacznie / zaangazowane sesje (>=15s):"
+met web_analytics_unique_visitors_today | while read -r line; do
+  s_id="$(printf '%s' "$line" | lbl site)"
+  uv_today="${line##* }"
+  uv_tot="$(met web_analytics_unique_visitors_total | grep "site=\"$s_id\"" | head -1 | awk '{print $NF}' || echo 0)"
+  eng_tot="$(met web_analytics_engaged_visits_total | grep "site=\"$s_id\"" | head -1 | awk '{print $NF}' || echo 0)"
+  printf '    %-16s dzis: %-6s | lacznie: %-6s | zaangazowane (>=15s): %s\n' "$s_id" "${uv_today:-0}" "${uv_tot:-0}" "${eng_tot:-0}"
+done
+echo "  Najpopularniejsze podstrony (niezerowe odslony):"
+met web_analytics_pageviews_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s %-24s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl path)" "${line##* }"
+done
+echo "  Zrodla ruchu (SEO / AI Search / Social / Direct):"
+met web_analytics_sources_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s %-16s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl source)" "${line##* }"
+done
+echo "  Konwersje CTA i zdarzenia biznesowe:"
+met web_analytics_events_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s %-22s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl event)" "${line##* }"
+done
+echo "  Wyszukiwane hasla (Salsopedia, UTM & AI Keywords):"
+met web_analytics_search_terms_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s "%s" -> %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl term)" "${line##* }"
+done
+echo "  Tematy pytan do czatbota AI (Zero-PII):"
+met ai_router_question_topics_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s %-20s %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl topic)" "${line##* }"
+done
+echo "  Slowa kluczowe z Google Search Console (GSC API):"
+met web_analytics_gsc_keyword_clicks_total | awk '$NF > 0 {print}' | while read -r line; do
+  printf '    %-16s "%s" -> klikniecia: %s\n' "$(printf '%s' "$line" | lbl site)" "$(printf '%s' "$line" | lbl query)" "${line##* }"
+done
+
+# ------------------------------------------------------------------------------
 hr "5. PROBY MODELI WG WYNIKU (niezerowe przelaczenia i odpowiedzi)"
 printf '  %-34s %-14s %s\n' "MODEL" "WYNIK" "LICZBA"
 met ai_router_model_attempts_total | awk '$NF > 0 {print}' | while read -r line; do

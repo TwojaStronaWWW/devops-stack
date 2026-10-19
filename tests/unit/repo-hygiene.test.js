@@ -475,6 +475,13 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const restoreBackup = path.join(ROOT_DIR, 'scripts', 'restore-backup.sh');
     assert.ok(fs.existsSync(restoreBackup), 'Brak scripts/restore-backup.sh');
     assert.match(fs.readFileSync(restoreBackup, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+
+    const syncGscSh = path.join(ROOT_DIR, 'scripts', 'sync-gsc-keywords.sh');
+    assert.ok(fs.existsSync(syncGscSh), 'Brak scripts/sync-gsc-keywords.sh');
+    assert.match(fs.readFileSync(syncGscSh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    assert.match(statsPhp, /ai_router_question_topics_total/);
+    assert.match(statsPhp, /web_analytics_gsc_keyword_clicks_total/);
+    assert.match(statsPhp, /web_analytics_gsc_keyword_position/);
   });
 
   it('weryfikacja krzyżowa (Cross-Template Contract): VPS AI Router, warm-ai-cache.sh oraz _site-template powinny zachowywać 100% spójność kontraktu', () => {

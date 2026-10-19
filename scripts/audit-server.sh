@@ -895,12 +895,19 @@ if [[ -f "${ENV_FILE}" ]]; then
 
         if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${PL_HOUR}" == "08" && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
             echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
+            if [[ -f "${STACK_DIR}/scripts/sync-gsc-keywords.sh" ]]; then
+                bash "${STACK_DIR}/scripts/sync-gsc-keywords.sh" >/dev/null 2>&1 || true
+            fi
             F2B_BANNED="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}' || echo '0')"
             F2B_IP_LIST="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Banned IP list/ {gsub(/^[ \t]+/,"",$2); print $2}' || echo 'brak')"
             AI_METRICS_RAW="$(curl -s --max-time 3 "http://127.0.0.1:8085/metrics" 2>/dev/null || true)"
             WA_PV_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_pageviews_total\{/ {s+=$NF} END {print s+0}')"
             WA_UV_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_unique_visitors_total\{/ {s+=$NF} END {print s+0}')"
+            WA_ENG_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_engaged_visits_total\{/ {s+=$NF} END {print s+0}')"
             WA_LEADS_TOTAL="$(echo "${AI_METRICS_RAW}" | awk '/^ai_router_leads_total\{/ {s+=$NF} END {print s+0}')"
+            WA_LCP_AVG="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_cwv_lcp_seconds_sum\{/ {s+=$NF} /^web_analytics_cwv_lcp_seconds_count\{/ {c+=$NF} END {if (c>0) printf "%.2fs", s/c; else print "b/d"}')"
+            WA_TOP_TOPIC="$(echo "${AI_METRICS_RAW}" | awk '/^ai_router_question_topics_total\{/ && $NF > 0 {val=$NF; match($0, /topic="[^"]+"/); t=substr($0, RSTART+7, RLENGTH-8); if (val > max) {max=val; best=t}} END {print (best != "" ? best " (" max ")" : "brak")}')"
+            WA_TOP_TERM="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_search_terms_total\{/ && $NF > 0 {val=$NF; match($0, /term="[^"]+"/); t=substr($0, RSTART+6, RLENGTH-7); if (t != "brak-wyszukiwan" && val > max) {max=val; best=t}} END {print (best != "" ? best " (" max ")" : "brak")}')"
 
             # Zbieranie Pełnego Rentgena 24h (Deep X-Ray 24h) z odfiltrowaniem szumu healthchecków
             AI_AUDIT_INSIGHT=""
@@ -912,7 +919,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
                     echo "Backupy: VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu"
                     echo "Ochrona IPS/WAF: Fail2ban zbanowane IP=${F2B_BANNED:-0} (aktywne IP: ${F2B_IP_LIST:-brak}) | WAF L7 zablokowane ataki=${WAF_BLOCKED_TOTAL:-0}"
-                    echo "Analityka WWW i AI: Odslony=${WA_PV_TOTAL:-0} | Unikalni=${WA_UV_TOTAL:-0} | Leady=${WA_LEADS_TOTAL:-0}"
+                    echo "Analityka WWW i AI: Odslony=${WA_PV_TOTAL:-0} | Unikalni=${WA_UV_TOTAL:-0} | Zaangazowani(>=15s)=${WA_ENG_TOTAL:-0} | LCP=${WA_LCP_AVG:-b/d} | Leady=${WA_LEADS_TOTAL:-0} | Top temat AI=${WA_TOP_TOPIC:-brak} | Top fraza=${WA_TOP_TERM:-brak}"
                     if [[ -n "${HINTS_SUMMARY}" ]]; then
                         echo "Wykryte wskazowki naprawcze: ${HINTS_SUMMARY}"
                     fi
@@ -1164,7 +1171,8 @@ PYEOF
             MORNING_BODY="✅ Wynik (67 testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
-📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsłon | ${WA_UV_TOTAL:-0} unikalnych | ${WA_LEADS_TOTAL:-0} leadów
+📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}
+🔍 Puls SEO & AI: Top temat AI: ${WA_TOP_TOPIC:-brak} | Top fraza: ${WA_TOP_TERM:-brak}
 🛡️ Ochrona: Kuma Auth OK (401) | WAF L7 blokady: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
                 MORNING_BODY="${MORNING_BODY}
