@@ -774,7 +774,7 @@ function aiRenderMetrics(): string
     // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
     $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];
     $waSameDay = (($wa['day'] ?? '') === aiAnalyticsDay());
-    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'];
+    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart'];
 
     $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO, Europe/Warsaw)';
     $o[] = '# TYPE web_analytics_unique_visitors_today gauge';
@@ -803,7 +803,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_pageviews_total Laczna liczba odslon podstron i sekcji SPA (Cookieless)';
     $o[] = '# TYPE web_analytics_pageviews_total counter';
     $pvMap = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
-    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'dancepuls|/', 'fuegolingua|/', 'twojastronawww|/'] as $defPv) {
+    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'dancepuls|/', 'fuegolingua|/', 'twojastronawww|/', 'raricart|/'] as $defPv) {
         if (!isset($pvMap[$defPv])) {
             $pvMap[$defPv] = 0;
         }
@@ -812,6 +812,11 @@ function aiRenderMetrics(): string
         '/'                => '🏠 / (Strona główna)',
         '/salsopedia.html' => '📖 /salsopedia.html (Słownik 179 haseł)',
         '/privacy.html'    => '🔒 /privacy.html (Polityka prywatności)',
+        '/pakiety.php'     => '🍽️ /pakiety.php (Pakiety i wycena Raricart)',
+        '/polityka-prywatnosci.php' => '🔒 /polityka-prywatnosci.php (Polityka prywatności)',
+        '/#onas'           => '👨‍🍳 /#onas (O Nas)',
+        '/#oferta'         => '🥂 /#oferta (Oferta i stacje Live Food)',
+        '/#realizacje'     => '📸 /#realizacje (Galeria realizacji)',
         '/#szkoly'         => '🎓 /#szkoly (Szkoły tańca)',
         '/#wydarzenia'     => '🎉 /#wydarzenia (Wydarzenia i imprezy)',
         '/#radio'          => '📻 /#radio (Radio Salsa)',

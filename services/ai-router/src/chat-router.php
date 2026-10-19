@@ -111,7 +111,9 @@ $defaultAllowedOrigins = [
     'https://fuegolingua.pl',
     'https://www.fuegolingua.pl',
     'https://twojastronawww.pl',
-    'https://www.twojastronawww.pl'
+    'https://www.twojastronawww.pl',
+    'https://raricart.pl',
+    'https://www.raricart.pl'
 ];
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
@@ -205,7 +207,7 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
         exit;
     }
 
-    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww'];
+    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart'];
     $bSite = strtolower(trim((string)($beacon['site_id'] ?? '')));
     if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite) || !in_array($bSite, $allowedAnalyticsSites, true)) {
         http_response_code(400);

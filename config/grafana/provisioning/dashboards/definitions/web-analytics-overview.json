@@ -659,9 +659,10 @@
           { "selected": false, "text": "katosalsahub", "value": "katosalsahub" },
           { "selected": false, "text": "dancepuls", "value": "dancepuls" },
           { "selected": false, "text": "fuegolingua", "value": "fuegolingua" },
-          { "selected": false, "text": "twojastronawww", "value": "twojastronawww" }
+          { "selected": false, "text": "twojastronawww", "value": "twojastronawww" },
+          { "selected": false, "text": "raricart", "value": "raricart" }
         ],
-        "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww",
+        "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww,raricart",
         "type": "custom"
       }
     ]
