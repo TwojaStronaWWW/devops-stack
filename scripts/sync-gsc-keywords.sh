@@ -101,7 +101,22 @@ req = urllib.request.Request(token_uri, data=token_req_data, headers={"Content-T
 with urllib.request.urlopen(req, timeout=10) as resp:
     access_token = json.loads(resp.read().decode("utf-8"))["access_token"]
 
-end_date = (datetime.date.today() - datetime.timedelta(days=2)).isoformat()
+print(f"[GSC-SYNC] Pomyślna autoryzacja OAuth2 dla konta: {client_email}")
+
+try:
+    sites_req = urllib.request.Request(
+        "https://searchconsole.googleapis.com/webmasters/v3/sites",
+        headers={"Authorization": f"Bearer {access_token}"}
+    )
+    with urllib.request.urlopen(sites_req, timeout=10) as sites_resp:
+        sites_list = json.loads(sites_resp.read().decode("utf-8")).get("siteEntry", [])
+        visible_urls = [s.get("siteUrl", "") for s in sites_list]
+        print(f"[GSC-SYNC] Widoczne usługi w Google Search Console ({len(visible_urls)}): {', '.join(visible_urls) if visible_urls else '(brak — dodaj ' + client_email + ' w Search Console -> Użytkownicy i uprawnienia)'}")
+except Exception as e:
+    visible_urls = []
+    print(f"[GSC-SYNC] Nie udało się pobrać listy usług GSC: {e}")
+
+end_date = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
 start_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
 
 for pair in sites_cfg.split(","):
@@ -109,40 +124,67 @@ for pair in sites_cfg.split(","):
     if "=" not in pair:
         continue
     site_id, gsc_prop = [x.strip() for x in pair.split("=", 1)]
-    encoded_prop = urllib.parse.quote(gsc_prop, safe="")
-    api_url = f"https://searchconsole.googleapis.com/webmasters/v3/sites/{encoded_prop}/searchAnalytics/query"
-    payload = json.dumps({
-        "startDate": start_date,
-        "endDate": end_date,
-        "dimensions": ["query"],
-        "rowLimit": 25
-    }).encode("utf-8")
-    try:
-        gsc_req = urllib.request.Request(api_url, data=payload, headers={
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json"
-        })
-        with urllib.request.urlopen(gsc_req, timeout=15) as gsc_resp:
-            gsc_data = json.loads(gsc_resp.read().decode("utf-8"))
-        rows = []
-        for r in gsc_data.get("rows", []):
-            keys = r.get("keys", [])
-            if not keys:
-                continue
-            rows.append({
-                "query": keys[0],
-                "clicks": int(round(float(r.get("clicks", 0)))),
-                "impressions": int(round(float(r.get("impressions", 0)))),
-                "position": round(float(r.get("position", 0.0)), 1)
+    base_domain = gsc_prop.replace("sc-domain:", "").replace("https://", "").replace("http://", "").strip("/")
+    candidates = [
+        gsc_prop,
+        f"sc-domain:{base_domain}",
+        f"https://{base_domain}/",
+        f"https://www.{base_domain}/"
+    ]
+    seen = set()
+    unique_candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+
+    synced = False
+    for prop_candidate in unique_candidates:
+        if visible_urls and prop_candidate not in visible_urls:
+            continue
+        encoded_prop = urllib.parse.quote(prop_candidate, safe="")
+        api_url = f"https://searchconsole.googleapis.com/webmasters/v3/sites/{encoded_prop}/searchAnalytics/query"
+        payload = json.dumps({
+            "startDate": start_date,
+            "endDate": end_date,
+            "dimensions": ["query"],
+            "rowLimit": 25
+        }).encode("utf-8")
+        try:
+            gsc_req = urllib.request.Request(api_url, data=payload, headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
             })
+            with urllib.request.urlopen(gsc_req, timeout=15) as gsc_resp:
+                gsc_data = json.loads(gsc_resp.read().decode("utf-8"))
+            rows = []
+            for r in gsc_data.get("rows", []):
+                keys = r.get("keys", [])
+                if not keys:
+                    continue
+                rows.append({
+                    "query": keys[0],
+                    "clicks": int(round(float(r.get("clicks", 0)))),
+                    "impressions": int(round(float(r.get("impressions", 0)))),
+                    "position": round(float(r.get("position", 0.0)), 1)
+                })
+            sync_payload = json.dumps({
+                "type": "gsc_sync",
+                "site_id": site_id,
+                "rows": rows
+            }).encode("utf-8")
+            sync_req = urllib.request.Request(router_url, data=sync_payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(sync_req, timeout=5) as sync_resp:
+                print(f"[GSC-SYNC] Zsynchronizowano {len(rows)} fraz dla {site_id} ({prop_candidate}) -> HTTP {sync_resp.status}")
+                synced = True
+                break
+        except Exception:
+            continue
+    if not synced:
         sync_payload = json.dumps({
             "type": "gsc_sync",
             "site_id": site_id,
-            "rows": rows
+            "rows": []
         }).encode("utf-8")
-        sync_req = urllib.request.Request(router_url, data=sync_payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(sync_req, timeout=5) as sync_resp:
-            print(f"[GSC-SYNC] Zsynchronizowano {len(rows)} fraz dla {site_id} ({gsc_prop}) -> HTTP {sync_resp.status}")
-    except Exception as e:
-        print(f"[GSC-SYNC] Pominięto {site_id} ({gsc_prop}): {e}")
+        try:
+            sync_req = urllib.request.Request(router_url, data=sync_payload, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(sync_req, timeout=5).close()
+        except Exception:
+            pass
 PYEOF
