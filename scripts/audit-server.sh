@@ -975,16 +975,16 @@ with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
 
 sys_prompt_primary = (
     "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
-    "Przeanalizuj szczegółowy 24-godzinny Rentgen serwera (67 testów deterministycznych, skaner anomalii 24h wszystkich 12 kontenerów, WAF L7, Fail2ban, Uptime Kuma SQLite, reguły tunelu Cloudflare, journalctl). "
-    "Napisz po polsku zwięzłą, kompletną diagnozę (dokładnie 3 krótkie wypunktowania •, łącznie do 420 znaków, nigdy nie ucinaj zdań): "
+    "Przeanalizuj szczegółowy 24-godzinny Rentgen serwera (testy deterministyczne, skaner anomalii 24h wszystkich 12 kontenerów, WAF L7, Fail2ban, Uptime Kuma SQLite, reguły tunelu Cloudflare, journalctl). "
+    "Napisz po polsku bardzo zwięzłą diagnozę w 3 krótkich punktach (po 1 zdaniu każdy): "
     "1) Anomalie w logach 24h i systemie, "
     "2) Stan ochrony Zero Trust, WAF/Fail2ban i backupów, "
-    "3) Werdykt końcowy i ewentualna rekomendacja."
+    "3) Werdykt końcowy i rekomendacja."
 )
 
 sys_prompt_cross = (
     "Jesteś drugim, niezależnym Audytorem Krzyżowym ISO 27001 (Second Opinion). "
-    "Zweryfikuj poniższy 24-godzinny Rentgen serwera VPS i napisz po polsku maksymalnie 2 krótkie zdania (do 240 znaków, bez ucinania zdań): "
+    "Zweryfikuj poniższy 24-godzinny Rentgen serwera VPS i napisz po polsku maksymalnie 2 krótkie zdania: "
     "potwierdź spójność wskaźników IoC/WAF/Backupów lub wskaż choćby najmniejszy ślad ryzyka."
 )
 
