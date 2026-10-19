@@ -43,6 +43,18 @@
       'Co to jest Enchufla i Dile Que No?',
       'Gdzie tańczymy i jak działa Radio?',
       'Jak dodać lub poprawić hasło w Salsopedii?'
+    ],
+    raricart: [
+      'Jak działa kreator okładek AI?',
+      'Ile trwa i kosztuje wysyłka obrazu?',
+      'Jakie rozmiary obrazów są dostępne?',
+      'Z jakich materiałów wykonane jest płótno?'
+    ],
+    dancepuls: [
+      'Czym jest aplikacja DancePuls?',
+      'Jakie style tańca obsługuje DancePuls?',
+      'Jak działa trening rytmu i clave?',
+      'Czy DancePuls jest darmowy?'
     ]
   };
   const quickPrompts = QUICK_PROMPTS_MAP[SITE_ID] || QUICK_PROMPTS_MAP.twojastronawww;

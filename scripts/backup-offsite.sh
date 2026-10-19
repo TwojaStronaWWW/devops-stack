@@ -257,7 +257,37 @@ if [[ -n "${S3_ACCESS_KEY}" && -n "${S3_SECRET_KEY}" && -n "${S3_ENDPOINT}" ]]; 
             -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
             rclone/rclone:latest \
             delete --min-age "${R2_RETENTION_DAYS}d" "r2:${S3_BUCKET}/backups/" >/dev/null 2>&1 || true
-        
+
+        # Statyczny backup offsite bazy wiedzy SQLite FTS5 Asystenta AMMS (162 MB, wykluczona z Git):
+        # Wysyłany do r2:${S3_BUCKET}/static/amms-knowledge.sqlite.gz.enc wyłącznie przy pierwszej inicjalizacji lub zmianie pliku
+        AMMS_SQLITE_PATH="${STACK_ROOT}/services/ai-router/data/amms-knowledge.sqlite"
+        AMMS_STAMP_FILE="/var/tmp/amms-sqlite-r2.stamp"
+        if [[ -f "${AMMS_SQLITE_PATH}" && -n "${BACKUP_ENCRYPTION_KEY}" ]] && command -v openssl >/dev/null 2>&1; then
+            CURRENT_AMMS_SIG="$(stat -c '%Y:%s' "${AMMS_SQLITE_PATH}" 2>/dev/null || echo '')"
+            SAVED_AMMS_SIG="$(cat "${AMMS_STAMP_FILE}" 2>/dev/null || echo '')"
+            if [[ -n "${CURRENT_AMMS_SIG}" && "${CURRENT_AMMS_SIG}" != "${SAVED_AMMS_SIG}" ]]; then
+                echo "--> [3b/3] Aktualizacja statycznej kopii bazy AMMS FTS5 (amms-knowledge.sqlite.gz.enc) w chmurze R2..."
+                AMMS_TMP_ENC="${BACKUP_DIR}/amms-knowledge.sqlite.gz.enc"
+                gzip -c "${AMMS_SQLITE_PATH}" | BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}" openssl enc -aes-256-cbc -pbkdf2 -salt \
+                    -out "${AMMS_TMP_ENC}" \
+                    -pass env:BACKUP_ENCRYPTION_KEY
+                if docker run --rm \
+                    -v "${BACKUP_DIR}:/data:ro" \
+                    -e RCLONE_CONFIG_R2_TYPE=s3 \
+                    -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+                    -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+                    -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+                    -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+                    -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+                    rclone/rclone:latest \
+                    copy "/data/amms-knowledge.sqlite.gz.enc" "r2:${S3_BUCKET}/static/"; then
+                    echo "${CURRENT_AMMS_SIG}" > "${AMMS_STAMP_FILE}"
+                    echo "--> [OK AMMS R2] Statyczna baza amms-knowledge.sqlite.gz.enc zsynchronizowana w r2:${S3_BUCKET}/static/."
+                fi
+                rm -f "${AMMS_TMP_ENC}"
+            fi
+        fi
+
         send_notification \
             "✅ Sukces: Backup VPS w Chmurze" \
             "Kopia ${BUNDLE_NAME} (${BUNDLE_SIZE}) została utworzona i przesłana offsite do chmury (retencja lokalna: ${RETENTION_DAYS}d, R2: ${R2_RETENTION_DAYS}d)." \

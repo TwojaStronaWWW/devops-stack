@@ -178,6 +178,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'katosalsahub-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'dancepuls-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'raricart-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'fuegolingua-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'amms-knowledge.txt'),
@@ -440,6 +442,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const rulesYml = fs.readFileSync(path.join(ROOT_DIR, 'config', 'prometheus', 'rules', 'ai-router.yml'), 'utf-8');
     assert.match(rulesYml, /alert:\s*CloudflareTunnelDown/);
     assert.match(rulesYml, /alert:\s*AIRouterModelDeprecated/);
+    assert.match(rulesYml, /alert:\s*VPSSecurityBreachIoCDetected/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /devops_backup_verified/);
@@ -448,6 +451,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(offsiteBackup, /RETENTION_DAYS="\$\{RETENTION_DAYS:-30\}"/);
     assert.match(offsiteBackup, /R2_RETENTION_DAYS="\$\{R2_RETENTION_DAYS:-14\}"/);
     assert.match(offsiteBackup, /delete --min-age "\$\{R2_RETENTION_DAYS\}d"/);
+    assert.match(offsiteBackup, /amms-knowledge\.sqlite\.gz\.enc/);
     assert.match(offsiteBackup, /docker image prune -f/);
 
     const deployYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'deploy.yml'), 'utf-8');
@@ -481,7 +485,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const restoreBackup = path.join(ROOT_DIR, 'scripts', 'restore-backup.sh');
     assert.ok(fs.existsSync(restoreBackup), 'Brak scripts/restore-backup.sh');
-    assert.match(fs.readFileSync(restoreBackup, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    const restoreBackupContent = fs.readFileSync(restoreBackup, 'utf-8');
+    assert.match(restoreBackupContent.split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    assert.match(restoreBackupContent, /amms-knowledge\.sqlite\.gz\.enc/);
 
     const syncGscSh = path.join(ROOT_DIR, 'scripts', 'sync-gsc-keywords.sh');
     assert.ok(fs.existsSync(syncGscSh), 'Brak scripts/sync-gsc-keywords.sh');
@@ -515,6 +521,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'Co to jest Enchufla i Dile Que No?',
       'Gdzie tańczymy i jak działa Radio?',
       'Jak dodać lub poprawić hasło w Salsopedii?',
+      'Jak działa kreator okładek AI?',
+      'Ile trwa i kosztuje wysyłka obrazu?',
+      'Czym jest aplikacja DancePuls?',
+      'Jak działa trening rytmu i clave?',
     ]) {
       assert.ok(warmCache.includes(prompt), `Brak pytania '${prompt}' w scripts/warm-ai-cache.sh`);
       assert.ok(vpsWidget.includes(prompt), `Brak pytania '${prompt}' w services/ai-router/src/widget.js`);

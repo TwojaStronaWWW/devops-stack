@@ -1,0 +1,19 @@
+# BAZA WIEDZY: DANCEPULS.KATOSALSAHUB.PL (Radar Imprez, Potańcówek i Warsztatów Tanecznych — Katowice & Śląsk)
+
+## Czym jest DancePuls?
+DancePuls (https://dancepuls.katosalsahub.pl/) to automatycznie aktualizowany radar, agregator i kalendarz wydarzeń tanecznych w Katowicach oraz całej aglomeracji górnośląskiej (GZM).
+- Obejmuje style: **Salsa Kubańska (Casino, Rueda, Timba), Salsa Liniowa (LA On1 / NY On2), Bachata Sensual & Dominican, Kizomba, Urbankiz oraz Brazilian Zouk**.
+- Serwis jest częścią ekosystemu społecznościowego **Kato Salsa Hub** (https://katosalsahub.pl/).
+
+## Co zawiera DancePuls i jak z niego korzystać?
+1. **6-sekcyjny Raport KSH:**
+   - Cotygodniowe, zweryfikowane zestawienie potwierdzonych imprez tanecznych (socials), praktyk tanecznych, warsztatów weekendowych, festiwali, darmowych potańcówek plenerowych (np. Dolina Trzech Stawów Sztauwajery, Bulwary Rawy) oraz kursów specjalnych na Śląsku.
+2. **Nawigacja GPS i bezpośrednie źródła:**
+   - Każde wydarzenie w kalendarzu zawiera znormalizowaną lokalizację, miasto, nazwę klubu/szkoły, godziny startu oraz bezpośredni link do oficjalnego wydarzenia organizatora.
+3. **Filtrowanie po stylach i dniach tygodnia:**
+   - Możliwość szybkiego sprawdzenia gdzie potańczyć dzisiaj, w najbliższy piątek/sobotę lub w wybranym stylu (Salsa, Bachata, Kizomba).
+
+## Powiązane narzędzia dla tancerzy na Śląsku:
+- **Portal główny Kato Salsa Hub:** https://katosalsahub.pl/ (mapa szkół tańca w Katowicach, grafik zajęć, porady jak zacząć od P0, Radio Salsa 24/7).
+- **Salsopedia (Interaktywny Słownik 85+ Figur Salsy i Ruedy de Casino):** https://katosalsahub.pl/salsopedia.html (opisy kroków, komendy cantantego, rytmika Clave 2-3 i 3-2).
+- **Zgłaszanie wydarzeń:** Organizatorzy i szkoły tańca mogą bezpłatnie zgłaszać swoje imprezy i warsztaty przez formularz kontaktowy na https://katosalsahub.pl/ lub bezpośrednio na czacie.

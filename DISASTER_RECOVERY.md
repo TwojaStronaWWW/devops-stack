@@ -57,10 +57,10 @@ mkdir -p /opt/devops-stack/backups/websites
 ```
 
 ### Krok 5: Odtworzenie danych z archiwów (Restore) (Czas: ~2 min)
-Możesz przeprowadzić automatyczne pobranie z chmury Cloudflare R2, odszyfrowanie AES-256-CBC, weryfikację spójności SQLite oraz przywrócenie wszystkich wolumenów i uprawnień jednym poleceniem:
+Możesz przeprowadzić automatyczne pobranie z chmury Cloudflare R2, odszyfrowanie AES-256-CBC, weryfikację spójności SQLite oraz przywrócenie wszystkich 7 wolumenów, uprawnień PoLP i statycznej bazy wiedzy `amms-knowledge.sqlite` (162 MB FTS5 z `r2:${S3_BUCKET}/static/amms-knowledge.sqlite.gz.enc`) jednym poleceniem:
 
 ```bash
-# Opcja A (Zalecana — pełny automat pobierający najświeższy backup z Cloudflare R2):
+# Opcja A (Zalecana — pełny automat pobierający najświeższy backup wolumenów + bazę AMMS FTS5 z Cloudflare R2):
 bash /opt/devops-stack/scripts/restore-backup.sh --from-r2 --yes
 
 # Opcja B (Nieinwazyjny test odtworzeniowy / Restore Drill bez nadpisywania wolumenów):
@@ -107,13 +107,13 @@ sudo bash /opt/devops-stack/scripts/setup-backup-timer.sh
 
 ## 3. Test Poprawności (Post-Recovery Checklist)
 
-- [ ] Wszystkie 13 kontenerów (w tym `oci-keepalive-buffer`) ma status `Up (healthy)` / `running`.
+- [ ] Wszystkie 12 kontenerów (w tym `oci-keepalive-buffer`) ma status `Up (healthy)` / `running`.
 - [ ] Runnery `runner-zeslownikiem-unified`, `runner-twojastronawww-unified` oraz `runner-gal-anonim-web` działają w odseparowanej sieci `devops_runners_network`.
-- [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health`, ma rozgrzane wpisy Quick Prompts w `/app/storage/cache` (`warm-ai-cache.sh`) oraz eksportuje metryki pod `http://127.0.0.1:8085/metrics`.
+- [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health`, posiada bazę FTS5 `/app/data/amms-knowledge.sqlite` (162 MB), ma rozgrzane wpisy Quick Prompts w `/app/storage/cache` (`warm-ai-cache.sh`) oraz eksportuje metryki pod `http://127.0.0.1:8085/metrics`.
 - [ ] Uptime Kuma prezentuje wszystkie 10 monitorowanych witryn i usług (w tym `AI Router Healthcheck` = UP).
 - [ ] Grafana uruchamia się w trybie PoLP `Viewer` ze wszystkimi 3 dashboardami (`Centrum Monitoringu Stron WWW & Usług`, `AI Router - Gemini Proxy Monitor` oraz `Analityka Ruchu WWW & SEO (Cookieless)`) pod `http://127.0.0.1:3000`.
-- [ ] Pełny audyt 5 warstw (`bash /opt/devops-stack/scripts/audit-server.sh` lub `npm run audit`) zwraca **`61 OK | 0 OSTRZEŻEŃ | 0 BŁĘDÓW`** (w tym `devops_security_ioc_clean 1` oraz `devops_backup_restore_drill_verified 1`).
-- [ ] Timery systemd `devops-backup.timer` (03:00 UTC) oraz `devops-audit.timer` (co 15 min + poranny raport 08:00 z Claude Sonnet 4.6) są aktywne.
+- [ ] Pełny audyt 5 warstw (`bash /opt/devops-stack/scripts/audit-server.sh` lub `npm run audit`) zwraca **`68 OK | 0 OSTRZEŻEŃ | 0 BŁĘDÓW`** (w tym `devops_security_ioc_clean 1` oraz `devops_backup_restore_drill_verified 1`).
+- [ ] Timery systemd `devops-backup.timer` (03:00 UTC) oraz `devops-audit.timer` (co 15 min + poranny raport 08:00 Dual-AI HIGH Reasoning + eskalacja Claude Sonnet 4.6) są aktywne.
 
 
 

@@ -160,3 +160,13 @@ groups:
         annotations:
           summary: "Pogorszenie szybkosci ladowania strony {{ $labels.site }} (Core Web Vitals LCP > 2.5s)"
           description: "Sredni czas renderowania najwiekszego elementu (LCP) u uzytkownikow serwisu {{ $labels.site }} wynosi {{ $value | printf \"%.2f\" }}s (prog Google Good <= 2.5s)."
+
+      - alert: VPSSecurityBreachIoCDetected
+        expr: devops_security_ioc_clean == 0 or devops_audit_status == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Wykryto slady kompromitacji IoC lub blad krytyczny audytu bezpieczenstwa VPS"
+          description: "Straznik 24/7 (audit-server.sh) zglosil naruszenie integralnosci IoC (devops_security_ioc_clean=0) lub awarie warstwy obronnej (devops_audit_status=0)."
+

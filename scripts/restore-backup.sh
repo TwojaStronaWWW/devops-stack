@@ -204,6 +204,30 @@ docker run --rm -v grafana_data:/target alpine:latest chown -R 472:472 /target 2
 docker run --rm -v prometheus_data:/target alpine:latest chown -R 65534:65534 /target 2>/dev/null || true
 docker run --rm -v ai_router_storage:/target alpine:latest chown -R 65534:65534 /target 2>/dev/null || true
 
+# 6. Odtworzenie statycznej bazy wiedzy SQLite FTS5 Asystenta AMMS (162 MB, wykluczona z Git) z Cloudflare R2
+AMMS_SQLITE_TARGET="${STACK_ROOT}/services/ai-router/data/amms-knowledge.sqlite"
+if [[ ! -f "${AMMS_SQLITE_TARGET}" && "${FROM_R2}" == "true" && -n "${BACKUP_ENCRYPTION_KEY}" ]]; then
+    echo "--> Pobieranie statycznej bazy AMMS FTS5 (static/amms-knowledge.sqlite.gz.enc) z chmury R2..."
+    if docker run --rm \
+        -v "${WORK_DIR}:/data" \
+        -e RCLONE_CONFIG_R2_TYPE=s3 \
+        -e RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
+        -e RCLONE_CONFIG_R2_ACCESS_KEY_ID="${S3_ACCESS_KEY}" \
+        -e RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="${S3_SECRET_KEY}" \
+        -e RCLONE_CONFIG_R2_ENDPOINT="${S3_ENDPOINT}" \
+        -e RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true \
+        rclone/rclone:latest \
+        copy "r2:${S3_BUCKET}/static/amms-knowledge.sqlite.gz.enc" /data/ 2>/dev/null && [[ -f "${WORK_DIR}/amms-knowledge.sqlite.gz.enc" ]]; then
+        BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}" openssl enc -d -aes-256-cbc -pbkdf2 \
+            -in "${WORK_DIR}/amms-knowledge.sqlite.gz.enc" \
+            -pass env:BACKUP_ENCRYPTION_KEY | gunzip -c > "${AMMS_SQLITE_TARGET}"
+        chmod 644 "${AMMS_SQLITE_TARGET}"
+        echo "--> [OK AMMS] Odtworzono bazę wiedzy FTS5: ${AMMS_SQLITE_TARGET}"
+    else
+        echo "--> [INFO] Brak pliku static/amms-knowledge.sqlite.gz.enc w R2 – pominięto."
+    fi
+fi
+
 echo "=============================================================================="
 echo "==> [ZAKOŃCZONO] Wszystkie wolumeny zostały pomyślnie odtworzone z kopii zapasowej!"
 echo "=============================================================================="

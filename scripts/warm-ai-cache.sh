@@ -37,6 +37,14 @@ PROMPTS=(
     "katosalsahub|Gdzie tańczymy w Katowicach i na Trzech Stawach?"
     "katosalsahub|Jak zacząć od zera (P0) i czy działa Multisport?"
     "katosalsahub|Ile kosztuje karnet?"
+    "raricart|Jak działa kreator okładek AI?"
+    "raricart|Ile trwa i kosztuje wysyłka obrazu?"
+    "raricart|Jakie rozmiary obrazów są dostępne?"
+    "raricart|Z jakich materiałów wykonane jest płótno?"
+    "dancepuls|Czym jest aplikacja DancePuls?"
+    "dancepuls|Jakie style tańca obsługuje DancePuls?"
+    "dancepuls|Jak działa trening rytmu i clave?"
+    "dancepuls|Czy DancePuls jest darmowy?"
 )
 
 echo "==> [warm-ai-cache] Rozgrzewanie pamięci podręcznej RAG (${#PROMPTS[@]} pytań startowych)..."

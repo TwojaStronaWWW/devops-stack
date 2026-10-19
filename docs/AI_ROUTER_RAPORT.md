@@ -107,12 +107,12 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 
 | Zasób | Wartość |
 |---|---|
-| RAM kontenera | ~12,1 MiB / limit 128 MiB (9,45 %, 4 workery PHP) |
+| RAM kontenera | ~18,4 MiB / limit 256 MiB (7,2 %, 4 workery PHP + PDO SQLite FTS5) |
 | CPU | ~0,01 % (limit 0,5 vCPU) |
-| Obraz Docker | 138 MB (`php:8.3-alpine` + cURL) |
-| Wolumen `ai_router_storage` | ~36 KB (rate-limit + cache RAG + `ai_stats.json` z automatycznym GC) |
-| Dane RAG (`data/`) | 20 KB (`:ro`) |
-| Dysk hosta | 9,7 GB z 96 GB (11 %) – w limicie Always Free 200 GB |
+| Obraz Docker | 95,4 MB (`php:8.3-alpine` + `pdo_sqlite` + cURL) |
+| Wolumen `ai_router_storage` | ~116 KB (rate-limit + cache RAG + `stats.json` z automatycznym GC) |
+| Dane RAG (`data/`) | 162 MB (`:ro` — 6 baz tekstowych `.txt` + baza SQLite FTS5 `amms-knowledge.sqlite` z 25 227 chunkami i 12 291 stronami zrzutów WebP) |
+| Dysk hosta | 11 GB z 96 GB (12 %) – w limicie Always Free 200 GB |
 | Koszt | 0,00 PLN (Free Tier + Always Free) |
 
 ## 6. Narzędzia kontroli i powiadomienia Push 24/7
@@ -121,9 +121,10 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 |---|---|---|
 | **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada (modele + Cache RAG `<5ms`), błędy wg przyczyny, zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch i leady per strona | `scripts\open-dashboard.cmd` |
 | **Grafana** → *Analityka Ruchu WWW & SEO (Cookieless)* | Filtr `$site`, unikalni dziś i łącznie, wskaźnik zaangażowania (`>=15s`), Core Web Vitals LCP, konwersje CTA i lejek AI, źródła wejść (w tym `Wyszukiwarki AI`: ChatGPT/Perplexity/Claude/Gemini, Google, Bing, DuckDuckGo, TikTok, YouTube, FB, IG), tematy pytań do AI, słowa kluczowe i pozycje z Google Search Console (GSC API) | `scripts\open-dashboard.cmd` |
+| **Asystent AMMS & Oracle DBA** | Interfejs w stylu Microsoft Teams (`http://127.0.0.1:8085/amms` tylko po tunelu SSH) z wyszukiwarką hybrydową SQLite FTS5 BM25 (314 PDF + 69 plików struktur bazy Oracle) i podglądem stron dokumentacji | `scripts\open-amms-assistant.cmd` |
 | **Raport CLI** | Pełny raport tekstowy (zasoby, providerzy, kaskada, statystyki cache RAG, pozyskane leady `ai_router_leads_total`, analityka WWW, tematy AI, frazy GSC, próby modeli, logi) | `.\scripts\ai-router-report.ps1` albo na VPS `scripts/ai-router-report.sh` |
 | **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `security_attack_blocked`, `contact_lead_captured`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
-| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 18 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` + poranny przegląd 08:00 **Claude Sonnet 4.6 Deep X-Ray** do **Ntfy.sh** | `npm run audit` |
+| **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 19 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` (68 testów) + poranny przegląd 08:00 **Dual-AI HIGH Reasoning ($0.00) + eskalacja Claude Sonnet 4.6** do **Ntfy.sh** | `npm run audit` |
 | **Uptime Kuma** | Dostępność `http://ai-router:8080/health` (z automatycznym odświeżaniem cache DNS `nscd -i hosts` po wdrożeniu) | `open-dashboard.cmd` → Uptime Kuma |
 
 ### Reguły Alertów Prometheusa (`config/prometheus/rules/ai-router.yml`)
@@ -132,22 +133,23 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 |---|---|---|
 | `AIRouterDown` | brak scrape `ai-router:8080` przez 2 min | critical |
 | `AIRouterAllModelsFailed` | ≥1 zapytanie HTTP 502 (wszystkie 11 modeli zawiodły) w 10 min | critical |
-| `AIRouterPrimaryModelSuspended` | model pozycji 0 zawieszony >5 min | warning |
+| `AIRouterPrimaryModelSuspended` | model pozycji 0 zawieszony >15 min | warning |
 | `AIRouterModelQuotaNearLimit` | >80 % dziennego limitu RPD | warning |
 | `AIRouterRateLimitSpike` | >20 blokad 429 / 10 min | warning |
-| `AIRouterSecurityAttackDetected` | ≥3 zablokowane ataki WAF (Prompt Injection / XSS / SQLi / LFI) w 10 min | warning |
+| `AIRouterSecurityAttackDetected` | >10 zablokowanych ataków WAF (Prompt Injection / XSS / SQLi / LFI / CORS) w 10 min | warning |
 | `AIRouterModelDeprecated` | ≥1 błąd HTTP 404 (`not_found`) modelu w kaskadzie | warning |
 | `AIRouterFallbackInUse` | odpowiedzi z pozycji >0 w 15 min | info |
-| `AIRouterNoFallbackProvider` | brak skonfigurowanego Groq i OpenRouter >1 h | info |
-| `WebsiteOrServiceDown` | `monitor_status == 0` w Uptime Kuma przez 2 min | critical |
+| `AIRouterNoFallbackProvider` | brak skonfigurowanego zapasowego providera >1 h | info |
+| `WebsiteOrServiceDown` | `monitor_status == 0` w Uptime Kuma przez 3 min | critical |
 | `SSLCertificateExpiringSoon` | `monitor_cert_days_remaining < 14` | warning |
 | `VPSHostDiskSpaceLow` | <20 % wolnego miejsca na `/` przez 5 min | warning |
 | `VPSHostMemoryLow` | <15 % dostępnej pamięci RAM na hoście przez 5 min | warning |
-| `VPSBackupFailedOrStale` | błąd backupu wolumenów, błąd `tar -tzf` / `PRAGMA quick_check` / Restore Drill lub brak backupu >26 h | warning |
+| `VPSBackupFailedOrStale` | błąd backupu wolumenów, błąd `tar -tzf` / `PRAGMA quick_check` lub brak backupu >26 h | warning |
 | `WebsitesBackupFailedOrStale` | błąd backupu stron LH.pl, błąd `tar -tzf` / `mysqldump` lub brak backupu >26 h | warning |
 | `CloudflareTunnelDown` | brak telemetrii `cloudflared:2000` przez 2 min | critical |
-| `VPSFail2BanAttackSpike` | ≥5 zbanowanych IP przez Fail2Ban w ciągu 15 min | warning |
-| `VPSSecurityBreachIoCDetected` | wykrycie śladów kompromitacji IoC (`devops_security_ioc_clean == 0`) | critical |
+| `SSHBruteForceWaveDetected` | ≥5 jednocześnie zbanowanych IP przez Fail2Ban na porcie 22 SSH | warning |
+| `WebsiteCoreWebVitalsLcpSlow` | średni czas renderowania LCP > 2.5 s przy ≥5 próbkach przez 15 min | warning |
+| `VPSSecurityBreachIoCDetected` | wykrycie śladów kompromitacji IoC (`devops_security_ioc_clean == 0` lub `devops_audit_status == 0`) | critical |
 
 
 
