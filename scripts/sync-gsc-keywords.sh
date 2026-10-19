@@ -110,7 +110,11 @@ try:
     )
     with urllib.request.urlopen(sites_req, timeout=10) as sites_resp:
         sites_list = json.loads(sites_resp.read().decode("utf-8")).get("siteEntry", [])
-        visible_urls = [s.get("siteUrl", "") for s in sites_list]
+        visible_urls = [
+            s.get("siteUrl", "")
+            for s in sites_list
+            if s.get("siteUrl") and s.get("permissionLevel") != "siteUnverifiedUser"
+        ]
         print(f"[GSC-SYNC] Widoczne usługi w Google Search Console ({len(visible_urls)}): {', '.join(visible_urls) if visible_urls else '(brak — dodaj ' + client_email + ' w Search Console -> Użytkownicy i uprawnienia)'}")
 except Exception as e:
     visible_urls = []
@@ -121,9 +125,12 @@ start_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
 
 for pair in sites_cfg.split(","):
     pair = pair.strip()
-    if "=" not in pair:
+    if "=" in pair:
+        site_id, gsc_prop = [x.strip() for x in pair.split("=", 1)]
+    elif ":" in pair:
+        site_id, gsc_prop = [x.strip() for x in pair.split(":", 1)]
+    else:
         continue
-    site_id, gsc_prop = [x.strip() for x in pair.split("=", 1)]
     base_domain = gsc_prop.replace("sc-domain:", "").replace("https://", "").replace("http://", "").strip("/")
     candidates = [
         gsc_prop,
