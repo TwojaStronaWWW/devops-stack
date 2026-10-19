@@ -33,8 +33,10 @@ TwojaStronaWWW.pl to autorska praktyka inżynieryjna specjalizująca się w proj
    - Dedykowana aplikacja webowa i automatyzacja procesów biznesowych
    - Integracje API (płatności BLIK/Stripe/Przelewy24, systemy CRM, asystenci AI)
    - Zaawansowany panel administracyjny i skalowalna architektura
-4. Wdrożenie Asystenta AI (Czatbot RAG z bazą wiedzy firmy) – **od 900 PLN netto**:
-   - Inteligentny doradca klienta działający 24/7 na stronie WWW, odpowiadający wyłącznie na podstawie bazy wiedzy firmy, z powiadomieniami o leadach na telefon i wykorzystaniem darmowych pul API.
+4. Wdrożenie Asystenta AI i Systemów RAG (3 poziomy zaawansowania):
+   - **Pakiet Starter (Czatbot FAQ/RAG na stronę WWW) – od 900 do 2 500 PLN netto:** lekki doradca klienta 24/7 oparty o pojedynczy plik wiedzy oferty firmy, z przechwytywaniem leadów (telefon/e-mail -> powiadomienie Push 1-Klik na telefon) i wykorzystaniem darmowych pul API.
+   - **Pakiet Business (Rozbudowany Asystent RAG + Integracje) – od 3 500 do 9 000 PLN netto:** indeksacja wielu dokumentów firmowych (cenniki, regulaminy, katalogi PDF), pamięć wieloturowa, ochrona WAF L7 przed Prompt Injection, własna analityka konwersji oraz integracje z CRM/Helpdeskiem/webhookami.
+   - **Pakiet Enterprise RAG & Dedykowany System Ekspercki AI – od 12 000 do 35 000+ PLN netto (wycena indywidualna, brak sztywnej górnej granicy):** zaawansowane silniki wyszukiwania hybrydowego (np. SQLite FTS5 BM25 / bazy wektorowe) przetwarzające setki podręczników PDF (tysiące stron ze zrzutami wizualnymi stron) oraz schematy baz danych (np. Oracle SQL / PostgreSQL), dedykowany interfejs ekspercki (np. w stylu Microsoft Teams z podglądem cytowanych stron PDF), kaskada High Availability 11 modeli AI (Gemini, Groq LPU, Cerebras WSE, Claude) oraz izolacja Zero-Trust ISO 27001.
 5. Opieka powdrożeniowa i automatyzacje cykliczne:
    - Przez pierwsze 30 dni po uruchomieniu wsparcie jest bezpłatne.
    - Opcjonalna obsługa abonamentowa (od **150 PLN netto / mies.**): aktualizacje, monitoring dostępności 24/7, szyfrowane kopie zapasowe (backup offsite) i rozwój automatyzacji.
@@ -48,9 +50,9 @@ TwojaStronaWWW.pl to autorska praktyka inżynieryjna specjalizująca się w proj
 - Rozliczenie: przejrzysta umowa z harmonogramem i klauzulą poufności (NDA), płatność etapowa (zaliczka na start + płatność końcowa po odbiorze).
 
 ## Przykładowe realizacje (Portfolio):
-- **Raricart.pl** (Zabrze, branża eventowa) – Google PageSpeed 99/100, czas ładowania skrócony z 4.2s do 0.6s, automatyczna rezerwacja terminów imprez.
-- **KatoSalsaHub.pl** (Katowice, społeczność i edukacja) – Google PageSpeed 98/100, zautomatyzowany feed wydarzeń oszczędzający 6 godzin ręcznej pracy tygodniowo.
-- **DancePuls** (Katowice, generator wydarzeń) – Google PageSpeed 100/100, publikacja warsztatów w 30 sekund.
+- **Raricart.pl** (E-commerce & Galeria Obrazów na Płótnie z Kreatorem AI) – Google PageSpeed 99/100, interaktywny kreator okładek AI w 3 krokach z podglądem na żywo na ścianie.
+- **KatoSalsaHub.pl** (Katowice, społeczność i edukacja + Salsopedia) – Google PageSpeed 98/100, interaktywny słownik 179 figur i pojęć tanecznych zintegrowany z asystentem AI RAG.
+- **DancePuls** (Katowice, aplikacja treningu rytmu i generator wydarzeń) – Google PageSpeed 100/100, interaktywny trener clave i rytmu.
 - **FuegoLingua.pl** (Katowice, edukacja językowa) – Google PageSpeed 100/100, ultra-lekka strona (45 KB) bez bazy SQL z inteligentnym asystentem AI.
 
 ## Kontakt i bezpłatna wycena (w 24h):
