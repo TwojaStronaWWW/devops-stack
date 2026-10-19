@@ -142,34 +142,39 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001, Fail2ban progresywny 1h->7d, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # 5-warstwowy audyt (67 testów, IoC/IPS/WAF, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
+│   ├── audit-server.sh            # 5-warstwowy audyt (68 testów, IoC/IPS/WAF, AMMS Zero-Trust, Web Analytics v3, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do chmury R2
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z hostingu LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256)
 │   ├── restore-backup.sh          # Automatyczne odtwarzanie (Disaster Recovery) i test Restore Drill (--verify-only)
-│   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie Grafany, Uptime Kuma i Dozzle)
+│   ├── open-dashboard.ps1/.cmd    # Błyskawiczny launcher 1-klik (cichy tunel SSH + otwarcie 3x Grafana, Dozzle, Uptime Kuma i AMMS)
+│   ├── open-amms-assistant.ps1/.cmd# 1-klikowy launcher Asystenta Eksperckiego AMMS & Oracle DBA (Microsoft Teams UI przez tunel SSH)
+│   ├── pack-amms-portable.ps1     # Generator przenośnej paczki ZIP (Portable) dla Asystenta AMMS i Monitoringu na drugi komputer
 │   ├── preview-tunnel.ps1/.sh     # Quick Tunnel – natychmiastowy szyfrowany link HTTPS dla stagingu
 │   ├── setup-audit-timer.sh       # Idempotentna instalacja strażnika systemd 24/7 (devops-audit.timer co 15 min)
 │   ├── setup-backup-timer.sh      # Idempotentna instalacja harmonogramu backupów systemd (devops-backup.timer 03:00 UTC)
 │   ├── setup-kuma.js              # Idempotentna rejestracja 10 monitorowanych witryn i AI Routera w Uptime Kuma
 │   ├── setup-ntfy.js              # Konfiguracja kanału powiadomień Ntfy
+│   ├── sync-gsc-keywords.sh       # Bezciasteczkowa synchronizacja słów kluczowych Google Search Console API + Sitemap Refresh + IndexNow
 │   ├── verify-remote.ps1/.cmd     # Zdalny wyzwalacz audytu VPS z poziomu Windows (npm run audit)
 │   ├── warm-ai-cache.sh           # Idempotentny pre-warming pamięci podręcznej RAG (Quick Prompts) po wdrożeniu
 │   └── runners/                   # Skrypty sterowania runnerami CI/CD
 ├── services/
-│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine, Multi-Provider RAG, Cache <5ms, WAF L7)
+│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, Multi-Provider RAG, Cache <5ms, WAF L7)
 │       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
 │       ├── src/
-│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, WAF L7 + 15m Penalty Box, Cache RAG (<5ms), Leady Ntfy 1-Klik, 11-modelowa kaskada LLM, /analytics
-│       │   ├── ai-stats.php       # Moduł telemetrii Prometheus (AI + Cookieless Web Analytics), Cooldownu modeli i limitów RPD
-│       │   └── widget.js          # Uniwersalny widget czatu AI serwowany przez GET /widget.js
-│       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua-knowledge.txt, katosalsahub-knowledge.txt, twojastronawww-knowledge.txt)
+│       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, WAF L7 + 15m Penalty Box, Cache RAG (<5ms), Leady Ntfy 1-Klik, 11-modelowa kaskada LLM, /amms, /analytics
+│       │   ├── amms-rag-search.php# Silnik Dual-Stream SQLite FTS5 BM25 (314 PDF + 69 plików bazy Oracle AMMS) + Smart Reasoning Tiering (LOW/HIGH)
+│       │   ├── amms-teams.html    # Interfejs Asystenta AMMS & Oracle DBA w stylu Microsoft Teams z wizualnymi zrzutami stron (Page Snapshots)
+│       │   ├── ai-stats.php       # Moduł telemetrii Prometheus (AI + Cookieless Web Analytics v3), Cooldownu modeli i limitów RPD
+│       │   └── widget.js          # Uniwersalny widget czatu AI + Cookieless Web Analytics serwowany przez GET /widget.js
+│       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua, katosalsahub, twojastronawww, amms-knowledge.txt + amms-knowledge.sqlite)
 │       ├── storage/               # Trwały wolumen na pliki rate-limit, cache RAG (/app/storage/cache) oraz ai_stats.json
 │       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
 ├── tests/
 │   └── unit/
-│       ├── repo-hygiene.test.js   # 25 testów higieny repozytorium, walidacji 3 dashboardów JSON, telemetrii AI/WWW i kontraktu _site-template
-│       └── security-regression.test.js # 15 testów regresji bezpieczeństwa OWASP / ISO 27001 / Zero Trust / WAF / Analytics (łącznie 40 testów)
+│       ├── repo-hygiene.test.js   # 26 testów higieny repozytorium, walidacji 3 dashboardów JSON, telemetrii AI/WWW, AMMS i kontraktu _site-template
+│       └── security-regression.test.js # 16 testów regresji bezpieczeństwa OWASP / ISO 27001 / Zero Trust / WAF / Analytics / AMMS (łącznie 42 testy)
 ├── AGENTS.md / GEMINI.md          # Wytyczne architektoniczne dla modeli AI i rygor Always Free
 ├── DISASTER_RECOVERY.md           # Procedura odtworzenia środowiska z kopii w < 15 minut
 ├── README.md                      # Główna dokumentacja architektury i bezpieczeństwa
@@ -359,7 +364,7 @@ Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla
 
 ### C. Automatyzacja Harmonogramów Systemd (Backup, Strażnik 24/7 & Poranny Audytor AI):
 - **`devops-backup.timer`** ([`scripts/setup-backup-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-backup-timer.sh)): Uruchamiany codziennie o **03:00 UTC** (05:00 rano czasu polskiego) — wykonuje pełny backup wolumenów, stron LH.pl oraz automatyczny *Restore Drill*.
-- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** (0 zapytań AI w rutynowych przebiegach) — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`, 67 testów), kontroluje ślady włamań IoC (`devops_security_ioc_clean`), blokady WAF L7 (`devops_waf_blocked_total`), skaner wyjątków 24h (`devops_log_critical_24h_total`) i statystyki Fail2Ban (`devops_fail2ban_banned_total`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport stanu infrastruktury wzbogacony o **24-godzinny Rentgen (`--since 24h`)** weryfikowany krzyżowo przez **dwa darmowe modele w trybie głębokiego myślenia (`Groq/Cerebras GPT-OSS-120B reasoning: HIGH` + `Gemini 3.5 Flash thinking: HIGH`, koszt `$0.00`)**, z automatyczną eskalacją do **`Claude Sonnet 4.6`** wyłącznie w razie wykrycia anomalii/błędów.
+- **`devops-audit.timer`** ([`scripts/setup-audit-timer.sh`](file:///e:/Projekty/VPS/scripts/setup-audit-timer.sh)): Uruchamiany **co 15 minut** (0 zapytań AI w rutynowych przebiegach) — wykonuje 5-warstwowy audyt bezpieczeństwa i zdrowia (`audit-server.sh`, 68 testów), kontroluje ślady włamań IoC (`devops_security_ioc_clean`), blokady WAF L7 (`devops_waf_blocked_total`), ochronę Zero-Trust i bazę FTS5 Asystenta AMMS (`/amms`), telemetrię Cookieless Web Analytics v3 & GSC Sync, skaner wyjątków 24h (`devops_log_critical_24h_total`) i statystyki Fail2Ban (`devops_fail2ban_banned_total`), odświeża telemetrię `audit.prom`, wykonuje samonaprawę DNS `nscd` w Uptime Kuma i wysyła natychmiastowy alert Push na telefon (**Ntfy.sh**) w razie jakiejkolwiek awarii lub aktywnego alarmu Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport stanu infrastruktury wzbogacony o **24-godzinny Rentgen (`--since 24h`)** weryfikowany krzyżowo przez **dwa darmowe modele w trybie głębokiego myślenia (`Groq/Cerebras GPT-OSS-120B reasoning: HIGH` + `Gemini 3.5 Flash thinking: HIGH`, koszt `$0.00`)**, z automatyczną eskalacją do **`Claude Sonnet 4.6`** wyłącznie w razie wykrycia anomalii/błędów.
 
 ---
 

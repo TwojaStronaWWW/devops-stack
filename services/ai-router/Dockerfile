@@ -4,8 +4,9 @@
 # ==============================================================================
 FROM php:8.3-alpine
 
-# Zainstaluj tylko niezbędne pakiety runtime (cURL, CA certyfikaty do bezpiecznego TLS)
+# Zainstaluj tylko niezbędne pakiety runtime (cURL, CA certyfikaty do bezpiecznego TLS) i zweryfikuj wsparcie PDO SQLite FTS5
 RUN apk add --no-cache curl ca-certificates && \
+    php -r 'if (!in_array("sqlite", PDO::getAvailableDrivers(), true)) { fwrite(STDERR, "Missing pdo_sqlite\n"); exit(1); }' && \
     mkdir -p /app/src /app/data /app/storage/rate_limits && \
     chown -R nobody:nobody /app
 

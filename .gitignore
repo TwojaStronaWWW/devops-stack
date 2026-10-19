@@ -24,6 +24,8 @@ cert.pem
 
 # Database dumps, archives & local backups
 *.sql
+*.sqlite
+*.sqlite3
 *.dump
 *.tar
 *.tar.gz

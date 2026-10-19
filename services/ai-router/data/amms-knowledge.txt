@@ -1,0 +1,16 @@
+# BAZA WIEDZY SYSTEMU ASSECO AMMS (6.10.07) — FALLBACK REFERENCYJNY (CI/CD)
+# Głównym silnikiem produkcyjnym dla site_id="amms" jest baza SQLite FTS5 BM25: amms-knowledge.sqlite (43 848 fragmentów z 383 plików: 314 PDF + 69 plików struktury bazy Oracle AMMS).
+
+## 1. Architektura Bazy Danych Oracle AMMS i Główne Tabele
+- `AD.AD_USER` — tabela kont użytkowników systemu AMMS (powiązana kluczem obcym `FK_AD_USER_PERSONNEL` z `AD.PERSONNEL(ID)`).
+- `AD.PERSONNEL` — dane personelu medycznego i administracyjnego (NPWZ, role, powiązania z jednostkami organizacyjnymi).
+- `AD.AD_USER_RIGHT` / `AD.AD_RIGHT` — uprawnienia użytkowników w modułach AMMS (`FK_AD_USER_RIGHT_AD_RIGHT`).
+- `AD.PATIENT_DATA` / `AD.PERSONAL_DATA` — dane osobowe i kartoteka pacjenta.
+- `AD.ADAPTER` — log operacji systemowych i synchronizacji danych.
+- `SYSADM.DBAP_UZYTKOWNICY` — słownik użytkowników aplikacyjnych części rozliczeniowej/szpitalnej.
+
+## 2. Kluczowe Moduły i Podręczniki PDF (Cytowania stron)
+- Izba Przyjęć i SOR: `[AMMS_IP_Podrecznik_uzytkownika.pdf, str. 20]` (Obsługa procesów przyjęcia pacjenta), `[AMMS_IP_Podrecznik_uzytkownika.pdf, str. 41]` (Ewidencja danych przyjęcia na Izbę Przyjęć).
+- Konfiguracja i Parametry: `[AMMS_Parametry_konfiguracyjne_6_10_07_00.pdf, str. 1]`, `[AMMS_Panel_konfiguracyjny_Podrecznik_uzytkownika.pdf, str. 1]`.
+- Serwer Aplikacyjny WildFly i Integracje: `[Instalator_systemu_AMMS_WildFly_Podrecznik_uzytkownika.pdf, str. 1]`, `[08_Aplikacja_WildFly_AMMS_Konfiguracja_Zmiany_Okna.txt, cz. 1]`.
+- Elektroniczna Dokumentacja Medyczna (EDM), e-Recepta, e-Skierowanie, HL7 CDA: `[EDM - instalacja - konfiguracja 524.pdf, str. 1]`, `[Konfiguracja_oraz_obsluga_e_Recept_i_e_Skierowan.pdf, str. 1]`.

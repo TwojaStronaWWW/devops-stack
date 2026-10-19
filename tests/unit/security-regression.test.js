@@ -98,7 +98,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
     });
 
     it('składnia PHP w plikach źródłowych AI Routera powinna być wolna od błędów (php -l)', { skip: !hasPhpCli() }, () => {
-      for (const phpFile of ['chat-router.php', 'ai-stats.php']) {
+      for (const phpFile of ['chat-router.php', 'ai-stats.php', 'amms-rag-search.php']) {
         const res = spawnSync('php', ['-l', path.join(ROUTER_SRC_DIR, phpFile)], { encoding: 'utf-8' });
         assert.strictEqual(res.status, 0, `Błąd składni PHP w ${phpFile}: ${res.stderr || res.stdout}`);
       }
@@ -593,6 +593,50 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.strictEqual(metricsText.includes(visitorIp), false, 'Wyciek IP odwiedzającego w metrykach web_analytics!');
       assert.strictEqual(metricsText.includes('fake_spam_site'), false, 'Nieautoryzowany site_id przedostał się do metryk!');
     });
+
+    it('endpointy Asystenta AMMS (/amms, /amms-page, /docs-pdf, site_id=amms) powinny działać przez tunel SSH (127.0.0.1) i bezwzględnie blokować dostęp z publicznego internetu WAN (HTTP 403)', async () => {
+      // 1. Interfejs Microsoft Teams pod /amms przez wewnętrzny tunel SSH (127.0.0.1, brak CF-Connecting-IP) -> HTTP 200
+      const teamsRes = await fetch(`${baseUrl}/amms`);
+      assert.strictEqual(teamsRes.status, 200);
+      assert.strictEqual(teamsRes.headers.get('x-content-type-options'), 'nosniff');
+      assert.strictEqual(teamsRes.headers.get('x-frame-options'), 'DENY');
+      const teamsHtml = await teamsRes.text();
+      assert.match(teamsHtml, /Ekspert Asseco AMMS/i);
+      assert.match(teamsHtml, /renderPageSnapshotDataUrl/);
+
+      // 2. Blokada dostępu do /amms oraz /amms-page z publicznego internetu (przez Cloudflare WAN -> HTTP 403)
+      const wanTeamsRes = await fetch(`${baseUrl}/amms`, {
+        headers: { 'CF-Connecting-IP': '198.51.100.201' },
+      });
+      assert.strictEqual(wanTeamsRes.status, 403, 'Interfejs /amms nie może być dostępny z publicznego internetu WAN!');
+
+      const wanPageRes = await fetch(`${baseUrl}/amms-page?file=AMMS_IP_Podrecznik_uzytkownika.pdf&page=1`, {
+        headers: { 'CF-Connecting-IP': '198.51.100.201' },
+      });
+      assert.strictEqual(wanPageRes.status, 403, 'Endpoint /amms-page nie może być dostępny z publicznego internetu WAN!');
+
+      // 3. Blokada odpytywania site_id="amms" z publicznego internetu (przez Cloudflare WAN -> HTTP 403)
+      const wanPostIp = '198.51.100.202';
+      trackIpRateFile(wanPostIp);
+      const wanPostRes = await fetch(`${baseUrl}/chat-router.php`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': wanPostIp,
+        },
+        body: JSON.stringify({ site_id: 'amms', question: 'Pokaż tabele bazy Oracle AMMS' }),
+      });
+      assert.strictEqual(wanPostRes.status, 403, 'Zapytania POST do site_id="amms" z publicznego internetu WAN muszą być blokowane kodem 403!');
+
+      // 4. Blokada Path Traversal w /amms-page na połączeniu lokalnym
+      const badPageRes = await fetch(`${baseUrl}/amms-page?file=../../etc/passwd&page=1`);
+      assert.strictEqual(badPageRes.status, 400);
+
+      // 5. Blokada Path Traversal / nieistniejącego pliku w /docs-pdf/
+      const badPdfRes = await fetch(`${baseUrl}/docs-pdf/../../.env`);
+      assert.ok([400, 404, 405].includes(badPdfRes.status));
+    });
   });
 });
+
 

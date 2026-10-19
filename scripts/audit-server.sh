@@ -638,7 +638,7 @@ else
     LOG_CRITICAL_SAMPLES=""
     for _cname in "${EXPECTED_CONTAINERS[@]}"; do
         _hits="$(docker logs --since 24h "${_cname}" 2>&1 | tr -d '\000' \
-            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|HEAD /)' \
+            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|GET /amms|HEAD /)' \
             | grep -E '(FATAL|PANIC|Out of memory|Segmentation fault|Uncaught Error|SQLITE_CORRUPT)' | tail -n 2 || true)"
         if [[ -n "${_hits}" ]]; then
             _cnt="$(echo "${_hits}" | wc -l | tr -d ' ')"
@@ -651,6 +651,36 @@ else
     else
         warn "Skaner logów 24h wykrył ${LOG_CRITICAL_24H} krytycznych wyjątków:${LOG_CRITICAL_SAMPLES}" \
              "Sprawdź logi kontenerów w panelu Dozzle"
+    fi
+
+    # 5g. Kontrola Asystenta Eksperckiego AMMS & Oracle DBA (Dual-Stream SQLite FTS5 RAG + Zero Trust WAN Guard)
+    AMMS_LOCAL_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 "http://127.0.0.1:8085/amms" 2>/dev/null || echo '000')"
+    AMMS_WAN_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 4 -H "CF-Connecting-IP: 198.51.100.254" "http://127.0.0.1:8085/amms" 2>/dev/null || echo '000')"
+    AMMS_SQLITE_FILE="${STACK_ROOT}/services/ai-router/data/amms-knowledge.sqlite"
+    if [[ "${AMMS_LOCAL_CODE}" == "200" && "${AMMS_WAN_CODE}" == "403" ]]; then
+        if [[ -f "${AMMS_SQLITE_FILE}" && -s "${AMMS_SQLITE_FILE}" ]]; then
+            AMMS_DB_SIZE="$(du -h "${AMMS_SQLITE_FILE}" 2>/dev/null | awk '{print $1}' || echo '162M')"
+            pass "Asystent AMMS & Oracle DBA (Zero Trust + SQLite FTS5): dostępny lokalnie (/amms -> 200), zablokowany z WAN (CF -> 403), baza FTS5 aktywna (${AMMS_DB_SIZE})."
+        else
+            warn "Interfejs AMMS (/amms) i blokada WAN (403) działają, ale brakuje pliku bazy ${AMMS_SQLITE_FILE}." \
+                 "Wgraj bazę: powershell -File scripts/open-amms-assistant.ps1 -SyncToVps"
+        fi
+    else
+        CONTAINERS_HEALTHY=0
+        fail "Błąd ochrony lub dostępności Asystenta AMMS (/amms lokalnie: HTTP ${AMMS_LOCAL_CODE}, blokada WAN: HTTP ${AMMS_WAN_CODE} — oczekiwano 200 i 403)!" \
+             "Sprawdź services/ai-router/src/chat-router.php oraz kontener ai-router"
+    fi
+
+    # 5h. Kontrola Cookieless Web Analytics v3 (5 domen w tym raricart + dancepuls) oraz synchronizatora GSC / IndexNow
+    METRICS_BODY="$(curl -s --max-time 4 "http://127.0.0.1:8085/metrics" 2>/dev/null || true)"
+    GSC_SCRIPT="${STACK_ROOT}/scripts/sync-gsc-keywords.sh"
+    if echo "${METRICS_BODY}" | grep -q 'web_analytics_unique_visitors_today{site="raricart"}' \
+       && echo "${METRICS_BODY}" | grep -q 'ai_router_question_topics_total' \
+       && [[ -f "${GSC_SCRIPT}" ]] && bash -n "${GSC_SCRIPT}" 2>/dev/null; then
+        pass "Cookieless Web Analytics v3 & SEO Sync (GSC API + IndexNow + Raricart.pl): telemetria 5 domen i skrypt sync-gsc-keywords.sh aktywne."
+    else
+        warn "Telemetria Web Analytics v3 (raricart/topics) lub skrypt sync-gsc-keywords.sh wymaga weryfikacji." \
+             "Sprawdź http://127.0.0.1:8085/metrics oraz ${GSC_SCRIPT}"
     fi
 fi
 
@@ -895,8 +925,8 @@ if [[ -f "${ENV_FILE}" ]]; then
 
         if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${PL_HOUR}" == "08" && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
             echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
-            if [[ -f "${STACK_DIR}/scripts/sync-gsc-keywords.sh" ]]; then
-                bash "${STACK_DIR}/scripts/sync-gsc-keywords.sh" >/dev/null 2>&1 || true
+            if [[ -f "${STACK_ROOT}/scripts/sync-gsc-keywords.sh" ]]; then
+                bash "${STACK_ROOT}/scripts/sync-gsc-keywords.sh" >/dev/null 2>&1 || true
             fi
             F2B_BANNED="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Total banned/ {gsub(/[ \t]/,"",$2); print $2}' || echo '0')"
             F2B_IP_LIST="$(sudo fail2ban-client status sshd 2>/dev/null | awk -F: '/Banned IP list/ {gsub(/^[ \t]+/,"",$2); print $2}' || echo 'brak')"
@@ -932,7 +962,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|container factory failed|GET /health|GET /metrics|HEAD /|Listening for Jobs|Connected to GitHub)' \
+                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|container factory failed|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub)' \
                             | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|ban|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
@@ -1168,7 +1198,7 @@ PYEOF
                 rm -f "${XRAY_FILE}" 2>/dev/null || true
             fi
 
-            MORNING_BODY="✅ Wynik (67 testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+            MORNING_BODY="✅ Wynik (68 testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
 📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}

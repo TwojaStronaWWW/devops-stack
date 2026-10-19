@@ -29,6 +29,100 @@ if ($requestUri === '/widget.js') {
     exit;
 }
 
+// Serwowanie interfejsu Asystenta AMMS w stylu Microsoft Teams (GET /amms | /amms-teams | /amms.html)
+// ZERO TRUST: Dostęp wyłącznie przez szyfrowany tunel SSH (127.0.0.1) — całkowita blokada ruchu z publicznego internetu (Cloudflare WAN)
+if ($requestUri === '/amms' || $requestUri === '/amms-teams' || $requestUri === '/amms.html' || str_starts_with($requestUri, '/docs-pdf/') || $requestUri === '/amms-page') {
+    if ($isFromCloudflare) {
+        header('Content-Type: application/json; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'Forbidden: Wewnętrzny Asystent AMMS oraz baza wiedzy Oracle są dostępne wyłącznie przez autoryzowany tunel SSH (127.0.0.1). Dostęp z publicznego internetu jest zablokowany.'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+if ($requestUri === '/amms' || $requestUri === '/amms-teams' || $requestUri === '/amms.html') {
+    header('Content-Type: text/html; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    $ammsHtmlPath = __DIR__ . '/amms-teams.html';
+    if (file_exists($ammsHtmlPath)) {
+        readfile($ammsHtmlPath);
+    } else {
+        http_response_code(404);
+        echo '<!DOCTYPE html><html lang="pl"><body><h1>Interfejs AMMS Teams nie został jeszcze zbudowany.</h1></body></html>';
+    }
+    exit;
+}
+
+// Bezpieczne serwowanie oryginalnych plików PDF dokumentacji AMMS (GET /docs-pdf/<nazwa.pdf>), jeśli są wgrane do data/docs-pdf/
+if (str_starts_with($requestUri, '/docs-pdf/')) {
+    $requestedPdf = rawurldecode(substr($requestUri, strlen('/docs-pdf/')));
+    $safePdfName = basename($requestedPdf);
+    $dataBaseDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
+    $pdfFullPath = $dataBaseDir ? realpath($dataBaseDir . '/docs-pdf/' . $safePdfName) : false;
+    if ($pdfFullPath && str_ends_with(strtolower($safePdfName), '.pdf') && is_readable($pdfFullPath)) {
+        header('Content-Type: application/pdf');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: SAMEORIGIN');
+        header('Cache-Control: private, max-age=86400');
+        readfile($pdfFullPath);
+        exit;
+    }
+    header('Content-Type: application/json; charset=UTF-8');
+    http_response_code(404);
+    echo json_encode(['success' => false, 'error' => 'Plik PDF nie jest dostępny na serwerze (użyj podglądu strony z bazy SQLite).'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Endpoint podglądu i kartkowania pojedynczej strony dokumentacji AMMS z bazy SQLite (GET /amms-page?file=...&page=X)
+if ($requestUri === '/amms-page') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+
+    $fileParam = trim((string)($_GET['file'] ?? ''));
+    $pageParam = max(1, (int)($_GET['page'] ?? 1));
+    $partParam = max(0, (int)($_GET['part'] ?? 0));
+
+    if ($fileParam === '' || str_contains($fileParam, '..') || str_contains($fileParam, '/') || str_contains($fileParam, '\\')) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Bad Request: Nieprawidłowa nazwa pliku źródłowego.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $dataBaseDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
+    $sqliteFile = $dataBaseDir ? ($dataBaseDir . '/amms-knowledge.sqlite') : '';
+    $ragClassFile = __DIR__ . '/amms-rag-search.php';
+
+    if ($sqliteFile === '' || !is_file($sqliteFile) || !is_file($ragClassFile)) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'error' => 'Baza wiedzy AMMS SQLite lub wskazany plik nie jest dostępny.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    require_once $ragClassFile;
+    try {
+        $rag = new AmmsRagSearch($sqliteFile);
+        $details = $rag->getPageDetails($fileParam, $pageParam, $partParam);
+        if ($details === null) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Nie znaleziono wskazanej strony w bazie wiedzy AMMS.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        http_response_code(200);
+        echo json_encode(['success' => true, 'page_data' => $details], JSON_UNESCAPED_UNICODE);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'error' => 'Błąd odczytu strony z bazy wiedzy AMMS.'], JSON_UNESCAPED_UNICODE);
+    }
+    exit;
+}
+
 // -----------------------------------------------------------------------------
 // 1. ENDPOINT METRYK PROMETHEUSA (/metrics) ORAZ HEALTHCHECK (/health)
 // -----------------------------------------------------------------------------
@@ -81,7 +175,7 @@ $aiAttempts        = 0;
 $aiSecurityBlocked = false;
 register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$aiAttempts, &$aiSecurityBlocked, $aiStart, $requestUri): void {
     $code = http_response_code() ?: 200;
-    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204 || $requestUri === '/analytics' || $requestUri === '/collect') {
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS' || $code === 204 || $requestUri === '/analytics' || $requestUri === '/collect' || $requestUri === '/amms-page') {
         return; // preflight CORS oraz beacony analityki WWW nie są zapytaniami czatu
     }
     $outcome = match (true) {
@@ -560,6 +654,16 @@ if (!preg_match('/^[a-z0-9_-]{2,32}$/i', $siteId)) {
 }
 $aiSite = strtolower($siteId); // etykieta telemetrii - ustawiana wyłącznie po walidacji regexem
 
+// ZERO TRUST: Baza wiedzy AMMS i struktura Oracle są ściśle wewnętrzne — blokada zapytań z publicznego internetu (Cloudflare WAN)
+if (in_array($aiSite, ['amms', 'amms-assistant', 'asseco-amms'], true) && $isFromCloudflare) {
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Forbidden: Wewnętrzny Asystent AMMS i baza wiedzy Oracle są dostępne wyłącznie przez szyfrowany tunel SSH (127.0.0.1). Dostęp z publicznego internetu jest zablokowany.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
     http_response_code(400);
     echo json_encode([
@@ -608,32 +712,87 @@ foreach (array_slice($rawHistory, -8) as $turn) {
 }
 
 // -----------------------------------------------------------------------------
-// 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY + INTELIGENTNY CACHE)
+// 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY TXT LUB HYBRYDOWEJ BAZY SQLITE FTS5 AMMS + INTELIGENTNY CACHE)
 // -----------------------------------------------------------------------------
 $rawDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
 $normalizedDataDir = $rawDir ? rtrim(str_replace('\\', '/', $rawDir), '/') : '';
 
-$possibleFiles = [
-    $rawDir . '/' . strtolower($siteId) . '-knowledge.txt',
-    $rawDir . '/' . strtolower($siteId) . '.txt',
-    $rawDir . '/' . strtolower($siteId) . '.md',
-];
+$isAmmsSite = ($aiSite === 'amms');
+$requestedReasoningMode = strtolower(trim((string)($payload['reasoning_mode'] ?? $payload['reasoning'] ?? 'auto')));
+if (!in_array($requestedReasoningMode, ['auto', 'fast', 'standard', 'high'], true)) {
+    $requestedReasoningMode = 'auto';
+}
+
+$ammsSources = [];
+$ammsRagStats = null;
+$ammsReasoningTier = 'fast';
+$ammsReasoningLabel = 'Standard RAG';
 
 $knowledgeContent = null;
 $loadedFile = null;
 $loadedFilePath = null;
 
-foreach ($possibleFiles as $filePath) {
-    $real = realpath($filePath);
-    if ($real) {
-        $normalizedReal = str_replace('\\', '/', $real);
-        // Weryfikacja czy plik istnieje i leży ściśle wewnątrz katalogu dataDir
-        if ($normalizedDataDir !== '' && str_starts_with($normalizedReal, $normalizedDataDir) && is_readable($real)) {
-            $knowledgeContent = file_get_contents($real, false, null, 0, 100000); // Max 100 KB
-            $loadedFile = basename($real);
-            $loadedFilePath = $real;
-            break;
+// Specjalistyczny silnik SQLite FTS5 BM25 Dual-Stream dla Asseco AMMS (383 pliki: 314 PDF + 69 plików struktury Oracle AMMS)
+$sqliteCandidate = $rawDir ? ($rawDir . '/' . $aiSite . '-knowledge.sqlite') : '';
+$ammsRagClassPath = __DIR__ . '/amms-rag-search.php';
+
+if ($sqliteCandidate !== '' && is_file($sqliteCandidate) && is_readable($sqliteCandidate) && is_file($ammsRagClassPath)) {
+    require_once $ammsRagClassPath;
+    $reasoningProfile = AmmsRagSearch::detectReasoningProfile($question, $requestedReasoningMode);
+    $ammsReasoningTier = $reasoningProfile['tier'];
+    $ammsReasoningLabel = $reasoningProfile['label'];
+
+    try {
+        $ammsRag = new AmmsRagSearch($sqliteCandidate);
+        // Dla zapytań wieloturowych dołączamy kontekst ostatniego pytania użytkownika, aby utrzymać ciągłość wyszukiwania FTS5
+        $ragSearchQuery = $question;
+        if (!empty($sanitizedHistory) && mb_strlen($question, 'UTF-8') < 65) {
+            for ($hIdx = count($sanitizedHistory) - 1; $hIdx >= 0; $hIdx--) {
+                if (($sanitizedHistory[$hIdx]['role'] ?? '') === 'user') {
+                    $ragSearchQuery = $sanitizedHistory[$hIdx]['text'] . ' ' . $question;
+                    break;
+                }
+            }
         }
+        $searchRes = $ammsRag->searchKnowledge($ragSearchQuery, 14, 68000, '/docs-pdf/');
+        if (trim($searchRes['context']) !== '') {
+            $knowledgeContent = $searchRes['context'];
+            $ammsSources = $searchRes['sources'];
+            $ammsRagStats = $searchRes['stats'];
+            $loadedFile = basename($sqliteCandidate);
+            $loadedFilePath = $sqliteCandidate;
+        }
+    } catch (Throwable $e) {
+        aiLog('amms_sqlite_error', ['site' => $aiSite, 'msg' => $e->getMessage()]);
+    }
+}
+
+if ($knowledgeContent === null) {
+    $possibleFiles = [
+        $rawDir . '/' . strtolower($siteId) . '-knowledge.txt',
+        $rawDir . '/' . strtolower($siteId) . '.txt',
+        $rawDir . '/' . strtolower($siteId) . '.md',
+    ];
+
+    foreach ($possibleFiles as $filePath) {
+        $real = realpath($filePath);
+        if ($real) {
+            $normalizedReal = str_replace('\\', '/', $real);
+            // Weryfikacja czy plik istnieje i leży ściśle wewnątrz katalogu dataDir
+            if ($normalizedDataDir !== '' && str_starts_with($normalizedReal, $normalizedDataDir) && is_readable($real)) {
+                $knowledgeContent = file_get_contents($real, false, null, 0, 100000); // Max 100 KB
+                $loadedFile = basename($real);
+                $loadedFilePath = $real;
+                break;
+            }
+        }
+    }
+
+    if ($isAmmsSite && is_file($ammsRagClassPath)) {
+        require_once $ammsRagClassPath;
+        $reasoningProfile = AmmsRagSearch::detectReasoningProfile($question, $requestedReasoningMode);
+        $ammsReasoningTier = $reasoningProfile['tier'];
+        $ammsReasoningLabel = $reasoningProfile['label'];
     }
 }
 
@@ -650,8 +809,8 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
 $emailRegex = '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/u';
 $phoneRegex = '/(?:\+?48[\s.\-()]*)?(?:\d[\s.\-()]*){8}\d/u';
 
-$hasEmail = (bool)preg_match_all($emailRegex, $question, $emailMatchesQ);
-$hasPhone = (bool)preg_match_all($phoneRegex, $question, $phoneMatchesQ);
+$hasEmail = !$isAmmsSite && (bool)preg_match_all($emailRegex, $question, $emailMatchesQ);
+$hasPhone = !$isAmmsSite && (bool)preg_match_all($phoneRegex, $question, $phoneMatchesQ);
 $hasContactLead = $hasEmail || $hasPhone;
 
 $extractedEmails = $hasEmail ? array_values(array_unique(array_map('strtolower', $emailMatchesQ[0]))) : [];
@@ -710,7 +869,7 @@ if ($normalizedQ === '') {
 }
 $historySig  = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
 $kbMtime     = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
-$dynSig      = ($kbVersion !== 'v0' || $dynamicContext !== '') ? hash('sha256', "{$kbVersion}|{$dynamicContext}") : 'static';
+$dynSig      = ($kbVersion !== 'v0' || $dynamicContext !== '' || $isAmmsSite) ? hash('sha256', "{$kbVersion}|{$ammsReasoningTier}|{$dynamicContext}") : 'static';
 $cacheKey    = hash('sha256', "{$aiSite}|{$kbMtime}|{$dynSig}|{$historySig}|{$normalizedQ}");
 $cacheFile   = $cacheDir . '/' . $cacheKey . '.json';
 
@@ -721,15 +880,24 @@ if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheF
         $usedModel = (string)($cachedJson['model'] ?? 'cache');
         $aiDepth = null;
         aiRecordCacheHit($aiSite);
-        http_response_code(200);
-        echo json_encode([
+        $cachedResponse = [
             'success'    => true,
             'site_id'    => $siteId,
             'model'      => $usedModel,
             'cached'     => true,
             'kb_version' => $kbVersion,
             'answer'     => (string)$cachedJson['answer']
-        ], JSON_UNESCAPED_UNICODE);
+        ];
+        if ($isAmmsSite || !empty($cachedJson['sources'])) {
+            $cachedResponse['sources'] = is_array($cachedJson['sources'] ?? null) ? $cachedJson['sources'] : $ammsSources;
+            $cachedResponse['reasoning_tier'] = (string)($cachedJson['reasoning_tier'] ?? $ammsReasoningTier);
+            $cachedResponse['reasoning_label'] = (string)($cachedJson['reasoning_label'] ?? $ammsReasoningLabel);
+            if ($ammsRagStats !== null) {
+                $cachedResponse['rag_stats'] = $ammsRagStats;
+            }
+        }
+        http_response_code(200);
+        echo json_encode($cachedResponse, JSON_UNESCAPED_UNICODE);
         exit;
     }
 }
@@ -758,17 +926,30 @@ if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && ($cf
 // Automatyczna korekta wycofanych modeli (1.5 / 2.0 / 2.5) na najnowszy darmowy gemini-3.8-flash (patrz aiConfiguredModel)
 $configuredModel = aiConfiguredModel();
 
-// Budowa System Promptu zgodnie z wytycznymi Agent RAG
-$systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {$siteId}. Rozmawiasz po ludzku, jak pracownik, a nie jak ulotka. " .
-                     "Opierasz się WYŁĄCZNIE na poniższej bazie wiedzy.\n" .
-                     "Zasady:\n" .
-                     "1. Odpowiedz bezpośrednio na to, o co pyta klient, w 1-4 zdaniach. Nie wklejaj całego cennika ani ogólnej prezentacji oferty, jeśli nikt o to nie prosił.\n" .
-                     "2. Nigdy nie powtarzaj odpowiedzi ani zdań z wcześniejszych wiadomości. Jeśli klient dopytuje, dodaj nową informację lub zadaj jedno krótkie pytanie doprecyzowujące.\n" .
-                     "3. Nie zmyślaj faktów, cen ani usług. Gdy baza nie zawiera odpowiedzi, powiedz to wprost własnymi słowami, powiedz co wiesz w temacie i odeślij do kontaktu (e-mail/telefon z bazy). Nie używaj jednej stałej formułki.\n" .
-                     "4. Pamiętaj kontekst rozmowy i odnoś się do tego, co klient już powiedział.\n" .
-                     "5. Odpowiadaj w języku pytania. Pogrubiaj tylko kluczowe kwoty i terminy. Kończ, gdy to naturalne, ewentualnie jednym krótkim pytaniem lub zachętą do bezpłatnej konsultacji (nie w każdej wiadomości).\n" .
-                     "6. Jeśli klient podał w wiadomości swój numer telefonu lub adres e-mail do kontaktu, podziękuj serdecznie i potwierdź, że przekazałeś namiary bezpośrednio do zespołu i wkrótce się z nim skontaktujemy.\n\n" .
-                     "Baza wiedzy:\n" . $knowledgeContent;
+// Budowa System Promptu zgodnie z wytycznymi Agent RAG (dedykowany profil Eksperta AMMS & DBA Oracle dla site_id="amms")
+if ($isAmmsSite) {
+    $systemInstruction = "Jesteś Starszym Konsultantem Wdrożeniowym systemu medycznego Asseco AMMS (wersja 6.10.07) oraz Architektem Bazy Danych Oracle AMMS. " .
+                         "Rozmawiasz z kolegą z zespołu IT/wdrożeń na czacie Microsoft Teams — pisz konkretnie, technicznie, partnersko i niezwykle precyzyjnie.\n" .
+                         "Opierasz się ŚCIŚLE na dostarczonych poniżej fragmentach oficjalnej dokumentacji PDF oraz słownika bazy danych Oracle AMMS.\n" .
+                         "Zasady obowiązkowe:\n" .
+                         "1. ZAWSZE wskazuj dokładną nazwę dokumentu i numer strony w nawiasie kwadratowym przy każdym kroku lub informacji, np. **[AMMS_IP_Podrecznik_uzytkownika.pdf, str. 41]** lub **[01_Baza_Oracle_AMMS_Slownik_Tabel_i_Kolumn_czesc_01.txt, cz. 14]**.\n" .
+                         "2. Jeśli pytanie dotyczy obsługi funkcji w AMMS: rozpisz przejrzystą instrukcję krok po kroku (ścieżka w menu/oknach AMMS, przyciski, zakładki, wymagane parametry konfiguracyjne) i wskaż dokładną stronę w podręczniku PDF.\n" .
+                         "3. Jeśli pytanie dotyczy struktury bazy danych, tabel, relacji lub wyciągania danych: podaj dokładne nazwy tabel ze schematem (np. `AD.AD_USER`, `AD.PERSONNEL`), nazwy kolumn z ich opisem, klucze obce (`FK_...`) oraz przygotuj gotowe, czyste zapytanie SQL (Oracle SQL) w bloku kodu ```sql.\n" .
+                         "4. Na końcu odpowiedzi dodaj krótką sekcję **📄 Wskazane strony w dokumentacji:** z listą użytych plików i numerów stron, aby użytkownik mógł od razu kliknąć załączone pod wiadomością zrzuty stron.\n" .
+                         "5. Nie zmyślaj nazw tabel, parametrów ani stron, których nie ma w dostarczonym kontekście RAG.\n\n" .
+                         $knowledgeContent;
+} else {
+    $systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {$siteId}. Rozmawiasz po ludzku, jak pracownik, a nie jak ulotka. " .
+                         "Opierasz się WYŁĄCZNIE na poniższej bazie wiedzy.\n" .
+                         "Zasady:\n" .
+                         "1. Odpowiedz bezpośrednio na to, o co pyta klient, w 1-4 zdaniach. Nie wklejaj całego cennika ani ogólnej prezentacji oferty, jeśli nikt o to nie prosił.\n" .
+                         "2. Nigdy nie powtarzaj odpowiedzi ani zdań z wcześniejszych wiadomości. Jeśli klient dopytuje, dodaj nową informację lub zadaj jedno krótkie pytanie doprecyzowujące.\n" .
+                         "3. Nie zmyślaj faktów, cen ani usług. Gdy baza nie zawiera odpowiedzi, powiedz to wprost własnymi słowami, powiedz co wiesz w temacie i odeślij do kontaktu (e-mail/telefon z bazy). Nie używaj jednej stałej formułki.\n" .
+                         "4. Pamiętaj kontekst rozmowy i odnoś się do tego, co klient już powiedział.\n" .
+                         "5. Odpowiadaj w języku pytania. Pogrubiaj tylko kluczowe kwoty i terminy. Kończ, gdy to naturalne, ewentualnie jednym krótkim pytaniem lub zachętą do bezpłatnej konsultacji (nie w każdej wiadomości).\n" .
+                         "6. Jeśli klient podał w wiadomości swój numer telefonu lub adres e-mail do kontaktu, podziękuj serdecznie i potwierdź, że przekazałeś namiary bezpośrednio do zespołu i wkrótce się z nim skontaktujemy.\n\n" .
+                         "Baza wiedzy:\n" . $knowledgeContent;
+}
 
 if ($dynamicContext !== '') {
     $safeDynamicContext = str_replace(['</reference_data>', '<reference_data>'], '', $dynamicContext);
@@ -836,6 +1017,12 @@ $geminiContents[] = [
     'parts' => [['text' => $question]]
 ];
 
+$isAmmsHighReasoning = ($isAmmsSite && $ammsReasoningTier === 'high');
+$geminiMaxOutputTokens = $isAmmsSite ? ($isAmmsHighReasoning ? 8192 : 4096) : 2048;
+$geminiTimeoutSec = $isAmmsSite ? ($isAmmsHighReasoning ? 14 : 8) : 4;
+$fallbackMaxTokens = $isAmmsSite ? 3200 : 900;
+$fallbackTimeoutSec = $isAmmsSite ? 9 : 4;
+
 $geminiPayload = [
     'system_instruction' => [
         'parts' => [
@@ -844,8 +1031,8 @@ $geminiPayload = [
     ],
     'contents' => $geminiContents,
     'generationConfig' => [
-        'temperature'     => 0.4,
-        'maxOutputTokens' => 2048
+        'temperature'     => $isAmmsSite ? 0.2 : 0.4,
+        'maxOutputTokens' => $geminiMaxOutputTokens
     ]
 ];
 
@@ -885,9 +1072,13 @@ if ($geminiApiKey !== '') {
             continue;
         }
 
-        // Dopasowanie thinkingLevel per model (redukcja ukrytych thoughtsTokenCount z ~530 do 0 i czasu z ~4.5s do ~1.5s)
+        // Dopasowanie thinkingLevel per model (dla AMMS w trybie HIGH włączamy pełne rozumowanie HIGH)
         $modelPayload = $geminiPayload;
-        if (str_starts_with($candidateModel, 'gemini-3.5-')) {
+        if ($isAmmsHighReasoning && str_starts_with($candidateModel, 'gemini-3.')) {
+            $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'HIGH'];
+        } elseif ($isAmmsSite && $ammsReasoningTier === 'standard' && str_starts_with($candidateModel, 'gemini-3.')) {
+            $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'LOW'];
+        } elseif (str_starts_with($candidateModel, 'gemini-3.5-')) {
             $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'MINIMAL'];
         } elseif (str_starts_with($candidateModel, 'gemini-3.')) {
             $modelPayload['generationConfig']['thinkingConfig'] = ['thinkingLevel' => 'LOW'];
@@ -895,7 +1086,7 @@ if ($geminiApiKey !== '') {
 
         $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/{$candidateModel}:generateContent?key={$geminiApiKey}";
         $t0 = microtime(true);
-        $res = executeJsonPost($apiUrl, $modelPayload, [], 4);
+        $res = executeJsonPost($apiUrl, $modelPayload, [], $geminiTimeoutSec);
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
 
@@ -982,7 +1173,13 @@ if ($answer === null && $groqApiKey !== '') {
     if ($cdLeft > 0 && !$allCooling) {
         aiRecordSkip('groq', $groqLabel, $cdLeft);
     } else {
-        $messages = [['role' => 'system', 'content' => $systemInstruction]];
+        // Ochrona przed HTTP 413 na Groq Free Tier (limit okna 8000 TPM = prompt + max_tokens)
+        $groqSysPrompt = mb_strlen($systemInstruction, 'UTF-8') > 18000
+            ? mb_substr($systemInstruction, 0, 18000, 'UTF-8') . "\n[...przycięto dalsze fragmenty dla okna 8000 TPM Groq LPU...]"
+            : $systemInstruction;
+        $groqMaxTokens = $isAmmsSite ? 1800 : $fallbackMaxTokens;
+
+        $messages = [['role' => 'system', 'content' => $groqSysPrompt]];
         foreach ($sanitizedHistory as $turn) {
             $messages[] = [
                 'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
@@ -991,16 +1188,22 @@ if ($answer === null && $groqApiKey !== '') {
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
+        $groqPayload = [
+            'model'       => $groqModel,
+            'messages'    => $messages,
+            'temperature' => 0.25,
+            'max_tokens'  => $groqMaxTokens
+        ];
+        if ($isAmmsHighReasoning && str_contains($groqModel, 'gpt-oss')) {
+            $groqPayload['reasoning_effort'] = 'high';
+        }
+
         $t0 = microtime(true);
         $res = executeJsonPost(
             'https://api.groq.com/openai/v1/chat/completions',
-            [
-                'model'       => $groqModel,
-                'messages'    => $messages,
-                'temperature' => 0.25,
-                'max_tokens'  => 900
-            ],
-            ["Authorization: Bearer {$groqApiKey}"]
+            $groqPayload,
+            ["Authorization: Bearer {$groqApiKey}"],
+            $fallbackTimeoutSec
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
@@ -1049,12 +1252,12 @@ if ($answer === null && $cerebrasApiKey !== '') {
             'model'       => $cerebrasModel,
             'messages'    => $messages,
             'temperature' => 0.25,
-            'max_tokens'  => 1200,
+            'max_tokens'  => $isAmmsSite ? 3200 : 1200,
         ];
         if (str_starts_with($cerebrasModel, 'qwen-')) {
-            $cbPayload['disable_reasoning'] = true;
+            $cbPayload['disable_reasoning'] = !$isAmmsHighReasoning;
         } else {
-            $cbPayload['reasoning_effort'] = 'low';
+            $cbPayload['reasoning_effort'] = $isAmmsHighReasoning ? 'high' : 'low';
         }
 
         $t0 = microtime(true);
@@ -1062,7 +1265,7 @@ if ($answer === null && $cerebrasApiKey !== '') {
             'https://api.cerebras.ai/v1/chat/completions',
             $cbPayload,
             ["Authorization: Bearer {$cerebrasApiKey}"],
-            4
+            $fallbackTimeoutSec
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
@@ -1121,10 +1324,10 @@ if ($answer === null && $cfAiToken !== '' && $cfAccountId !== '') {
                 'model'       => $cfModel,
                 'messages'    => $messages,
                 'temperature' => 0.25,
-                'max_tokens'  => 900
+                'max_tokens'  => $fallbackMaxTokens
             ],
             ["Authorization: Bearer {$cfAiToken}"],
-            5
+            $isAmmsSite ? 9 : 5
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
@@ -1165,22 +1368,27 @@ if ($answer === null && $openRouterApiKey !== '') {
         }
         $messages[] = ['role' => 'user', 'content' => $question];
 
+        $orPayload = [
+            'model'       => $orModel,
+            'messages'    => $messages,
+            'temperature' => 0.25,
+            'max_tokens'  => $fallbackMaxTokens,
+            'reasoning'   => ['effort' => 'none']
+        ];
+        if ($isAmmsHighReasoning) {
+            $orPayload['reasoning'] = ['effort' => 'high'];
+        }
+
         $t0 = microtime(true);
         $res = executeJsonPost(
             'https://openrouter.ai/api/v1/chat/completions',
-            [
-                'model'       => $orModel,
-                'messages'    => $messages,
-                'temperature' => 0.25,
-                'max_tokens'  => 900,
-                'reasoning'   => ['effort' => 'none']
-            ],
+            $orPayload,
             [
                 "Authorization: Bearer {$openRouterApiKey}",
                 'HTTP-Referer: https://twojastronawww.pl',
                 'X-Title: TwojaStronaWWW AI Router'
             ],
-            6
+            $isAmmsSite ? 10 : 6
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
@@ -1240,7 +1448,7 @@ if ($answer === null && $anthropicApiKey !== '') {
             'https://api.anthropic.com/v1/messages',
             [
                 'model'       => $anthropicModel,
-                'max_tokens'  => 900,
+                'max_tokens'  => $fallbackMaxTokens,
                 'temperature' => 0.25,
                 'system'      => [
                     [
@@ -1255,7 +1463,7 @@ if ($answer === null && $anthropicApiKey !== '') {
                 "x-api-key: {$anthropicApiKey}",
                 'anthropic-version: 2023-06-01'
             ],
-            6
+            $isAmmsSite ? 10 : 6
         );
         $ms = (microtime(true) - $t0) * 1000;
         $aiAttempts++;
@@ -1301,11 +1509,15 @@ if ($answer === null) {
 // Zapis odpowiedzi w pamięci podręcznej RAG (atomowo, z pominięciem komunikatów SAFETY oraz wiadomości z danymi kontaktowymi Zero-PII)
 if (!$hasContactLead && is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
     $tmpCache = $cacheFile . '.' . getmypid() . '.tmp';
-    if (@file_put_contents($tmpCache, json_encode([
-        'answer' => $answer,
-        'model'  => $usedModel,
-        'ts'     => time()
-    ], JSON_UNESCAPED_UNICODE)) !== false) {
+    $cachePayload = [
+        'answer'          => $answer,
+        'model'           => $usedModel,
+        'ts'              => time(),
+        'sources'         => $ammsSources,
+        'reasoning_tier'  => $ammsReasoningTier,
+        'reasoning_label' => $ammsReasoningLabel,
+    ];
+    if (@file_put_contents($tmpCache, json_encode($cachePayload, JSON_UNESCAPED_UNICODE)) !== false) {
         @rename($tmpCache, $cacheFile);
     }
 }
@@ -1407,7 +1619,7 @@ if ($hasContactLead) {
             'timestamp'       => gmdate('c')
         ], [], 3);
     }
-} elseif (count($sanitizedHistory) === 6) {
+} elseif (!$isAmmsSite && count($sanitizedHistory) === 6) {
     // Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
     aiRecordLead($aiSite, 'hot_lead');
     aiLog('hot_lead_detected', ['site' => $aiSite, 'turns' => 4]);
@@ -1433,12 +1645,22 @@ if ($hasContactLead) {
 // -----------------------------------------------------------------------------
 // 7. CZYSTY ZWROT DANYCH DO FRONTENDU
 // -----------------------------------------------------------------------------
-http_response_code(200);
-echo json_encode([
+$finalResponse = [
     'success' => true,
     'site_id' => $siteId,
     'model'   => $usedModel,
     'cached'  => false,
     'answer'  => $answer
-], JSON_UNESCAPED_UNICODE);
+];
+if ($isAmmsSite || !empty($ammsSources)) {
+    $finalResponse['sources'] = $ammsSources;
+    $finalResponse['reasoning_tier'] = $ammsReasoningTier;
+    $finalResponse['reasoning_label'] = $ammsReasoningLabel;
+    if ($ammsRagStats !== null) {
+        $finalResponse['rag_stats'] = $ammsRagStats;
+    }
+}
+http_response_code(200);
+echo json_encode($finalResponse, JSON_UNESCAPED_UNICODE);
+
 

@@ -174,10 +174,13 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const requiredRouterFiles = [
       path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'katosalsahub-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'fuegolingua-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'amms-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'storage', 'rate_limits', '.gitkeep'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'),
@@ -233,6 +236,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(firstLine, /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
     assert.match(auditContent, /devops_audit_status/);
     assert.match(auditContent, /audit\.prom/);
+    assert.match(auditContent, /amms-knowledge\.sqlite/);
+    assert.match(auditContent, /http:\/\/127\.0\.0\.1:8085\/amms/);
+    assert.match(auditContent, /sync-gsc-keywords\.sh/);
+    assert.strictEqual(auditContent.includes('${STACK_DIR}'), false, 'W audit-server.sh wykryto niezdefiniowaną zmienną ${STACK_DIR} zamiast ${STACK_ROOT}!');
   });
 
   it('wszystkie pliki Docker Compose powinny definiować czytelne etykiety dev.dozzle.name dla kontenerów', () => {
@@ -526,6 +533,32 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       assert.match(siteBlueprint, /11-Modelowa Kaskada/);
     }
   });
+
+  it('Asystent Ekspercki AMMS & Oracle DBA (Dual-Stream SQLite FTS5 RAG + Adaptive HIGH Reasoning + MS Teams UI) powinien być kompletnie skonfigurowany', () => {
+    const ragPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'), 'utf-8');
+    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const teamsHtml = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'), 'utf-8');
+
+    assert.match(ragPhp, /class AmmsRagSearch/);
+    assert.match(ragPhp, /detectReasoningProfile/);
+    assert.match(ragPhp, /searchKnowledge/);
+    assert.match(ragPhp, /getPageDetails/);
+    assert.match(ragPhp, /bm25\(chunks_fts/);
+
+    assert.match(routerPhp, /amms-rag-search\.php/);
+    assert.match(routerPhp, /\/amms-page/);
+    assert.match(routerPhp, /\['sources'\]\s*=\s*\$ammsSources/);
+    assert.match(routerPhp, /\['reasoning_tier'\]\s*=\s*\$ammsReasoningTier/);
+
+    assert.match(teamsHtml, /renderPageSnapshotDataUrl/);
+    assert.match(teamsHtml, /openLightboxForSource/);
+    assert.match(teamsHtml, /Poprzednia strona/);
+    assert.match(teamsHtml, /Następna strona/);
+
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'open-amms-assistant.ps1')), 'Brak scripts/open-amms-assistant.ps1');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'open-amms-assistant.cmd')), 'Brak scripts/open-amms-assistant.cmd');
+  });
 });
+
 
 

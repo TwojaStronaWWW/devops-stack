@@ -329,9 +329,9 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 128M
+          memory: 256M
         reservations:
-          memory: 32M
+          memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/health || exit 1"]
       interval: 30s
