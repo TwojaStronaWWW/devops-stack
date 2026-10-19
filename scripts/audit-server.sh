@@ -971,7 +971,7 @@ xray_path = os.environ.get("XRAY_FILE", "")
 budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
 
 with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
-    xray_text = f.read()[:14000]
+    xray_text = f.read()[:8500]
 
 sys_prompt_primary = (
     "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
@@ -1002,7 +1002,7 @@ if groq_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 2048
+        "max_tokens": 4096
     }))
 if cerebras_key:
     primary_candidates.append(("Cerebras GPT-OSS-120B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
@@ -1010,13 +1010,13 @@ if cerebras_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 2048
+        "max_tokens": 4096
     }))
     primary_candidates.append(("Cerebras Qwen-3.8-27B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
         "model": "qwen-3.8-27b",
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "temperature": 0.2,
-        "max_tokens": 2048
+        "max_tokens": 4096
     }))
 
 for label, url, api_key, body in primary_candidates:
@@ -1052,7 +1052,7 @@ cross_think_tok = 0
 cross_total_tok = 0
 
 if gemini_key:
-    for g_model in ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash"):
+    for g_model in ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"):
         try:
             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
             g_body = {
@@ -1060,7 +1060,7 @@ if gemini_key:
                 "contents": [{"role": "user", "parts": [{"text": xray_text}]}],
                 "generationConfig": {
                     "temperature": 0.2,
-                    "maxOutputTokens": 3072,
+                    "maxOutputTokens": 8192,
                     "thinkingConfig": {"thinkingLevel": "HIGH"}
                 }
             }
