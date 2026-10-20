@@ -120,7 +120,7 @@ except Exception as e:
     visible_urls = []
     print(f"[GSC-SYNC] Nie udało się pobrać listy usług GSC: {e}")
 
-end_date = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+end_date = datetime.date.today().isoformat()
 start_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
 indexnow_key = "4f8b9d2e7a1c6f3b5e0d8a9c2b4f7e1a"
 
@@ -165,7 +165,8 @@ for pair in sites_cfg.split(","):
             "startDate": start_date,
             "endDate": end_date,
             "dimensions": ["query"],
-            "rowLimit": 25
+            "rowLimit": 25,
+            "dataState": "all"
         }).encode("utf-8")
         try:
             gsc_req = urllib.request.Request(api_url, data=payload, headers={
@@ -203,6 +204,7 @@ for pair in sites_cfg.split(","):
         in_urls = [f"https://{base_domain}/", f"https://{base_domain}/llms.txt"]
         if site_id == "katosalsahub":
             in_urls.append(f"https://{base_domain}/salsopedia.html")
+            in_urls.append(f"https://{base_domain}/grafik.html")
         elif site_id == "fuegolingua":
             in_urls.append(f"https://{base_domain}/cennik.html")
         elif site_id == "raricart":
