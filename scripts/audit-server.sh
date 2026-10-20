@@ -1170,7 +1170,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|container factory failed|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub)' \
+                            | grep -vE '(broken pipe|context canceled|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub)' \
                             | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|ban|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
@@ -1247,7 +1247,7 @@ if groq_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 2500
+        "max_tokens": 4096
     }))
 if cerebras_key:
     primary_candidates.append(("Cerebras GPT-OSS-120B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
@@ -1255,13 +1255,13 @@ if cerebras_key:
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "reasoning_effort": "high",
         "temperature": 0.2,
-        "max_tokens": 2500
+        "max_tokens": 4096
     }))
     primary_candidates.append(("Cerebras Qwen-3.8-27B (reasoning: HIGH)", "https://api.cerebras.ai/v1/chat/completions", cerebras_key, {
         "model": "qwen-3.8-27b",
         "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
         "temperature": 0.2,
-        "max_tokens": 2500
+        "max_tokens": 4096
     }))
 
 for label, url, api_key, body in primary_candidates:
@@ -1355,7 +1355,7 @@ if anthropic_key and (need_claude or not primary_answer):
     try:
         c_payload = {
             "model": "claude-sonnet-4-6",
-            "max_tokens": 450,
+            "max_tokens": 900,
             "system": [{"type": "text", "text": sys_prompt_primary, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": xray_text}]
         }
