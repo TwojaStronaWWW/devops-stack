@@ -878,7 +878,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_pageviews_total Laczna liczba odslon podstron i sekcji SPA (Cookieless)';
     $o[] = '# TYPE web_analytics_pageviews_total counter';
     $pvMap = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
-    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'dancepuls|/', 'fuegolingua|/', 'twojastronawww|/', 'raricart|/'] as $defPv) {
+    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'katosalsahub|/grafik.html', 'dancepuls|/', 'fuegolingua|/', 'fuegolingua|/cennik.html', 'twojastronawww|/', 'twojastronawww|/jak-pracuje.html', 'raricart|/', 'raricart|/pakiety'] as $defPv) {
         if (!isset($pvMap[$defPv])) {
             $pvMap[$defPv] = 0;
         }
@@ -886,8 +886,13 @@ function aiRenderMetrics(): string
     $pathLabels = [
         '/'                => '🏠 / (Strona główna)',
         '/salsopedia.html' => '📖 /salsopedia.html (Słownik 179 haseł)',
+        '/grafik.html'     => '📅 /grafik.html (Wspólny Grafik Szkół Tańca)',
+        '/jak-pracuje.html'=> '⚙️ /jak-pracuje.html (Proces współpracy i SLA)',
+        '/cennik.html'     => '💰 /cennik.html (Cennik kursów FuegoLingua)',
         '/privacy.html'    => '🔒 /privacy.html (Polityka prywatności)',
+        '/pakiety'         => '🍽️ /pakiety (Pakiety i wycena Raricart)',
         '/pakiety.php'     => '🍽️ /pakiety.php (Pakiety i wycena Raricart)',
+        '/polityka-prywatnosci'     => '🔒 /polityka-prywatnosci (Polityka prywatności)',
         '/polityka-prywatnosci.php' => '🔒 /polityka-prywatnosci.php (Polityka prywatności)',
         '/#onas'           => '👨‍🍳 /#onas (O Nas)',
         '/#oferta'         => '🥂 /#oferta (Oferta i stacje Live Food)',
@@ -901,6 +906,9 @@ function aiRenderMetrics(): string
         '/#slownik'        => '📚 /#slownik (Sekcja słownika)',
         '/#faq'            => '❓ /#faq (Pytania FAQ)',
         '/#cennik'         => '💰 /#cennik (Oferta i cennik)',
+        '/#pricing'        => '💰 /#pricing (Pakiety i cennik)',
+        '/#portfolio'      => '🚀 /#portfolio (Realizacje i wdrożenia)',
+        '/#contact'        => '📞 /#contact (Formularz wyceny)',
         '/#kontakt'        => '📞 /#kontakt (Sekcja kontaktu)',
         '/#kursy'          => '🇪🇸 /#kursy (Kursy językowe)',
     ];
@@ -913,10 +921,12 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_sources_total Zrodla wejsc uzytkownikow (Google, AI Search, Facebook, Instagram, TikTok, Direct, Inne)';
     $o[] = '# TYPE web_analytics_sources_total counter';
     $srcMap = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
-    foreach (['direct', 'google', 'ai_search', 'facebook', 'instagram'] as $defSrc) {
-        $sKey = 'katosalsahub|' . $defSrc;
-        if (!isset($srcMap[$sKey])) {
-            $srcMap[$sKey] = 0;
+    foreach ($knownSites as $defSite) {
+        foreach (['direct', 'google', 'ai_search', 'facebook', 'instagram'] as $defSrc) {
+            $sKey = $defSite . '|' . $defSrc;
+            if (!isset($srcMap[$sKey])) {
+                $srcMap[$sKey] = 0;
+            }
         }
     }
     $sourceLabels = [
@@ -940,10 +950,12 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_devices_total Urzadzenia odwiedzajacych (mobile, tablet, desktop)';
     $o[] = '# TYPE web_analytics_devices_total counter';
     $devMap = is_array($wa['devices'] ?? null) ? $wa['devices'] : [];
-    foreach (['mobile', 'desktop'] as $defDev) {
-        $dKey = 'katosalsahub|' . $defDev;
-        if (!isset($devMap[$dKey])) {
-            $devMap[$dKey] = 0;
+    foreach ($knownSites as $defSite) {
+        foreach (['mobile', 'desktop'] as $defDev) {
+            $dKey = $defSite . '|' . $defDev;
+            if (!isset($devMap[$dKey])) {
+                $devMap[$dKey] = 0;
+            }
         }
     }
     $deviceLabels = [
@@ -960,6 +972,11 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_countries_total Kraje odwiedzajacych wg naglowka Cloudflare CF-IPCountry';
     $o[] = '# TYPE web_analytics_countries_total counter';
     $cntMap = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
+    foreach ($knownSites as $defSite) {
+        if (!isset($cntMap[$defSite . '|PL'])) {
+            $cntMap[$defSite . '|PL'] = 0;
+        }
+    }
     foreach (['PL', 'DE', 'GB', 'CZ'] as $defCountry) {
         if (!isset($cntMap['katosalsahub|' . $defCountry])) {
             $cntMap['katosalsahub|' . $defCountry] = 0;
@@ -995,25 +1012,33 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_search_terms_total Wyszukiwane hasla i frazy kluczowe w Salsopedii oraz parametrach UTM';
     $o[] = '# TYPE web_analytics_search_terms_total counter';
     $termMap = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
-    if (empty($termMap)) {
-        $o[] = 'web_analytics_search_terms_total{site="katosalsahub",term="(brak wpisanych fraz — czekam na wyszukiwania w Salsopedii)"} 0';
-    } else {
-        foreach ($termMap as $tKey => $tCount) {
-            [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
-            if ($tTerm !== '') {
-                $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '"} ' . (int)$tCount;
-            }
+    $sitesWithTerms = [];
+    foreach ($termMap as $tKey => $tCount) {
+        [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
+        if ($tTerm !== '') {
+            $sitesWithTerms[$tSite] = true;
+            $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '"} ' . (int)$tCount;
+        }
+    }
+    foreach ($knownSites as $defSite) {
+        if (empty($sitesWithTerms[$defSite])) {
+            $o[] = 'web_analytics_search_terms_total{site="' . aiEsc($defSite) . '",term="(brak wpisanych fraz UTM / wyszukiwarki)"} 0';
         }
     }
 
     $o[] = '# HELP web_analytics_events_total Zdarzenia biznesowe, konwersje CTA i interakcje z widzetem AI (Cookieless)';
     $o[] = '# TYPE web_analytics_events_total counter';
     $evMap = is_array($wa['events'] ?? null) ? $wa['events'] : [];
-    foreach (['chat_open', 'quick_prompt_click', 'cta_phone_click', 'radio_play'] as $defEv) {
-        $eKey = 'katosalsahub|' . $defEv;
-        if (!isset($evMap[$eKey])) {
-            $evMap[$eKey] = 0;
+    foreach ($knownSites as $defSite) {
+        foreach (['chat_open', 'quick_prompt_click', 'cta_phone_click', 'contact_form_submit'] as $defEv) {
+            $eKey = $defSite . '|' . $defEv;
+            if (!isset($evMap[$eKey])) {
+                $evMap[$eKey] = 0;
+            }
         }
+    }
+    if (!isset($evMap['katosalsahub|radio_play'])) {
+        $evMap['katosalsahub|radio_play'] = 0;
     }
     $eventLabels = [
         'chat_open'          => '💬 Otwarcie okna czatu AI',
@@ -1066,7 +1091,7 @@ function aiRenderMetrics(): string
         'contact_lead'    => '📞 Pozyskany namiar kontaktowy (Telefon / E-mail)',
         'general_inquiry' => '💬 Inne pytanie ogólne o ofertę',
     ];
-    foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'fuegolingua|spanish_course', 'twojastronawww|pricing'] as $defTop) {
+    foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'dancepuls|events_party', 'fuegolingua|spanish_course', 'twojastronawww|pricing', 'raricart|pricing'] as $defTop) {
         if (!isset($topicsMap[$defTop])) {
             $topicsMap[$defTop] = 0;
         }
@@ -1093,21 +1118,29 @@ function aiRenderMetrics(): string
     $gscClicksLines = [];
     $gscImprLines   = [];
     $gscPosLines    = [];
+    $sitesWithGsc   = [];
     foreach ($gscMap as $gSite => $gRows) {
         if (!is_array($gRows)) continue;
         foreach ($gRows as $row) {
             if (!is_array($row) || empty($row['query'])) continue;
             $qEsc = aiEsc((string)$row['query']);
             $sEsc = aiEsc((string)$gSite);
+            $sitesWithGsc[(string)$gSite] = true;
             $gscClicksLines[] = 'web_analytics_gsc_keyword_clicks_total{site="' . $sEsc . '",query="' . $qEsc . '"} ' . (int)($row['clicks'] ?? 0);
             $gscImprLines[]   = 'web_analytics_gsc_keyword_impressions_total{site="' . $sEsc . '",query="' . $qEsc . '"} ' . (int)($row['impressions'] ?? 0);
             $gscPosLines[]    = 'web_analytics_gsc_keyword_position{site="' . $sEsc . '",query="' . $qEsc . '"} ' . round((float)($row['position'] ?? 1.0), 1);
         }
     }
-    if (empty($gscClicksLines)) {
-        $gscClicksLines[] = 'web_analytics_gsc_keyword_clicks_total{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
-        $gscImprLines[]   = 'web_analytics_gsc_keyword_impressions_total{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
-        $gscPosLines[]    = 'web_analytics_gsc_keyword_position{site="katosalsahub",query="(oczekuje na synchronizacje Google Search Console API)"} 0';
+    foreach ($knownSites as $defSite) {
+        if (empty($sitesWithGsc[$defSite])) {
+            $sEsc = aiEsc($defSite);
+            $placeholderQuery = $hasGscData
+                ? '(GSC API aktywne — oczekuje na pierwsze wyswietlenia w Google)'
+                : '(oczekuje na synchronizacje Google Search Console API)';
+            $gscClicksLines[] = 'web_analytics_gsc_keyword_clicks_total{site="' . $sEsc . '",query="' . $placeholderQuery . '"} 0';
+            $gscImprLines[]   = 'web_analytics_gsc_keyword_impressions_total{site="' . $sEsc . '",query="' . $placeholderQuery . '"} 0';
+            $gscPosLines[]    = 'web_analytics_gsc_keyword_position{site="' . $sEsc . '",query="' . $placeholderQuery . '"} 0';
+        }
     }
     foreach ($gscClicksLines as $l) {
         $o[] = $l;

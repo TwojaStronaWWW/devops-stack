@@ -48,6 +48,8 @@ services:
       org.opencontainers.image.description: "Silnik bazy szeregów czasowych zbierający metryki serwera i usług (Prometheus)"
     restart: unless-stopped
     user: "65534:65534" # nobody:nobody (PoLP - non-root)
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -92,6 +94,8 @@ services:
       org.opencontainers.image.description: "Wizualizacja metryk, statusów stron WWW, AI Routera i backupów (Grafana)"
     restart: unless-stopped
     user: "472:472" # grafana non-root
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -142,6 +146,8 @@ services:
       dev.dozzle.name: "node-exporter • Parametry Hosta VPS"
       org.opencontainers.image.description: "Eksporter parametrów sprzętowych VPS (CPU, RAM, dysk) i telemetrii backupów"
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -223,6 +229,8 @@ services:
       dev.dozzle.name: "dozzle • Logi Kontenerów"
       org.opencontainers.image.description: "Przeglądarka logów wszystkich kontenerów Docker w czasie rzeczywistym"
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -259,6 +267,8 @@ services:
       dev.dozzle.name: "github-exporter • Metryki GitHub"
       org.opencontainers.image.description: "Eksporter statystyk repozytoriów i statusów potoków GitHub Actions do Prometheusa"
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:
@@ -294,6 +304,8 @@ services:
       dev.dozzle.name: "ai-router • Czatbot AI & AMMS"
       org.opencontainers.image.description: "Scentralizowana bramka AI (11 modeli + Asystent AMMS & Oracle FTS5) dla TwojaStronaWWW"
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:

@@ -121,7 +121,7 @@ except Exception as e:
     print(f"[GSC-SYNC] Nie udało się pobrać listy usług GSC: {e}")
 
 end_date = datetime.date.today().isoformat()
-start_date = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+start_date = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
 indexnow_key = "4f8b9d2e7a1c6f3b5e0d8a9c2b4f7e1a"
 
 for pair in sites_cfg.split(","):
@@ -176,16 +176,54 @@ for pair in sites_cfg.split(","):
             with urllib.request.urlopen(gsc_req, timeout=15) as gsc_resp:
                 gsc_data = json.loads(gsc_resp.read().decode("utf-8"))
             rows = []
+            sum_clicks = 0
+            sum_impr = 0
             for r in gsc_data.get("rows", []):
                 keys = r.get("keys", [])
                 if not keys:
                     continue
+                c_val = int(round(float(r.get("clicks", 0))))
+                i_val = int(round(float(r.get("impressions", 0))))
+                sum_clicks += c_val
+                sum_impr += i_val
                 rows.append({
                     "query": keys[0],
-                    "clicks": int(round(float(r.get("clicks", 0)))),
-                    "impressions": int(round(float(r.get("impressions", 0)))),
+                    "clicks": c_val,
+                    "impressions": i_val,
                     "position": round(float(r.get("position", 0.0)), 1)
                 })
+
+            # Uwzględnienie zapytań zanonimizowanych przez Google (dimensions=[] zwraca pełny ruch domeny)
+            try:
+                tot_payload = json.dumps({
+                    "startDate": start_date,
+                    "endDate": end_date,
+                    "dimensions": [],
+                    "dataState": "all"
+                }).encode("utf-8")
+                tot_req = urllib.request.Request(api_url, data=tot_payload, headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                })
+                with urllib.request.urlopen(tot_req, timeout=10) as tot_resp:
+                    tot_data = json.loads(tot_resp.read().decode("utf-8"))
+                tot_rows = tot_data.get("rows", [])
+                if tot_rows:
+                    tot_c = int(round(float(tot_rows[0].get("clicks", 0))))
+                    tot_i = int(round(float(tot_rows[0].get("impressions", 0))))
+                    tot_pos = round(float(tot_rows[0].get("position", 0.0)), 1)
+                    rem_c = max(0, tot_c - sum_clicks)
+                    rem_i = max(0, tot_i - sum_impr)
+                    if (rem_i > 0 or rem_c > 0) and tot_pos >= 1.0:
+                        rows.append({
+                            "query": f"{site_id} ruch organiczny ogolem",
+                            "clicks": rem_c,
+                            "impressions": rem_i,
+                            "position": tot_pos
+                        })
+            except Exception:
+                pass
+
             sync_payload = json.dumps({
                 "type": "gsc_sync",
                 "site_id": site_id,
@@ -207,6 +245,8 @@ for pair in sites_cfg.split(","):
             in_urls.append(f"https://{base_domain}/grafik.html")
         elif site_id == "fuegolingua":
             in_urls.append(f"https://{base_domain}/cennik.html")
+        elif site_id == "twojastronawww":
+            in_urls.append(f"https://{base_domain}/jak-pracuje.html")
         elif site_id == "raricart":
             in_urls.append(f"https://{base_domain}/pakiety")
         in_body = json.dumps({

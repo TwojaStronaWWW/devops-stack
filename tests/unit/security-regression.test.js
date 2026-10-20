@@ -209,11 +209,14 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       }
     });
 
-    it('endpoint /health powinien zwracać nagłówki bezpieczeństwa X-Content-Type-Options: nosniff, X-Frame-Options: DENY i ukrywać X-Powered-By', async () => {
+    it('endpoint /health powinien zwracać nagłówki bezpieczeństwa X-Content-Type-Options: nosniff, X-Frame-Options: DENY, HSTS, CSP i ukrywać X-Powered-By', async () => {
       const res = await fetch(`${baseUrl}/health`);
       assert.strictEqual(res.status, 200);
       assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
       assert.strictEqual(res.headers.get('x-frame-options'), 'DENY');
+      assert.strictEqual(res.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
+      assert.strictEqual(res.headers.get('referrer-policy'), 'no-referrer');
+      assert.strictEqual(res.headers.get('content-security-policy'), "default-src 'none'; frame-ancestors 'none'");
       assert.strictEqual(res.headers.get('x-powered-by'), null);
       const body = await res.json();
       assert.strictEqual(body.status, 'UP');
@@ -529,6 +532,22 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       });
       assert.strictEqual(evRes.status, 202);
 
+      // 4b. Zdarzenie konwersji CTA z aliasem event_name i search_term (kompatybilność z raricart)
+      const raricartEvRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+        body: JSON.stringify({
+          site_id: 'raricart',
+          type: 'event',
+          event_name: 'contact_form_submit',
+        }),
+      });
+      assert.strictEqual(raricartEvRes.status, 202);
+
       const engRes = await fetch(`${baseUrl}/analytics`, {
         method: 'POST',
         headers: {
@@ -600,11 +619,19 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(metricsText, /web_analytics_countries_total\{site="katosalsahub",country="PL",label="[^"]*Polska \(PL\)"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="katosalsahub",event="cta_phone_click",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_events_total\{site="raricart",event="contact_form_submit",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_sources_total\{site="twojastronawww",source="direct",label="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_devices_total\{site="twojastronawww",device="mobile",label="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_countries_total\{site="twojastronawww",country="PL",label="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_events_total\{site="twojastronawww",event="chat_open",label="[^"]+"\}\s+\d+/);
       assert.match(metricsText, /web_analytics_cwv_lcp_seconds_count\{site="katosalsahub"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_gsc_configured\s+1/);
       assert.match(metricsText, /web_analytics_gsc_keyword_clicks_total\{site="katosalsahub",query="salsa katowice"\}\s+42/);
       assert.match(metricsText, /web_analytics_gsc_keyword_impressions_total\{site="katosalsahub",query="salsa katowice"\}\s+510/);
       assert.match(metricsText, /web_analytics_gsc_keyword_position\{site="katosalsahub",query="salsa katowice"\}\s+2\.3/);
+      assert.match(metricsText, /web_analytics_gsc_keyword_clicks_total\{site="twojastronawww",query="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_gsc_keyword_position\{site="twojastronawww",query="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_search_terms_total\{site="twojastronawww",term="[^"]+"\}\s+\d+/);
       assert.match(metricsText, /ai_router_question_topics_total\{site="katosalsahub",topic="salsopedia",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /ai_router_question_topics_total\{site="katosalsahub",topic="figures",label="[^"]+"\}\s+[1-9]/);
       assert.strictEqual(metricsText.includes('PrywatneHasloKlienta777'), false, 'Surowa treść pytania nie może wyciekać do etykiet tematów AI!');

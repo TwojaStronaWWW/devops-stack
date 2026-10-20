@@ -11,6 +11,8 @@ services:
       dev.dozzle.name: "cloudflared • Tunel Zero Trust"
       org.opencontainers.image.description: "Szyfrowany tunel krawędziowy Cloudflare Zero Trust (dostęp bez otwartych portów WAN)"
     restart: unless-stopped
+    cap_drop:
+      - ALL
     security_opt:
       - no-new-privileges:true
     networks:

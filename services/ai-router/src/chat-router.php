@@ -9,6 +9,10 @@ declare(strict_types=1);
  */
 
 header_remove('X-Powered-By');
+header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $isFromCloudflare = !empty($_SERVER['HTTP_CF_CONNECTING_IP']) || !empty($_SERVER['HTTP_CF_RAY']);
@@ -154,6 +158,7 @@ if ($requestUri === '/metrics' || ($requestUri === '/health' && str_contains($_S
 header('Content-Type: application/json; charset=UTF-8');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
+header("Content-Security-Policy: default-src 'none'; frame-ancestors 'none'");
 
 if ($requestUri === '/health') {
     http_response_code(200);
@@ -209,7 +214,16 @@ $defaultAllowedOrigins = [
     'https://twojastronawww.pl',
     'https://www.twojastronawww.pl',
     'https://raricart.pl',
-    'https://www.raricart.pl'
+    'https://www.raricart.pl',
+    'https://test.raricart.pl',
+    'https://laclave.pl',
+    'https://www.laclave.pl',
+    'https://milpasoskatowice.pl',
+    'https://www.milpasoskatowice.pl',
+    'https://goodmood.dance',
+    'https://www.goodmood.dance',
+    'https://tanecznakompania.pl',
+    'https://www.tanecznakompania.pl'
 ];
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
@@ -226,6 +240,7 @@ if ($origin !== '') {
 
     if ($isAllowed) {
         header("Access-Control-Allow-Origin: {$origin}");
+        header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: POST, OPTIONS');
         header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
         header('Access-Control-Max-Age: 86400');
@@ -401,7 +416,7 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
             $bSource = 'bing';
         } elseif (preg_match('/(google\.|gclid|yahoo\.|ecosia\.)/', $sourceProbe)) {
             $bSource = 'google';
-        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|localhost|127\.0\.0\.1)/', $sourceProbe)) {
+        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|raricart\.pl|localhost|127\.0\.0\.1)/', $sourceProbe)) {
             $bSource = 'other';
         }
     }
@@ -418,13 +433,13 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
 
     $visitorHash = substr(hash('sha256', aiAnalyticsDay() . '|' . $bSite . '|' . $bIp . '|' . $ua), 0, 16);
 
-    $rawTerm = trim((string)($beacon['term'] ?? $beacon['utm_term'] ?? ''));
+    $rawTerm = trim((string)($beacon['term'] ?? $beacon['search_term'] ?? $beacon['utm_term'] ?? ''));
     $bTerm = mb_substr(trim((string)preg_replace('/[^a-ząćęłńóśźż0-9 _-]/iu', '', mb_strtolower($rawTerm))), 0, 40);
     if (mb_strlen($bTerm) < 2) {
         $bTerm = '';
     }
 
-    $rawEvent = strtolower(trim((string)($beacon['event'] ?? '')));
+    $rawEvent = strtolower(trim((string)($beacon['event'] ?? $beacon['event_name'] ?? '')));
     $bEvent = substr(preg_replace('/[^a-z0-9_-]/', '', $rawEvent) ?: '', 0, 32);
 
     $bLcpMs = isset($beacon['lcp_ms']) && is_numeric($beacon['lcp_ms']) ? (float)$beacon['lcp_ms'] : 0.0;

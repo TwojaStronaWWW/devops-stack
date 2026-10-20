@@ -447,15 +447,19 @@
         utm_term: params.get('utm_term') || params.get('q') || ''
       }, extra || {});
       const body = JSON.stringify(payload);
-      if (navigator.sendBeacon) {
-        const blob = new Blob([body], { type: 'application/json' });
-        navigator.sendBeacon(ANALYTICS_URL, blob);
-      } else if (typeof fetch === 'function') {
+      let sent = false;
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        try {
+          sent = navigator.sendBeacon(ANALYTICS_URL, body);
+        } catch (_) {}
+      }
+      if (!sent && typeof fetch === 'function') {
         fetch(ANALYTICS_URL, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: body,
-          keepalive: true
+          keepalive: true,
+          mode: 'cors',
+          credentials: 'omit'
         }).catch(function() {});
       }
     } catch (_) {}
