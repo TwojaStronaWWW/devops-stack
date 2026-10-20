@@ -16,24 +16,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: 1. Weryfikacja dostępności krawędziowej AI Routera i Tunelu Cloudflare Zero Trust (WAN)
+      - name: 1. Weryfikacja dostępności krawędziowej AI Routera, Tunelu Cloudflare i Hosta VPS (WAN)
         id: probe
         env:
           TARGET_URL: "https://ai.twojastronawww.pl/health"
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           set +e
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
           TUNNEL_OK=0
           LAST_CODE="000"
           for attempt in 1 2 3; do
-            BODY_AND_CODE="$(curl -sS --max-time 8 -w "\n%{http_code}" "${TARGET_URL}" 2>/dev/null)"
+            BODY_AND_CODE="$(curl -sS --max-time 8 -A "${UA}" -H "Accept: application/json" -w "\n%{http_code}" "${TARGET_URL}" 2>/dev/null)"
             HTTP_CODE="$(echo "${BODY_AND_CODE}" | tail -n1)"
             BODY="$(echo "${BODY_AND_CODE}" | head -n -1)"
             LAST_CODE="${HTTP_CODE}"
             if [[ "${HTTP_CODE}" == "200" ]] && echo "${BODY}" | grep -q '"status":"UP"'; then
               echo "✅ [Próba ${attempt}/3] Zewnętrzny probe WAN (${TARGET_URL}) -> HTTP 200 (status: UP)"
               TUNNEL_OK=1
+              break
+            fi
+            # Jeśli Cloudflare Bot Fight Mode nałożył blokadę L7 (403) na IP Azure (GitHub Runner), nie jest to błąd 5xx/530 tunelu
+            if [[ "${HTTP_CODE}" == "403" ]]; then
+              echo "ℹ️ [Próba ${attempt}/3] Cloudflare WAF/Bot Fight Mode zwrócił HTTP 403 dla IP runnera Azure (brzeg Cloudflare żyje, brak błędu 502/530)."
               break
             fi
             echo "⚠️ [Próba ${attempt}/3] Brak poprawnej odpowiedzi z ${TARGET_URL} (HTTP ${HTTP_CODE}). Ponawianie za 5s..."
@@ -48,6 +56,18 @@ jobs:
               echo "❌ Zewnętrzny probe TCP SSH (${VPS_HOST}:22) -> BRAK ODPOWIEDZI!"
               SSH_OK=0
             fi
+          fi
+
+          # Jeśli Cloudflare zablokował IP Azure kodem 403, zweryfikujmy stan tunelu cloudflared i AI Routera bezpośrednio po kluczu SSH
+          if [[ "${TUNNEL_OK}" -eq 0 && "${LAST_CODE}" == "403" && "${SSH_OK}" -eq 1 && -n "${VPS_SSH_KEY}" ]]; then
+            mkdir -p ~/.ssh && chmod 700 ~/.ssh
+            printf "%s\n" "${VPS_SSH_KEY}" > ~/.ssh/id_watchdog && chmod 600 ~/.ssh/id_watchdog
+            if ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 -i ~/.ssh/id_watchdog "${VPS_USER:-ubuntu}@${VPS_HOST}" \
+               "curl -sf --max-time 4 http://127.0.0.1:8085/health | grep -q '\"status\":\"UP\"' && docker exec prometheus wget -q -T 4 --spider http://cloudflared:2000/ready" >/dev/null 2>&1; then
+              echo "✅ Weryfikacja bezpośrednia przez SSH: AI Router (status: UP) oraz Tunel Cloudflare QUIC (cloudflared:2000/ready) działają w 100% prawidłowo!"
+              TUNNEL_OK=1
+            fi
+            rm -f ~/.ssh/id_watchdog
           fi
 
           if [[ "${TUNNEL_OK}" -eq 1 && "${SSH_OK}" -eq 1 ]]; then
