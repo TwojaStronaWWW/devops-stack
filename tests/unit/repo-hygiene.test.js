@@ -281,6 +281,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey/$cerebrasApiKey/$mistralApiKey/$cfAiToken
     assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|cerebrasApiKey|mistralApiKey|cfAiToken|openRouterApiKey)/.test(router), false);
     assert.strictEqual(router.includes('csk-'), false, 'Wykryto zahardkodowany klucz Cerebras API w chat-router.php');
+    assert.strictEqual(router.includes('mstrl_'), false, 'Wykryto zahardkodowany klucz Mistral API w chat-router.php');
     assert.strictEqual(router.includes('cfut_'), false, 'Wykryto zahardkodowany token Cloudflare Workers AI w chat-router.php');
   });
 
