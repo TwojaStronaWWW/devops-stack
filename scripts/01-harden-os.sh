@@ -42,27 +42,34 @@ apt-get install -y ufw fail2ban unattended-upgrades curl iptables ca-certificate
 echo "======================================================================"
 echo ">> [4/8] SSH Hardening (ISO 27001 baseline)..."
 echo "======================================================================"
+# Zablokowanie interaktywnej powłoki odziedziczonego konta opc (Oracle Cloud) oraz usunięcie kluczy roota
+usermod -s /usr/sbin/nologin opc 2>/dev/null || true
+rm -f /root/.ssh/authorized_keys 2>/dev/null || true
+
 SSH_HARDEN_CONF="/etc/ssh/sshd_config.d/99-security-hardening.conf"
 mkdir -p /etc/ssh/sshd_config.d
-cat << 'EOF' > "${SSH_HARDEN_CONF}"
+cat << EOF > "${SSH_HARDEN_CONF}"
 # Security Hardening (ISO 27001 / CIS Benchmark)
-# 1. Całkowity zakaz logowania na konto root
+# 1. Całkowity zakaz logowania na konto root oraz biała lista kont
 PermitRootLogin no
+AllowUsers ${TARGET_USER}
 # 2. Zakaz uwierzytelniania hasłem (wyłącznie klucze kryptograficzne)
 PasswordAuthentication no
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 AuthenticationMethods publickey
-# 3. Ograniczenie liczby prób autoryzacji przed rozłączeniem
+# 3. Ograniczenie liczby prób autoryzacji przed rozłączeniem i pełny dziennik audytowy
 MaxAuthTries 3
+LogLevel VERBOSE
 # 4. Wyłączenie zbędnych i podatnych funkcji
 X11Forwarding no
+AllowAgentForwarding no
 AllowTcpForwarding yes
 ClientAliveInterval 300
 ClientAliveCountMax 2
 EOF
 
-systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+sshd -t && (systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true)
 
 echo "======================================================================"
 echo ">> [5/8] Zapora sieciowa UFW (Stateful Firewall & Rate Limiting)..."
@@ -123,8 +130,10 @@ EOF
 cat << 'EOF' > /etc/apt/apt.conf.d/50unattended-upgrades
 Unattended-Upgrade::Allowed-Origins {
     "${distro_id}:${distro_codename}-security";
+    "${distro_id}:${distro_codename}-updates";
     "${distro_id}ESMApps:${distro_codename}-apps-security";
     "${distro_id}ESM:${distro_codename}-infra-security";
+    "Docker CE:${distro_codename}";
 };
 Unattended-Upgrade::Package-Blacklist {
 };
@@ -161,9 +170,24 @@ net.ipv4.icmp_echo_ignore_broadcasts = 1
 
 # Wymagane trasowanie pakietów dla mostka sieciowego Dockera
 net.ipv4.ip_forward = 1
+
+# Utwardzenie przestrzeni adresowej i eBPF JIT w jądrze (CIS Benchmark)
+kernel.kptr_restrict = 2
+kernel.dmesg_restrict = 1
+kernel.unprivileged_bpf_disabled = 2
+net.core.bpf_jit_harden = 2
 EOF
 
 sysctl --system >/dev/null 2>&1 || true
+
+# Ochrona łańcucha DOCKER-USER przed przypadkowym wystawieniem portu kontenera na interfejs WAN
+WAN_IFACE="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
+if [[ -n "${WAN_IFACE}" ]] && iptables -L DOCKER-USER -n >/dev/null 2>&1; then
+    iptables -D DOCKER-USER -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
+    iptables -D DOCKER-USER -i "${WAN_IFACE}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
+    iptables -I DOCKER-USER 1 -i "${WAN_IFACE}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
+    iptables -I DOCKER-USER 2 -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
+fi
 
 # Zabezpieczenie pamięci współdzielonej /dev/shm przed uruchamianiem exploitów
 if grep -q " /dev/shm " /etc/fstab 2>/dev/null; then

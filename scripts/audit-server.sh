@@ -407,6 +407,33 @@ else
     pass "Jądro systemu jest aktualne (brak oczekującego restartu /var/run/reboot-required)."
 fi
 
+# 6. Kontrola i automatyczna samonaprawa oczekujących aktualizacji bezpieczeństwa APT oraz łańcucha DOCKER-USER
+WAN_IFACE_AUDIT="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
+if [[ -n "${WAN_IFACE_AUDIT}" ]] && sudo -n iptables -L DOCKER-USER -n >/dev/null 2>&1; then
+    if ! sudo -n iptables -C DOCKER-USER -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null; then
+        sudo -n iptables -I DOCKER-USER 1 -i "${WAN_IFACE_AUDIT}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
+        sudo -n iptables -I DOCKER-USER 2 -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null || true
+    fi
+fi
+
+APT_PENDING_COUNT="$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)"
+APT_PENDING_COUNT="${APT_PENDING_COUNT:-0}"
+if [[ "${APT_PENDING_COUNT}" -gt 0 ]]; then
+    sudo -n DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --with-new-pkgs upgrade -y >/dev/null 2>&1 || true
+    APT_AFTER_COUNT="$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)"
+    APT_AFTER_COUNT="${APT_AFTER_COUNT:-0}"
+    if [[ "${APT_AFTER_COUNT}" -eq 0 ]]; then
+        pass "Aktualizacje bezpieczeństwa APT (Auto-Patching): automatycznie zainstalowano ${APT_PENDING_COUNT} oczekujących pakietów (0 zaległych)."
+        APT_PENDING_COUNT=0
+    else
+        APT_PENDING_COUNT="${APT_AFTER_COUNT}"
+        warn "System posiada ${APT_PENDING_COUNT} oczekujących pakietów APT wymagających interwencji." \
+             "sudo apt-get update && sudo apt-get --with-new-pkgs upgrade -y"
+    fi
+else
+    pass "Aktualizacje bezpieczeństwa APT (unattended-upgrades + Docker CE): wszystkie pakiety są aktualne (0 zaległych)."
+fi
+
 
 # ==============================================================================
 # WARSTWA 4: KONTENERY DOCKER, HEALTHCHECKI I SMOKE TESTY ENDPOINTÓW
@@ -878,6 +905,10 @@ devops_waf_blocked_total ${WAF_BLOCKED_TOTAL:-0}
 # HELP devops_log_critical_24h_total Liczba krytycznych wyjatkow w logach kontenerow z ostatnich 24h
 # TYPE devops_log_critical_24h_total gauge
 devops_log_critical_24h_total ${LOG_CRITICAL_24H:-0}
+
+# HELP devops_apt_upgradable_packages Liczba oczekujacych aktualizacji pakietow APT na hoscie
+# TYPE devops_apt_upgradable_packages gauge
+devops_apt_upgradable_packages ${APT_PENDING_COUNT:-0}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true

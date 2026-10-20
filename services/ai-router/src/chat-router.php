@@ -49,6 +49,8 @@ if ($requestUri === '/amms' || $requestUri === '/amms-teams' || $requestUri === 
     header('Content-Type: text/html; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
+    header("Content-Security-Policy: frame-ancestors 'none'");
     $ammsHtmlPath = __DIR__ . '/amms-teams.html';
     if (file_exists($ammsHtmlPath)) {
         readfile($ammsHtmlPath);

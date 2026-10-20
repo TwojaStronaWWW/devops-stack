@@ -4,10 +4,11 @@
 # ==============================================================================
 FROM php:8.3-alpine
 
-# Zainstaluj tylko niezbędne pakiety runtime (cURL, CA certyfikaty do bezpiecznego TLS) i zweryfikuj wsparcie PDO SQLite FTS5
+# Zainstaluj tylko niezbędne pakiety runtime (cURL, CA certyfikaty do bezpiecznego TLS), zweryfikuj wsparcie PDO SQLite FTS5 i utwardź php.ini (CIS/OWASP)
 RUN apk add --no-cache curl ca-certificates && \
     php -r 'if (!in_array("sqlite", PDO::getAvailableDrivers(), true)) { fwrite(STDERR, "Missing pdo_sqlite\n"); exit(1); }' && \
-    mkdir -p /app/src /app/data /app/storage/rate_limits && \
+    mkdir -p /app/src /app/data /app/storage/rate_limits /usr/local/etc/php/conf.d && \
+    printf "expose_php = Off\ndisplay_errors = Off\ndisplay_startup_errors = Off\nlog_errors = On\nallow_url_include = Off\nfile_uploads = Off\nopen_basedir = /app:/tmp\ndisable_functions = exec,passthru,shell_exec,system,proc_open,popen,curl_multi_exec,parse_ini_file,show_source,pcntl_exec\n" > /usr/local/etc/php/conf.d/99-security-hardening.ini && \
     chown -R nobody:nobody /app
 
 WORKDIR /app

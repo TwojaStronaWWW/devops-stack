@@ -86,15 +86,27 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
     it('skrypt 01-harden-os.sh powinien wymuszać twardą politykę SSH, UFW, Fail2ban, wyłączenie rpcbind oraz ochronę jądra (sysctl / noexec)', () => {
       const hardenScript = fs.readFileSync(path.join(ROOT_DIR, 'scripts', '01-harden-os.sh'), 'utf-8');
       assert.match(hardenScript, /^PermitRootLogin no$/m);
+      assert.match(hardenScript, /^AllowUsers \$\{TARGET_USER\}$/m);
+      assert.match(hardenScript, /^AllowAgentForwarding no$/m);
+      assert.match(hardenScript, /^LogLevel VERBOSE$/m);
       assert.match(hardenScript, /^PasswordAuthentication no$/m);
       assert.match(hardenScript, /^AuthenticationMethods publickey$/m);
       assert.match(hardenScript, /ufw default deny incoming/);
       assert.match(hardenScript, /ufw limit 22\/tcp/);
+      assert.match(hardenScript, /DOCKER-USER/);
+      assert.match(hardenScript, /Docker CE:\$\{distro_codename\}/);
       assert.match(hardenScript, /systemctl mask rpcbind\.service rpcbind\.socket/);
       assert.match(hardenScript, /net\.ipv4\.tcp_syncookies\s*=\s*1/);
       assert.match(hardenScript, /net\.ipv4\.conf\.all\.rp_filter\s*=\s*1/);
+      assert.match(hardenScript, /kernel\.kptr_restrict\s*=\s*2/);
+      assert.match(hardenScript, /net\.core\.bpf_jit_harden\s*=\s*2/);
       assert.match(hardenScript, /noexec,nosuid,nodev/);
       assert.match(hardenScript, /SystemMaxUse=200M/);
+
+      const dockerfile = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'), 'utf-8');
+      assert.match(dockerfile, /99-security-hardening\.ini/);
+      assert.match(dockerfile, /disable_functions\s*=/);
+      assert.match(dockerfile, /open_basedir\s*=\s*\/app:\/tmp/);
     });
 
     it('składnia PHP w plikach źródłowych AI Routera powinna być wolna od błędów (php -l)', { skip: !hasPhpCli() }, () => {
