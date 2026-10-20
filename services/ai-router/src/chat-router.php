@@ -720,6 +720,10 @@ $rawDir = realpath('/app/data') ?: realpath(dirname(__DIR__) . '/data');
 $normalizedDataDir = $rawDir ? rtrim(str_replace('\\', '/', $rawDir), '/') : '';
 
 $isAmmsSite = ($aiSite === 'amms');
+$ammsChannel = strtolower(trim((string)($payload['channel'] ?? 'general')));
+if (!preg_match('/^[a-z0-9_-]{2,24}$/', $ammsChannel)) {
+    $ammsChannel = 'general';
+}
 $requestedReasoningMode = strtolower(trim((string)($payload['reasoning_mode'] ?? $payload['reasoning'] ?? 'auto')));
 if (!in_array($requestedReasoningMode, ['auto', 'fast', 'standard', 'high'], true)) {
     $requestedReasoningMode = 'auto';
@@ -729,10 +733,22 @@ $ammsSources = [];
 $ammsRagStats = null;
 $ammsReasoningTier = 'fast';
 $ammsReasoningLabel = 'Standard RAG';
+$ammsDetectedDbQuery = ($isAmmsSite && $ammsChannel === 'oracle');
 
 $knowledgeContent = null;
 $loadedFile = null;
 $loadedFilePath = null;
+
+// Dla zapytań wieloturowych dołączamy kontekst ostatniego pytania użytkownika, aby utrzymać ciągłość wyszukiwania FTS5 i detekcji SQL
+$ragSearchQuery = $question;
+if (!empty($sanitizedHistory) && mb_strlen($question, 'UTF-8') < 90) {
+    for ($hIdx = count($sanitizedHistory) - 1; $hIdx >= 0; $hIdx--) {
+        if (($sanitizedHistory[$hIdx]['role'] ?? '') === 'user') {
+            $ragSearchQuery = $sanitizedHistory[$hIdx]['text'] . ' ' . $question;
+            break;
+        }
+    }
+}
 
 // Specjalistyczny silnik SQLite FTS5 BM25 Dual-Stream dla Asseco AMMS (383 pliki: 314 PDF + 69 plików struktury Oracle AMMS)
 $sqliteCandidate = $rawDir ? ($rawDir . '/' . $aiSite . '-knowledge.sqlite') : '';
@@ -740,23 +756,14 @@ $ammsRagClassPath = __DIR__ . '/amms-rag-search.php';
 
 if ($sqliteCandidate !== '' && is_file($sqliteCandidate) && is_readable($sqliteCandidate) && is_file($ammsRagClassPath)) {
     require_once $ammsRagClassPath;
-    $reasoningProfile = AmmsRagSearch::detectReasoningProfile($question, $requestedReasoningMode);
+    $reasoningProfile = AmmsRagSearch::detectReasoningProfile($ragSearchQuery, $requestedReasoningMode, $ammsChannel);
     $ammsReasoningTier = $reasoningProfile['tier'];
     $ammsReasoningLabel = $reasoningProfile['label'];
+    $ammsDetectedDbQuery = !empty($reasoningProfile['is_db_query']);
 
     try {
         $ammsRag = new AmmsRagSearch($sqliteCandidate);
-        // Dla zapytań wieloturowych dołączamy kontekst ostatniego pytania użytkownika, aby utrzymać ciągłość wyszukiwania FTS5
-        $ragSearchQuery = $question;
-        if (!empty($sanitizedHistory) && mb_strlen($question, 'UTF-8') < 65) {
-            for ($hIdx = count($sanitizedHistory) - 1; $hIdx >= 0; $hIdx--) {
-                if (($sanitizedHistory[$hIdx]['role'] ?? '') === 'user') {
-                    $ragSearchQuery = $sanitizedHistory[$hIdx]['text'] . ' ' . $question;
-                    break;
-                }
-            }
-        }
-        $searchRes = $ammsRag->searchKnowledge($ragSearchQuery, 14, 68000, '/docs-pdf/');
+        $searchRes = $ammsRag->searchKnowledge($ragSearchQuery, 14, 68000, '/docs-pdf/', $ammsDetectedDbQuery);
         if (trim($searchRes['context']) !== '') {
             $knowledgeContent = $searchRes['context'];
             $ammsSources = $searchRes['sources'];
@@ -792,9 +799,10 @@ if ($knowledgeContent === null) {
 
     if ($isAmmsSite && is_file($ammsRagClassPath)) {
         require_once $ammsRagClassPath;
-        $reasoningProfile = AmmsRagSearch::detectReasoningProfile($question, $requestedReasoningMode);
+        $reasoningProfile = AmmsRagSearch::detectReasoningProfile($ragSearchQuery, $requestedReasoningMode, $ammsChannel);
         $ammsReasoningTier = $reasoningProfile['tier'];
         $ammsReasoningLabel = $reasoningProfile['label'];
+        $ammsDetectedDbQuery = !empty($reasoningProfile['is_db_query']);
     }
 }
 
@@ -871,7 +879,7 @@ if ($normalizedQ === '') {
 }
 $historySig  = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
 $kbMtime     = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
-$dynSig      = ($kbVersion !== 'v0' || $dynamicContext !== '' || $isAmmsSite) ? hash('sha256', "{$kbVersion}|{$ammsReasoningTier}|{$dynamicContext}") : 'static';
+$dynSig      = ($kbVersion !== 'v0' || $dynamicContext !== '' || $isAmmsSite) ? hash('sha256', "{$kbVersion}|{$ammsReasoningTier}|{$ammsChannel}|" . ($ammsDetectedDbQuery ? 'db' : 'doc') . "|{$dynamicContext}") : 'static';
 $cacheKey    = hash('sha256', "{$aiSite}|{$kbMtime}|{$dynSig}|{$historySig}|{$normalizedQ}");
 $cacheFile   = $cacheDir . '/' . $cacheKey . '.json';
 
@@ -1023,8 +1031,10 @@ $geminiContents[] = [
 $isAmmsHighReasoning = ($isAmmsSite && $ammsReasoningTier === 'high');
 // Flaga gwarantująca, że specjalistyczne modele SQL (Codestral / Cohere Code) są wywoływane WYŁĄCZNIE dla Asystenta AMMS & Oracle DBA
 $isAmmsDbQuery = $isAmmsSite && (
-    !empty($ammsRagStats['is_db_mode'])
-    || (class_exists('AmmsRagSearch') && AmmsRagSearch::isDatabaseOrArchitectureQuery($question))
+    $ammsDetectedDbQuery
+    || $ammsChannel === 'oracle'
+    || !empty($ammsRagStats['is_db_mode'])
+    || (class_exists('AmmsRagSearch') && AmmsRagSearch::isDatabaseOrArchitectureQuery($ragSearchQuery, $ammsChannel))
 );
 $geminiMaxOutputTokens = $isAmmsSite ? ($isAmmsHighReasoning ? 8192 : 4096) : 2048;
 $geminiTimeoutSec = $isAmmsSite ? ($isAmmsHighReasoning ? 14 : 8) : 4;

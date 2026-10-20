@@ -1732,6 +1732,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               site_id: 'amms',
+              channel: currentChannel,
               question: q,
               reasoning_mode: reasoningMode,
               history: histories[currentChannel].slice(-8)

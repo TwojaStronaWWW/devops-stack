@@ -43,19 +43,20 @@ class AmmsRagSearch
     }
 
     /**
-     * Automatycznie określa optymalny poziom rozumowania (Reasoning Level) na podstawie pytania i wyboru w UI.
+     * Automatycznie określa optymalny poziom rozumowania (Reasoning Level) na podstawie pytania, kanału i wyboru w UI.
      *
      * @return array{tier: string, label: string, is_db_query: bool}
      */
-    public static function detectReasoningProfile(string $userQuestion, string $requestedMode = 'auto'): array
+    public static function detectReasoningProfile(string $userQuestion, string $requestedMode = 'auto', string $channel = 'general'): array
     {
         $mode = strtolower(trim($requestedMode));
-        $isDbOrArch = self::isDatabaseOrArchitectureQuery($userQuestion);
+        $ch = strtolower(trim($channel));
+        $isDbOrArch = ($ch === 'oracle') || self::isDatabaseOrArchitectureQuery($userQuestion);
 
         if ($mode === 'fast' || $mode === 'low' || $mode === 'minimal') {
             return [
                 'tier'        => 'fast',
-                'label'       => 'Szybki (LOW Reasoning)',
+                'label'       => $isDbOrArch ? 'SQL Engine (Fast RAG)' : 'Szybki (LOW Reasoning)',
                 'is_db_query' => $isDbOrArch,
             ];
         }
@@ -63,21 +64,21 @@ class AmmsRagSearch
         if ($mode === 'high' || $mode === 'deep') {
             return [
                 'tier'        => 'high',
-                'label'       => 'Głęboka Analiza (HIGH Reasoning)',
+                'label'       => $isDbOrArch ? 'SQL Engine + Głęboka Analiza (HIGH)' : 'Głęboka Analiza (HIGH Reasoning)',
                 'is_db_query' => $isDbOrArch,
             ];
         }
 
         // Tryb Adaptacyjny (Auto):
-        // Dla pytań o strukturę bazy Oracle, tabele, klucze obce, SQL, PL/SQL, integracje lub złożone problemy -> HIGH
+        // Dla kanału 'oracle' lub pytań o strukturę bazy Oracle, tabele, klucze obce, SQL, PL/SQL, integracje -> HIGH + SQL Engine
         $qLower = mb_strtolower($userQuestion, 'UTF-8');
-        $complexReasoningPattern = '/\b(sql|select|join|from|where|tabel[aięy]|kolumn[ayę]|klucz\s+obcy|foreign\s+key|relacj[aei]|schemat|struktura\s+bazy|oracle|pl\/?sql|pakiet|procedur[ay]|widok|view|birt|jrxml|wildfly|hazelcast|hl7|rest|soap|wsdl|openapi|dlaczego|przyczyn[ay]|błąd|blad|ora-\d+|porównaj|architektur[ay]|optymalizacj[ai])\b/iu';
+        $complexReasoningPattern = '/\b(sql|select|join|from|where|tabel[a-ząćęłńóśźż]*|kolumn[a-ząćęłńóśźż]*|klucz[a-ząćęłńóśźż]*|foreign\s+key|relacj[a-ząćęłńóśźż]*|schemat[a-ząćęłńóśźż]*|struktur[a-ząćęłńóśźż]*\s+baz|w\s+bazie|z\s+bazy|oracle|pl\/?sql|pakiet[a-ząćęłńóśźż]*|procedur[a-ząćęłńóśźż]*|widok[a-ząćęłńóśźż]*|view|birt|jrxml|wildfly|hazelcast|hl7|rest|soap|wsdl|openapi|dlaczego|przyczyn[a-ząćęłńóśźż]*|błąd|blad|ora-\d+|porównaj|architektur[a-ząćęłńóśźż]*|optymalizacj[a-ząćęłńóśźż]*)\b/iu';
 
         if ($isDbOrArch || preg_match($complexReasoningPattern, $qLower) || mb_strlen($userQuestion, 'UTF-8') > 130) {
             return [
                 'tier'        => 'high',
-                'label'       => 'Auto -> Głęboka Analiza (HIGH Reasoning)',
-                'is_db_query' => true,
+                'label'       => $isDbOrArch ? 'Auto -> Silnik SQL & Oracle DBA (HIGH)' : 'Auto -> Głęboka Analiza (HIGH Reasoning)',
+                'is_db_query' => $isDbOrArch || (bool)preg_match($complexReasoningPattern, $qLower),
             ];
         }
 
@@ -89,16 +90,19 @@ class AmmsRagSearch
     }
 
     /**
-     * Sprawdza, czy pytanie dotyczy głównie struktury bazy danych Oracle, tabel, SQL lub architektury technicznej.
+     * Sprawdza, czy pytanie dotyczy struktury bazy danych Oracle, tabel, kolumn, SQL lub architektury technicznej.
      */
-    public static function isDatabaseOrArchitectureQuery(string $userQuestion): bool
+    public static function isDatabaseOrArchitectureQuery(string $userQuestion, string $channel = 'general'): bool
     {
-        $qLower = mb_strtolower($userQuestion, 'UTF-8');
-        if (preg_match('/\b(tabel[aięy]|kolumn[ayę]|klucz|relacj[aei]|foreign\s+key|fk_|pk_|sql|select|oracle|plsql|pl\/sql|widok|view|slownik\s+tabel|struktura\s+bazy|birt|jrxml|wildfly|openapi|wsdl|soap|rest\s+api)\b/iu', $qLower)) {
+        if (strtolower(trim($channel)) === 'oracle') {
             return true;
         }
-        // Wykrywanie nazw technicznych z podkreślnikiem (np. AD_USER, PERSONNEL_ID)
-        if (preg_match('/\b[a-z]{2,12}_[a-z0-9_]{2,25}\b/i', $userQuestion)) {
+        $qLower = mb_strtolower($userQuestion, 'UTF-8');
+        if (preg_match('/\b(tabel[a-ząćęłńóśźż]*|kolumn[a-ząćęłńóśźż]*|klucz[a-ząćęłńóśźż]*|relacj[a-ząćęłńóśźż]*|foreign\s+key|fk_|pk_|sql|select|insert|update|delete|join|where|from|oracle|plsql|pl\/sql|widok[a-ząćęłńóśźż]*|view|slownik[a-ząćęłńóśźż]*\s+tabel|słownik[a-ząćęłńóśźż]*\s+tabel|slownik[a-ząćęłńóśźż]*\s+baz|słownik[a-ząćęłńóśźż]*\s+baz|struktur[a-ząćęłńóśźż]*\s+baz[a-ząćęłńóśźż]*|w\s+bazie|z\s+bazy|baza\s+danych|bazy\s+danych|schemat[a-ząćęłńóśźż]*|rekord[a-ząćęłńóśźż]*|pol[eauó]\b|polach|zapytani[a-ząćęłńóśźż]*|birt|jrxml|wildfly|openapi|wsdl|soap|rest\s+api)\b/iu', $qLower)) {
+            return true;
+        }
+        // Wykrywanie nazw technicznych z podkreślnikiem lub schematem (np. AD_USER, AD.PATIENT_DATA, PERSONNEL_ID, SYSADM.*)
+        if (preg_match('/\b([a-z]{2,12}_[a-z0-9_]{2,25}|(ad|sysadm)\.[a-z0-9_]{2,30})\b/i', $userQuestion)) {
             return true;
         }
         return false;
@@ -163,13 +167,30 @@ class AmmsRagSearch
                 }
             }
 
-            // Rozszerzenia skrótów medycznych / AMMS
+            // Rozszerzenia skrótów medycznych i synonimów tabel/kolumn Oracle AMMS
             if ($lower === 'ip') {
                 $tokens[] = '"izba"*';
                 $tokens[] = '"przyjec"*';
                 $highlightWords[] = 'izba';
             } elseif ($lower === 'sor') {
                 $tokens[] = '"ratunkow"*';
+            } elseif ($lower === 'pesel') {
+                $tokens[] = '"national_ident"*';
+                $tokens[] = '"patient_data"*';
+                $highlightWords[] = 'national_ident';
+            } elseif (str_starts_with($lower, 'pacjent') || str_starts_with($lower, 'pacjenc')) {
+                $tokens[] = '"patient_data"*';
+                $tokens[] = '"pacjent"*';
+                $highlightWords[] = 'patient_data';
+            } elseif (str_starts_with($lower, 'użytkownik') || str_starts_with($lower, 'uzytkownik') || str_starts_with($lower, 'operator')) {
+                $tokens[] = '"ad_user"*';
+                $highlightWords[] = 'ad_user';
+            } elseif (str_starts_with($lower, 'personel') || str_starts_with($lower, 'lekarz') || str_starts_with($lower, 'pielęgniar') || str_starts_with($lower, 'pielegniar')) {
+                $tokens[] = '"personnel"*';
+                $highlightWords[] = 'personnel';
+            } elseif (str_starts_with($lower, 'oddział') || str_starts_with($lower, 'oddzial') || str_starts_with($lower, 'komórk') || str_starts_with($lower, 'komork')) {
+                $tokens[] = '"org_unit"*';
+                $highlightWords[] = 'org_unit';
             }
         }
 
@@ -197,7 +218,8 @@ class AmmsRagSearch
         string $userQuestion,
         int $topK = 14,
         int $maxContextBytes = 68000,
-        string $pdfBaseUrl = '/docs-pdf/'
+        string $pdfBaseUrl = '/docs-pdf/',
+        bool $forceDbMode = false
     ): array {
         $t0 = microtime(true);
         $parsed = $this->parseQueryTokens($userQuestion);
@@ -208,10 +230,10 @@ class AmmsRagSearch
             return ['context' => '', 'sources' => [], 'stats' => ['ms' => 0, 'chunks' => 0]];
         }
 
-        $isDbQuery = self::isDatabaseOrArchitectureQuery($userQuestion);
+        $isDbQuery = $forceDbMode || self::isDatabaseOrArchitectureQuery($userQuestion);
         // Podział slotów między dokumentację PDF (strony) a strukturę bazy Oracle / architekturę
-        $pdfLimit  = $isDbQuery ? max(5, (int)floor($topK * 0.45)) : max(8, (int)ceil($topK * 0.65));
-        $techLimit = max(5, $topK - $pdfLimit + 2);
+        $pdfLimit  = $isDbQuery ? max(4, (int)floor($topK * 0.35)) : max(8, (int)ceil($topK * 0.65));
+        $techLimit = max(6, $topK - $pdfLimit + 2);
 
         $sqlStream = "
             SELECT
@@ -236,12 +258,38 @@ class AmmsRagSearch
         $stmtPdf->execute();
         $pdfRows = $stmtPdf->fetchAll();
 
-        // Strumień 2: Struktura Bazy Oracle AMMS (01..10, tabele, FK, widoki SQL, PL/SQL, API) z pominięciem duplikatów HTML_czesc
+        // Strumień 2A (Priorytetowy dla zapytań o bazę danych): Czysty Słownik Tabel i Kolumn (01), Relacje FK (02) oraz Widoki SQL (05)
+        $schemaRows = [];
+        if ($isDbQuery) {
+            $stmtSchema = $this->pdo->prepare($sqlStream);
+            $stmtSchema->bindValue(
+                ':query',
+                "({$ftsQuery}) AND (source_file : \"01\" OR source_file : \"02\" OR source_file : \"05\")",
+                PDO::PARAM_STR
+            );
+            $stmtSchema->bindValue(':limit', max(5, (int)ceil($techLimit * 0.7)), PDO::PARAM_INT);
+            $stmtSchema->execute();
+            $schemaRows = $stmtSchema->fetchAll();
+        }
+
+        // Strumień 2B: Pełna Struktura Bazy Oracle AMMS i Architektura (01..10, PL/SQL, BIRT, API) z pominięciem duplikatów HTML_czesc
         $stmtTech = $this->pdo->prepare($sqlStream);
         $stmtTech->bindValue(':query', "({$ftsQuery}) NOT source_file : \"pdf\" NOT source_file : \"HTML_czesc\"", PDO::PARAM_STR);
         $stmtTech->bindValue(':limit', $techLimit, PDO::PARAM_INT);
         $stmtTech->execute();
-        $techRows = $stmtTech->fetchAll();
+        $rawTechRows = $stmtTech->fetchAll();
+
+        // Połączenie czystego słownika tabel/FK/widoków na czele strumienia technicznego (bez duplikatów id)
+        $techRows = [];
+        $seenTechIds = [];
+        foreach (array_merge($schemaRows, $rawTechRows) as $tRow) {
+            $tid = (int)($tRow['id'] ?? 0);
+            if ($tid > 0 && !isset($seenTechIds[$tid])) {
+                $seenTechIds[$tid] = true;
+                $techRows[] = $tRow;
+            }
+        }
+        $techRows = array_slice($techRows, 0, $techLimit);
 
         // Przeplatanie (Interleaving) najlepszych trafień z obu strumieni, aby w kartach wizualnych (Top 6)
         // zawsze znalazły się zarówno strony PDF (str. X), jak i schematy bazy danych Oracle (cz. Y)
