@@ -1522,20 +1522,55 @@ if (!$hasContactLead && is_dir($cacheDir) && !str_starts_with($answer, 'Przepras
     }
 }
 
+// -----------------------------------------------------------------------------
+// 7. CZYSTY ZWROT DANYCH DO FRONTENDU (NATYCHMIASTOWY FLUSH PRZED WEBHOOKAMI)
+// -----------------------------------------------------------------------------
+$finalResponse = [
+    'success' => true,
+    'site_id' => $siteId,
+    'model'   => $usedModel,
+    'cached'  => false,
+    'answer'  => $answer
+];
+if ($isAmmsSite || !empty($ammsSources)) {
+    $finalResponse['sources'] = $ammsSources;
+    $finalResponse['reasoning_tier'] = $ammsReasoningTier;
+    $finalResponse['reasoning_label'] = $ammsReasoningLabel;
+    if ($ammsRagStats !== null) {
+        $finalResponse['rag_stats'] = $ammsRagStats;
+    }
+}
+$jsonBodyOut = (string)json_encode($finalResponse, JSON_UNESCAPED_UNICODE);
+ignore_user_abort(true);
+http_response_code(200);
+header('Connection: close');
+header('Content-Length: ' . strlen($jsonBodyOut));
+echo $jsonBodyOut;
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+} else {
+    while (ob_get_level() > 0) {
+        @ob_end_flush();
+    }
+    flush();
+}
+
 $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
 $leadWebhookUrl = trim((string)(getenv('LEAD_WEBHOOK_URL') ?: ''));
+$osTicketApiKey = trim((string)(getenv('OSTICKET_API_KEY') ?: ''));
+$webhookHeaders = $osTicketApiKey !== '' ? ["X-API-Key: {$osTicketApiKey}"] : [];
 
-// Przekazanie namiarów kontaktowych (e-mail / telefon) od klienta prosto na telefon właściciela (Zero-PII w logach i Prometheusie)
+$priorUserQuestions = [];
+foreach ($sanitizedHistory as $hTurn) {
+    if (($hTurn['role'] ?? '') === 'user' && trim((string)($hTurn['text'] ?? '')) !== '') {
+        $priorUserQuestions[] = '• ' . trim((string)$hTurn['text']);
+    }
+}
+
+// Przekazanie namiarów kontaktowych (e-mail / telefon) od klienta prosto na telefon właściciela, e-mail i do osTicket (Zero-PII w logach i Prometheusie)
 if ($hasContactLead) {
     aiRecordLead($aiSite, 'contact');
     aiLog('contact_lead_captured', ['site' => $aiSite, 'channel' => $contactChannel]);
-
-    $priorUserQuestions = [];
-    foreach ($sanitizedHistory as $hTurn) {
-        if (($hTurn['role'] ?? '') === 'user' && trim((string)($hTurn['text'] ?? '')) !== '') {
-            $priorUserQuestions[] = '• ' . trim((string)$hTurn['text']);
-        }
-    }
 
     if ($ntfyTopic !== '') {
         $leadLines = [];
@@ -1553,6 +1588,10 @@ if ($hasContactLead) {
             $leadLines[]  = "✉️ E-MAIL: {$emailListStr}";
             $titleParts[] = "EMAIL: {$extractedEmails[0]}";
             $ntfyActions[] = "view, Napisz e-mail ({$extractedEmails[0]}), mailto:{$extractedEmails[0]}";
+        }
+
+        if (count($ntfyActions) < 3) {
+            $ntfyActions[] = 'view, Otworz Helpdesk, https://hd.twojastronawww.pl/scp/';
         }
 
         $leadLines[] = "🌐 STRONA: {$aiSite}";
@@ -1608,59 +1647,75 @@ if ($hasContactLead) {
     }
 
     if ($leadWebhookUrl !== '' && filter_var($leadWebhookUrl, FILTER_VALIDATE_URL)) {
-        executeJsonPost($leadWebhookUrl, [
+        $whRes = executeJsonPost($leadWebhookUrl, [
             'event'           => 'contact_lead_captured',
             'site_id'         => $aiSite,
             'channel'         => $contactChannel,
             'phones'          => $extractedPhones,
             'emails'          => $extractedEmails,
             'message'         => $question,
+            'answer'          => $answer,
             'prior_questions' => array_slice($priorUserQuestions, -3),
             'timestamp'       => gmdate('c')
-        ], [], 3);
+        ], $webhookHeaders, 8);
+        if ($whRes['httpCode'] < 200 || $whRes['httpCode'] >= 300) {
+            aiLog('contact_lead_webhook_failed', ['site' => $aiSite, 'http' => $whRes['httpCode']]);
+        }
     }
 } elseif (!$isAmmsSite && count($sanitizedHistory) === 6) {
-    // Detektor aktywnego Leada (Zero-PII): cichy sygnał Ntfy przy 4. pytaniu klienta w sesji rozmowy
+    // Detektor Gorącego Leada (Zero-PII): sygnał Ntfy + osTicket + E-mail przy 4. pytanie klienta w sesji rozmowy
     aiRecordLead($aiSite, 'hot_lead');
     aiLog('hot_lead_detected', ['site' => $aiSite, 'turns' => 4]);
+
     if ($ntfyTopic !== '') {
+        $hotLines = [
+            "🔥 Klient prowadzi zaangażowaną rozmowę (4. pytanie w sesji) na stronie: {$aiSite} (model: {$usedModel}).",
+            "────────────────────────",
+            "💬 Bieżące (4.) pytanie klienta:",
+            "\"{$question}\""
+        ];
+        if (!empty($priorUserQuestions)) {
+            $hotLines[] = "";
+            $hotLines[] = "📋 Wcześniejsze pytania (1-3):";
+            foreach (array_slice($priorUserQuestions, -3) as $pq) {
+                $hotLines[] = $pq;
+            }
+        }
+
         $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");
         curl_setopt_array($chNtfy, [
             CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => "Klient prowadzi zaangażowaną rozmowę (4. pytanie w sesji) na stronie: {$aiSite} (model: {$usedModel}).",
+            CURLOPT_POSTFIELDS     => implode("\n", $hotLines),
             CURLOPT_HTTPHEADER     => [
-                "Title: Aktywny Klient na Czatbocie ({$aiSite})",
-                'Priority: default',
-                'Tags: speech_balloon,fire'
+                "Title: Goracy Lead na Czatbocie ({$aiSite})",
+                'Priority: high',
+                'Tags: speech_balloon,fire',
+                'Actions: view, Otworz Helpdesk, https://hd.twojastronawww.pl/scp/'
             ],
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 2,
-            CURLOPT_CONNECTTIMEOUT => 1
+            CURLOPT_TIMEOUT        => 3,
+            CURLOPT_CONNECTTIMEOUT => 2
         ]);
         @curl_exec($chNtfy);
         curl_close($chNtfy);
     }
-}
 
-// -----------------------------------------------------------------------------
-// 7. CZYSTY ZWROT DANYCH DO FRONTENDU
-// -----------------------------------------------------------------------------
-$finalResponse = [
-    'success' => true,
-    'site_id' => $siteId,
-    'model'   => $usedModel,
-    'cached'  => false,
-    'answer'  => $answer
-];
-if ($isAmmsSite || !empty($ammsSources)) {
-    $finalResponse['sources'] = $ammsSources;
-    $finalResponse['reasoning_tier'] = $ammsReasoningTier;
-    $finalResponse['reasoning_label'] = $ammsReasoningLabel;
-    if ($ammsRagStats !== null) {
-        $finalResponse['rag_stats'] = $ammsRagStats;
+    if ($leadWebhookUrl !== '' && filter_var($leadWebhookUrl, FILTER_VALIDATE_URL)) {
+        $whRes = executeJsonPost($leadWebhookUrl, [
+            'event'           => 'hot_lead_detected',
+            'site_id'         => $aiSite,
+            'channel'         => 'chat_engagement',
+            'phones'          => [],
+            'emails'          => [],
+            'message'         => $question,
+            'answer'          => $answer,
+            'prior_questions' => array_slice($priorUserQuestions, -3),
+            'timestamp'       => gmdate('c')
+        ], $webhookHeaders, 8);
+        if ($whRes['httpCode'] < 200 || $whRes['httpCode'] >= 300) {
+            aiLog('hot_lead_webhook_failed', ['site' => $aiSite, 'http' => $whRes['httpCode']]);
+        }
     }
 }
-http_response_code(200);
-echo json_encode($finalResponse, JSON_UNESCAPED_UNICODE);
 
 
