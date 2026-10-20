@@ -760,18 +760,18 @@ else
         fi
     fi
 
-    # 5c. Kontrola autoryzacji GitHub PAT (github-exporter -> github_repo_created_timestamp > 0 & github_request_failures_total == 0)
+    # 5c. Kontrola autoryzacji GitHub PAT (github-exporter -> github_repo_created_timestamp > 0 & brak świeżych błędów github_request_failures_total w oknie 15m)
     GH_REPOS_COUNT="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=count(github_repo_created_timestamp)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
-    GH_FAILURES="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=sum(github_request_failures_total)' 2>/dev/null | grep -oE '"[0-9]+"\]' | tr -d '"[]' | head -n1 || echo '0')"
+    GH_FAILURES="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=round(sum(increase(github_request_failures_total[15m])))' 2>/dev/null | grep -oE '"[0-9]+(\.[0-9]+)?"\]' | tr -d '"[]' | cut -d'.' -f1 | head -n1 || echo '0')"
     if [[ "${GH_REPOS_COUNT:-0}" -gt 0 ]] && [[ "${GH_FAILURES:-0}" -eq 0 ]]; then
-        pass "Tokeny GitHub PAT (github-exporter) są aktywne i autoryzowane (monitorowane repozytoria: ${GH_REPOS_COUNT}, błędy API: 0)."
+        pass "Tokeny GitHub PAT (github-exporter) są aktywne i autoryzowane (monitorowane repozytoria: ${GH_REPOS_COUNT}, błędy API 15m: 0)."
     else
-        warn "Exporter GitHub zgłasza problem z API GitHub (repozytoria: ${GH_REPOS_COUNT:-0}, błędy: ${GH_FAILURES:-0} — sprawdź ważność GITHUB_PAT_* w .env)."
+        warn "Exporter GitHub zgłasza problem z API GitHub (repozytoria: ${GH_REPOS_COUNT:-0}, błędy 15m: ${GH_FAILURES:-0} — sprawdź ważność GITHUB_PAT_* w .env)."
     fi
 
     # 5d. Kontrola reguły Catch-All (http_status:404) w konfiguracji Ingress tunelu Cloudflare Zero Trust
     CF_INGRESS_CFG="$(docker logs cloudflared 2>&1 | grep -i "Updated to new configuration" | tail -n 1 || true)"
-    if [[ -z "${CF_INGRESS_CFG}" ]] || echo "${CF_INGRESS_CFG}" | grep -q "http_status:404"; then
+    if [[ -z "${CF_INGRESS_CFG}" ]] || [[ "${CF_INGRESS_CFG}" == *"http_status:404"* ]]; then
         pass "Polityka Ingress Tunelu [cloudflared]: reguła catch-all Zero Trust (http_status:404) jest aktywna."
     else
         warn "W konfiguracji Ingress tunelu cloudflared nie wykryto reguły fallback http_status:404!" \
@@ -829,8 +829,8 @@ else
     # 5h. Kontrola Cookieless Web Analytics v3 (5 domen w tym raricart + dancepuls) oraz synchronizatora GSC / IndexNow
     METRICS_BODY="$(curl -s --max-time 4 "http://127.0.0.1:8085/metrics" 2>/dev/null || true)"
     GSC_SCRIPT="${STACK_ROOT}/scripts/sync-gsc-keywords.sh"
-    if echo "${METRICS_BODY}" | grep -q 'web_analytics_unique_visitors_today{site="raricart"}' \
-       && echo "${METRICS_BODY}" | grep -q 'ai_router_question_topics_total' \
+    if [[ "${METRICS_BODY}" == *'web_analytics_unique_visitors_today{site="raricart"}'* ]] \
+       && [[ "${METRICS_BODY}" == *'ai_router_question_topics_total'* ]] \
        && [[ -f "${GSC_SCRIPT}" ]] && bash -n "${GSC_SCRIPT}" 2>/dev/null; then
         pass "Cookieless Web Analytics v3 & SEO Sync (GSC API + IndexNow + Raricart.pl): telemetria 5 domen i skrypt sync-gsc-keywords.sh aktywne."
     else

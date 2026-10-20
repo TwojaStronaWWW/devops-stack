@@ -144,12 +144,12 @@ groups:
           description: "Kontener cloudflared nie eksportuje telemetrii na porcie 2000 od ponad 2 minut - ruch z WAN do ai.twojastronawww.pl moze byc przerwany."
 
       - alert: SSHBruteForceWaveDetected
-        expr: increase(devops_fail2ban_banned_total[15m]) >= 5 or devops_fail2ban_banned_current >= 25
+        expr: increase(devops_fail2ban_banned_total[15m]) >= 15 or devops_fail2ban_banned_current >= 30
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "Aktywna fala ataku Brute-Force na SSH (Fail2Ban zbanowal >= 5 nowych IP w 15 min)"
+          summary: "Aktywna fala ataku Brute-Force na SSH (Fail2Ban zbanowal >= 15 nowych IP w 15 min)"
           description: "Demon IPS Fail2Ban zbanowal nowa fale agresorow lub utrzymuje {{ $value }} jednoczesnych blokad IP na porcie 22 SSH."
 
       - alert: WebsiteCoreWebVitalsLcpSlow
