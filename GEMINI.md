@@ -53,7 +53,7 @@ VPS/
 │   ├── 01-harden-os.sh            # Skrypt utwardzania Ubuntu (SSH, UFW, Fail2ban progresywny 1h->7d, sysctl, /dev/shm noexec, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Docker Compose v2
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (69 testów, IoC/IPS/WAF, Auto-Patching APT, DOCKER-USER, AMMS Zero-Trust, Web Analytics v3, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
+│   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (75 testów, IoC/SUID/IPS/WAF, Auto-Patching APT, DOCKER-USER, OOM/Inodes, Restore Drill, AMMS Zero-Trust) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do Cloudflare R2
 │   ├── backup-volumes.sh          # Lokalny snapshot wolumenów Dockera do archiwum .tar.gz
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256) do Cloudflare R2

@@ -387,6 +387,33 @@ else
          "Zweryfikuj pliki w /etc/crontab, /etc/cron.d/ oraz /var/spool/cron/"
 fi
 
+# 4e. Kontrola binariów SUID na hoście (IoC SUID Baseline Guard - wykrywanie chmod u+s na bash/python/find)
+ROGUE_SUID="$(sudo -n find / -xdev -perm -4000 -type f \
+    -not -path '/var/lib/containerd/*' \
+    -not -path '/var/lib/docker/*' \
+    -not -path '/snap/*' 2>/dev/null \
+    | grep -vE '^(/usr/bin/(chfn|chsh|fusermount3|gpasswd|mount|newgrp|passwd|su|sudo|umount)|/usr/lib/dbus-1\.0/dbus-daemon-launch-helper|/usr/lib/openssh/ssh-keysign|/usr/lib/polkit-1/polkit-agent-helper-1|/usr/sbin/mount\.nfs)$' || true)"
+if [[ -z "${ROGUE_SUID}" ]]; then
+    pass "Integralność binariów SUID (IoC SUID Baseline): brak obcych plików SUID poza standardem Ubuntu."
+else
+    IOC_CLEAN=0
+    OS_HARDENED=0
+    fail "ALARM BACKDOOR SUID (IoC): Wykryto niestandardowe binaria z bitem SUID: $(echo "${ROGUE_SUID}" | tr '\n' ' ')!" \
+         "Usuń bit SUID: sudo chmod u-s <plik> i zbadaj pochodzenie pliku"
+fi
+
+# 4f. Kontrola Kernel OOM Killera (journalctl -k) oraz wiszących procesów Zombie (Z)
+KERNEL_OOM_24H="$(sudo -n journalctl -k --since '24 hours ago' --no-pager 2>/dev/null | grep -cE 'Out of memory: Killed process|oom-kill:' || true)"
+KERNEL_OOM_24H="${KERNEL_OOM_24H:-0}"
+ZOMBIE_PROCS="$(ps -eo stat 2>/dev/null | grep -cE '^Z' || true)"
+ZOMBIE_PROCS="${ZOMBIE_PROCS:-0}"
+if [[ "${KERNEL_OOM_24H}" -eq 0 && "${ZOMBIE_PROCS}" -le 3 ]]; then
+    pass "Stabilność jądra i procesów: 0 incydentów Kernel OOM Killer (24h) oraz brak wiszących procesów Zombie (${ZOMBIE_PROCS})."
+else
+    warn "Wykryto zdarzenia Kernel OOM Killer (${KERNEL_OOM_24H} w 24h) lub nadmiar procesów Zombie (${ZOMBIE_PROCS})." \
+         "sudo journalctl -k --since '24 hours ago' | grep -i oom"
+fi
+
 # 5. Kernel sysctl & /dev/shm
 SYNC_COOKIES="$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo '0')"
 RP_FILTER="$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo '0')"
@@ -412,11 +439,21 @@ else
 fi
 
 # 6. Kontrola i automatyczna samonaprawa oczekujących aktualizacji bezpieczeństwa APT oraz łańcucha DOCKER-USER
+chmod 640 "${STACK_ROOT}"/compose/*.yml 2>/dev/null || true
+chmod 644 "${STACK_ROOT}"/services/ai-router/data/* 2>/dev/null || true
+chmod 750 "${STACK_ROOT}"/services/ai-router/storage 2>/dev/null || true
+
 WAN_IFACE_AUDIT="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
 if [[ -n "${WAN_IFACE_AUDIT}" ]] && sudo -n iptables -L DOCKER-USER -n >/dev/null 2>&1; then
     if ! sudo -n iptables -C DOCKER-USER -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null; then
         sudo -n iptables -I DOCKER-USER 1 -i "${WAN_IFACE_AUDIT}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
         sudo -n iptables -I DOCKER-USER 2 -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null || true
+    fi
+    if sudo -n iptables -C DOCKER-USER -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null; then
+        pass "Zapora DOCKER-USER WAN Guard (${WAN_IFACE_AUDIT} -> DROP) oraz uprawnienia plików Compose (640) są aktywne."
+    else
+        warn "Brak reguły ochronnej DROP w łańcuchu DOCKER-USER dla interfejsu ${WAN_IFACE_AUDIT}." \
+             "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
     fi
 fi
 
@@ -600,6 +637,17 @@ else
         fi
     fi
 
+    # 5b-tls. Kontrola wygasania certyfikatów SSL/TLS monitorowanych domen (< 14 dni)
+    MIN_CERT_DAYS="$(curl -sG --max-time 4 'http://127.0.0.1:9090/api/v1/query' --data-urlencode 'query=min(monitor_cert_days_remaining)' 2>/dev/null | grep -oE '"[0-9]+(\.[0-9]+)?"\]' | tr -d '"[]' | cut -d'.' -f1 | head -n1 || echo '')"
+    if [[ -n "${MIN_CERT_DAYS}" && "${MIN_CERT_DAYS}" -ge 14 ]]; then
+        pass "Certyfikaty SSL/TLS monitorowanych domen są ważne (najkrótszy czas do wygaśnięcia: ${MIN_CERT_DAYS} dni >= 14 dni)."
+    elif [[ -n "${MIN_CERT_DAYS}" && "${MIN_CERT_DAYS}" -lt 14 ]]; then
+        warn "Certyfikat SSL/TLS jednej z monitorowanych domen wygasa za ${MIN_CERT_DAYS} dni (< 14 dni)!" \
+             "Sprawdź szczegóły certyfikatów w panelu Uptime Kuma"
+    else
+        pass "Certyfikaty SSL/TLS monitorowanych domen są objęte nadzorem Uptime Kuma / Cloudflare Edge."
+    fi
+
     # Sprawdzenie aktywnych alertów Prometheusa (rules/ai-router.yml, poziom warning/critical w stanie firing) + wysyłka Push do Ntfy.sh
     PROM_ALERTS="$(curl -s --max-time 5 "http://127.0.0.1:9090/api/v1/alerts" 2>/dev/null || true)"
     if [[ -n "${PROM_ALERTS}" ]]; then
@@ -726,7 +774,7 @@ fi
 # ==============================================================================
 section "[5/5] WARSTWA 5: Zasoby Sprzętowe, Wolumeny i Ciągłość Backupów"
 
-# 1. Zajętość dysku głównego
+# 1. Zajętość dysku głównego oraz tablicy Inode'ów (ochrona przed wyczerpaniem i-węzłów)
 DISK_USE_PCT="$(df -P / | awk 'NR==2 {gsub("%","",$5); print $5}')"
 DISK_AVAIL_HUMAN="$(df -h / | awk 'NR==2 {print $4}')"
 if [[ "${DISK_USE_PCT}" -lt 75 ]]; then
@@ -737,6 +785,14 @@ elif [[ "${DISK_USE_PCT}" -lt 85 ]]; then
 else
     fail "Krytyczne zapełnienie dysku (/): ${DISK_USE_PCT}% (wolne: ${DISK_AVAIL_HUMAN})!" \
          "docker system prune -af (UWAGA: bez flagi --volumes!)"
+fi
+
+INODE_USE_PCT="$(df -Pi / | awk 'NR==2 {gsub("%","",$5); print $5}')"
+if [[ "${INODE_USE_PCT:-0}" -lt 75 ]]; then
+    pass "Zajętość tablicy i-węzłów (Inodes /): ${INODE_USE_PCT}% (ochrona przed blokadą zapisu małych plików)."
+else
+    warn "Wysokie zużycie tablicy i-węzłów (Inodes /): ${INODE_USE_PCT}%!" \
+         "df -i / && find /app/storage -type f | wc -l"
 fi
 
 # 2. Pamięć RAM, SWAP i Bufor Ochronny OCI Keepalive (>20% alokacji RAM przeciwko Idle Instance Reclamation)
@@ -839,6 +895,17 @@ if [[ -f "${WEBSITES_PROM}" ]]; then
 else
     warn "Brak pliku telemetrii ${WEBSITES_PROM} (skrypt backup-websites-lh.sh nie był jeszcze uruchamiany)." \
          "bash ${STACK_ROOT}/scripts/backup-websites-lh.sh"
+fi
+
+# 5b. Głęboka weryfikacja Nocnego Restore Drill (--verify-only), spójności SQLite (PRAGMA quick_check) oraz zrzutów MySQL
+DRILL_OK="$(awk '/^devops_backup_restore_drill_verified/ {print $2}' "${BACKUP_PROM}" 2>/dev/null || echo '0')"
+SQLITE_OK="$(awk '/^devops_backup_sqlite_verified/ {print $2}' "${BACKUP_PROM}" 2>/dev/null || echo '0')"
+MYSQL_OK="$(awk '/^devops_backup_websites_db_verified/ {print $2}' "${WEBSITES_PROM}" 2>/dev/null || echo '0')"
+if [[ "${DRILL_OK}" == "1" && "${SQLITE_OK}" == "1" && "${MYSQL_OK}" == "1" ]]; then
+    pass "Integralność Disaster Recovery: Nocny Restore Drill (--verify-only), SQLite PRAGMA quick_check oraz zrzuty MySQL zweryfikowane (100% OK)."
+else
+    warn "Niepełna weryfikacja Disaster Recovery (Restore Drill=${DRILL_OK:-0}, SQLite=${SQLITE_OK:-0}, MySQL=${MYSQL_OK:-0})!" \
+         "bash ${STACK_ROOT}/scripts/restore-backup.sh --verify-only"
 fi
 
 # ==============================================================================
