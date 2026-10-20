@@ -316,11 +316,15 @@ else
     fail "Usługa Fail2Ban NIE DZIAŁA!" "sudo systemctl enable --now fail2ban"
 fi
 
-# 4. SSH Hardening
-if [[ -f /etc/ssh/sshd_config.d/99-security-hardening.conf ]]; then
-    pass "Konfiguracja SSH Hardening (99-security-hardening.conf) jest wdrożona."
+# 4. SSH Hardening (weryfikacja głębokich dyrektyw CIS Benchmark)
+if [[ -f /etc/ssh/sshd_config.d/99-security-hardening.conf ]] \
+   && grep -qE '^PermitRootLogin no' /etc/ssh/sshd_config.d/99-security-hardening.conf 2>/dev/null \
+   && grep -qE '^PasswordAuthentication no' /etc/ssh/sshd_config.d/99-security-hardening.conf 2>/dev/null \
+   && grep -qE '^AllowUsers ' /etc/ssh/sshd_config.d/99-security-hardening.conf 2>/dev/null \
+   && grep -qE '^AllowAgentForwarding no' /etc/ssh/sshd_config.d/99-security-hardening.conf 2>/dev/null; then
+    pass "Konfiguracja SSH Hardening (PermitRootLogin no, PasswordAuthentication no, AllowUsers, AllowAgentForwarding no) jest aktywna."
 else
-    warn "Brak pliku /etc/ssh/sshd_config.d/99-security-hardening.conf (sprawdź czy uruchomiono 01-harden-os.sh)." \
+    warn "Plik /etc/ssh/sshd_config.d/99-security-hardening.conf nie istnieje lub brakuje w nim pełnych dyrektyw CIS (AllowUsers / AllowAgentForwarding)." \
          "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
 fi
 
@@ -656,9 +660,15 @@ else
              "Sprawdź regułę catch-all w panelu Cloudflare Zero Trust -> Networks -> Tunnels"
     fi
 
-    # 5e. Telemetria WAF Warstwy 7 i 15-minutowego IP Penalty Box w bramce AI Router
+    # 5e. Telemetria WAF Warstwy 7, 15-minutowego IP Penalty Box oraz piaskownicy PHP (open_basedir + disable_functions) w AI Routerze
     WAF_BLOCKED_TOTAL="$(curl -s --max-time 4 "http://127.0.0.1:8085/metrics" 2>/dev/null | awk '/^ai_router_requests_total\{.*outcome="security_blocked"/ {s+=$NF} END {print s+0}')"
-    pass "Strażnik WAF L7 & IP Penalty Box (AI Router): aktywny (zablokowane ataki L7 od startu: ${WAF_BLOCKED_TOTAL:-0})."
+    PHP_SANDBOX_OK="$(docker exec ai-router php -r 'echo (ini_get("open_basedir") === "/app:/tmp" && strpos(ini_get("disable_functions"), "shell_exec") !== false) ? "1" : "0";' 2>/dev/null || echo '0')"
+    if [[ "${PHP_SANDBOX_OK}" == "1" ]]; then
+        pass "Strażnik WAF L7, IP Penalty Box & PHP Sandbox (open_basedir=/app:/tmp, disable_functions): aktywny (zablokowane ataki L7: ${WAF_BLOCKED_TOTAL:-0})."
+    else
+        warn "Kontener ai-router działa, ale brakuje aktywnej piaskownicy php.ini (open_basedir / disable_functions)!" \
+             "Przebuduj kontener: cd ${STACK_ROOT}/compose && docker compose --env-file ../.env -f docker-compose.yml up -d --build ai-router"
+    fi
 
     # 5f. Skaner Anomalii Logów 24h (24h Container Log Error Hunter - pełne 24h zamiast wycinka --tail 6)
     LOG_CRITICAL_24H=0
