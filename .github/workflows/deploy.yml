@@ -56,6 +56,9 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             chmod +x scripts/*.sh
+            chmod 640 "${DEPLOY_PATH}"/compose/*.yml 2>/dev/null || true
+            chmod 644 "${DEPLOY_PATH}"/services/ai-router/data/* 2>/dev/null || true
+            chmod 750 "${DEPLOY_PATH}"/services/ai-router/storage 2>/dev/null || true
             bash "${DEPLOY_PATH}/scripts/setup-audit-timer.sh" >/dev/null 2>&1 || true
             bash "${DEPLOY_PATH}/scripts/setup-backup-timer.sh" >/dev/null 2>&1 || true
 

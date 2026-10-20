@@ -65,14 +65,14 @@
 
 Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/01-harden-os.sh`](file:///e:/Projekty/VPS/scripts/01-harden-os.sh):
 
-### A. Automatyczne Aktualizacje Bezpieczeństwa (Unattended Upgrades)
-- **Codzienna instalacja łatek CVE**: System automatycznie pobiera i instaluje krytyczne poprawki bezpieczeństwa z oficjalnych repozytoriów (`security`), eliminując podatności typu zero-day bez konieczności ręcznego logowania administratora.
+### A. Automatyczne Aktualizacje Bezpieczeństwa (Unattended Upgrades & Auto-Patching APT)
+- **Codzienna instalacja łatek CVE (OS + Docker CE)**: System automatycznie pobiera i instaluje krytyczne poprawki bezpieczeństwa z oficjalnych repozytoriów (`Ubuntu:noble-security`, `Ubuntu:noble-updates` oraz `Docker CE:noble`), a autonomiczny strażnik `audit-server.sh` co 15 minut monitoruje kolejkę APT (`devops_apt_upgradable_packages`) i automatycznie instaluje oczekujące łatki w tle (`Auto-Patching`), eliminując podatności typu zero-day bez konieczności ręcznego logowania administratora.
 - **Higiena pakietów i logów**: Automatyczne usuwanie zbędnych zależności (`Remove-Unused-Kernel-Packages: true`) oraz twardy limit `SystemMaxUse=200M` na logi systemowe `systemd-journald`.
 
-### B. Ochrona Dostępu SSH (Brak Haseł & Blokada Roota) + Kryminalistyczna Kontrola IoC
-- **Blokada konta root**: `PermitRootLogin no` uniemożliwia bezpośrednie logowanie na konto roota.
+### B. Ochrona Dostępu SSH (Brak Haseł, AllowUsers & Blokada Roota) + Kryminalistyczna Kontrola IoC
+- **Blokada konta root i biała lista użytkowników**: `PermitRootLogin no`, `AllowUsers ubuntu` oraz blokada powłoki odziedziczonego konta `opc` (`/usr/sbin/nologin`) uniemożliwiają logowanie na jakiekolwiek inne konto.
 - **Wyłączenie uwierzytelniania hasłem**: `PasswordAuthentication no` całkowicie eliminuje podatność na ataki słownikowe i zgadywanie haseł. Dozwolone są wyłącznie silne klucze asymetryczne (**Ed25519**).
-- **Limit prób logowania**: `MaxAuthTries 3` – rozłączenie sesji po 3 nieudanych próbach.
+- **Limit prób i pełny dziennik audytowy**: `MaxAuthTries 3`, `AllowAgentForwarding no` oraz `LogLevel VERBOSE` (logowanie odcisków kluczy SSH zgodnie z CIS Benchmark).
 - **Wyłączenie zbędnych demonów sieciowych**: `X11Forwarding no` oraz całkowite zamaskowanie `rpcbind.service` / `rpcbind.socket` (port 111).
 - **Kryminalistyczna kontrola śladów włamania (IoC — `devops_security_ioc_clean`)**: Co 15 minut skrypt `audit-server.sh` weryfikuje dziennik `journalctl -u ssh` pod kątem zerowej liczby logowań hasłem/rootem, sprawdza brak obcych kont `UID 0` w `/etc/passwd`, brak procesów uruchomionych z `/tmp` i `/dev/shm`, integralność `/etc/cron*` oraz kontroluje liczbę kluczy w `~/.ssh/authorized_keys`.
 
@@ -90,18 +90,19 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 - **Anti-Spoofing (RP Filter)**: `net.ipv4.conf.all.rp_filter = 1` weryfikuje trasę powrotną pakietów, odrzucając pakiety z podrobionym adresem źródłowym (IP Spoofing).
 - **Blokada ataków MITM (ICMP Redirects)**: Wyłączenie akceptowania i wysyłania przekierowań ICMP (`accept_redirects = 0`).
 - **Ochrona przed atakiem Smurf**: `icmp_echo_ignore_broadcasts = 1` ignoruje zapytania ICMP wysyłane na adresy rozgłoszeniowe.
+- **Utwardzenie wskaźników jądra i eBPF JIT**: `kernel.kptr_restrict = 2`, `kernel.dmesg_restrict = 1`, `kernel.unprivileged_bpf_disabled = 2` oraz `net.core.bpf_jit_harden = 2`.
 
 ### F. Zabezpieczenie Pamięci Współdzielonej (`/dev/shm`)
 - Montowanie pamięci `/dev/shm` z flagami `noexec,nosuid,nodev` w `/etc/fstab` uniemożliwia uruchamianie złośliwych skryptów i binariów w pamięci podręcznej.
 
-### G. Izolacja Usług i Konteneryzacja (Docker Hardening & Network Segmentation)
-- **Binding wyłącznie do localhosta**: Porty usług nasłuchują na `127.0.0.1`, a nie `0.0.0.0` (brak omijania UFW przez iptables Dockera).
+### G. Izolacja Usług i Konteneryzacja (Docker Hardening, `DOCKER-USER` & Network Segmentation)
+- **Binding wyłącznie do localhosta + `DOCKER-USER` WAN Guard**: Porty usług nasłuchują wyłącznie na `127.0.0.1`, a łańcuch `DOCKER-USER` w `iptables` wymusza blokadę nowych połączeń przychodzących z interfejsu WAN (`enp0s6 -> DROP`), uniemożliwiając ominięcie zapory UFW przez demona Docker.
 - **Separacja sieciowa Runnerów CI/CD**: Runnery GitHub Actions działają w odizolowanej sieci `devops_runners_network`, nie mając dostępu sieciowego do wewnętrznej sieci `devops_internal_network`.
-- **PoLP (Zasada Najmniejszych Przywilejów)**:
+- **PoLP (Zasada Najmniejszych Przywilejów) & Piaskownica PHP (`99-security-hardening.ini`)**:
   - Prometheus działa jako użytkownik `nobody` (UID `65534`).
   - Grafana działa jako użytkownik `grafana` (UID `472`) z domyślną rolą `Viewer` dla dostępu bez logowania przez tunel SSH (`GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`).
   - Uptime Kuma ma wymuszone logowanie (`DISABLE_AUTH=false`) i jest dostępna przez tunel SSH (`127.0.0.1:3001`).
-  - AI Router działa jako użytkownik `nobody` z 4 workerami PHP (`PHP_CLI_SERVER_WORKERS=4`).
+  - AI Router działa jako użytkownik `nobody` z 4 workerami PHP (`PHP_CLI_SERVER_WORKERS=4`), wyłączonymi funkcjami powłoki (`disable_functions = exec,passthru,shell_exec,system,proc_open,popen,...`), wyłączonym `file_uploads` oraz `open_basedir = /app:/tmp`.
 - **Flaga bezpieczeństwa**: `security_opt: [no-new-privileges:true]` uniemożliwia eskalację uprawnień z wnętrza któregokolwiek z 13 kontenerów.
 - **Pliki konfiguracyjne w trybie tylko do odczytu**: `prometheus.yml`, `rules/`, `provisioning/` oraz bazy wiedzy `data/` montowane z uprawnieniem `:ro`.
 - **Prewencja zapełnienia dysku**: Rotacja logów kontenerów w `/etc/docker/daemon.json` (`max-size: 10m`, `max-file: 3`).
