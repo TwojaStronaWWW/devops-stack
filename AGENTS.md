@@ -31,7 +31,8 @@ VPS/
 ├── .github/
 │   ├── workflows/
 │   │   ├── lint-compose.yml       # Quality Gate: walidacja Compose, składni skryptów i higieny
-│   │   └── deploy.yml             # Automatyczny deploy po SSH na VPS + flush DNS nscd + audyt powykonawczy
+│   │   ├── deploy.yml             # Automatyczny deploy po SSH na VPS + flush DNS nscd + audyt powykonawczy
+│   │   └── external-watchdog.yml  # Zewnętrzny Dead Man's Switch (WAN Watchdog z chmury GitHub -> Ntfy.sh)
 │   ├── ISSUE_TEMPLATE/            # Szablony zgłoszeń incydentów i zadań infrastrukturalnych
 │   ├── pull_request_template.md   # Checklista weryfikacyjna dla zmian infrastrukturalnych
 │   └── dependabot.yml             # Nadzór nad wersjami akcji GitHub i obrazów Docker
@@ -45,12 +46,12 @@ VPS/
 ├── config/
 │   ├── grafana/                   # Provisioning źródeł danych (uid: prometheus) i 3 dashboardów (Centrum Monitoringu + AI Router + Analityka WWW & SEO)
 │   ├── node-exporter/             # Prometheus Textfile Collector (*.prom z telemetrią backupów, Fail2ban IPS, IoC i audytu)
-│   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 18 reguł alertów (rules/ai-router.yml)
+│   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 21 reguł alertów (rules/ai-router.yml)
 ├── docs/
 │   ├── AI_ROUTER_RAPORT.md        # Dokumentacja operacyjna, metryki, cache RAG, WAF/Penalty Box, Analityka WWW i raportowanie AI Routera
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Przewodnik konfiguracji tuneli Cloudflare
 ├── scripts/
-│   ├── 01-harden-os.sh            # Skrypt utwardzania Ubuntu (SSH, UFW, Fail2ban progresywny 1h->7d, sysctl, /dev/shm noexec, journald 200M)
+│   ├── 01-harden-os.sh            # Skrypt utwardzania Ubuntu (SSH, UFW, Fail2ban 1h->7d, sysctl + TCP BBR + inotify, NTP ISO 27001, SWAP 2GB, DOCKER-USER systemd hook, /dev/shm noexec, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Docker Compose v2
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
 │   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (75 testów, IoC/SUID/IPS/WAF, Auto-Patching APT, DOCKER-USER, OOM/Inodes, Restore Drill, AMMS Zero-Trust) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)

@@ -49,8 +49,11 @@ cat << 'EOF' > /etc/docker/daemon.json
 }
 EOF
 
-# 7. Start i włączenie usługi
+# 7. Start i włączenie usługi + aktywacja strażnika DOCKER-USER (jeśli skonfigurowany)
 systemctl enable --now docker 2>/dev/null || service docker start 2>/dev/null || true
+if [[ -x /usr/local/sbin/devops-docker-user-guard.sh ]]; then
+    /usr/local/sbin/devops-docker-user-guard.sh 2>/dev/null || true
+fi
 
 # 8. Dodanie użytkownika do grupy docker
 usermod -aG docker "${TARGET_USER}"

@@ -35,6 +35,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       '.github/dependabot.yml',
       '.github/workflows/lint-compose.yml',
       '.github/workflows/deploy.yml',
+      '.github/workflows/external-watchdog.yml',
     ];
 
     for (const doc of requiredDocs) {
@@ -357,6 +358,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'SSLCertificateExpiringSoon',
       'VPSHostDiskSpaceLow',
       'VPSHostMemoryLow',
+      'VPSHostHighCPU',
+      'VPSHostInodesLow',
+      'VPSClockNotSynchronized',
     ]) {
       assert.match(rulesContent, new RegExp(`alert:\\s*${alertName}`));
     }
@@ -466,6 +470,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const auditSh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'audit-server.sh'), 'utf-8');
     assert.match(auditSh, /docker image prune -f/);
     assert.match(auditSh, /devops_oci_keepalive_buffer_bytes/);
+    assert.match(auditSh, /devops_ntp_synchronized/);
     assert.match(auditSh, /github_request_failures_total/);
     assert.match(auditSh, /devops_waf_blocked_total/);
     assert.match(auditSh, /devops_log_critical_24h_total/);

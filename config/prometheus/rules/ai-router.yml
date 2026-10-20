@@ -170,3 +170,31 @@ groups:
           summary: "Wykryto slady kompromitacji IoC lub blad krytyczny audytu bezpieczenstwa VPS"
           description: "Straznik 24/7 (audit-server.sh) zglosil naruszenie integralnosci IoC (devops_security_ioc_clean=0) lub awarie warstwy obronnej (devops_audit_status=0)."
 
+      - alert: VPSHostHighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Wysokie obciazenie procesora ARM64 na hoscie VPS (> 85% przez 10 min)"
+          description: "Srednie zuzycie 4 rdzeni Ampere Altra wynosi {{ $value | printf \"%.1f\" }}% - sprawdz aktywne zadania CI/CD lub zawieszone procesy."
+
+      - alert: VPSHostInodesLow
+        expr: (node_filesystem_files_free{mountpoint="/"} / node_filesystem_files{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Malo wolnych i-wezlow (Inodes < 20%) na partycji glownej VPS"
+          description: "Pozostalo {{ $value | printf \"%.1f\" }}% wolnych i-wezlow na / - ryzyko zablokowania zapisu nowych plikow."
+
+      - alert: VPSClockNotSynchronized
+        expr: devops_ntp_synchronized == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Zegar systemowy VPS stracil synchronizacje atomowa NTP (ISO 27001 A.8.17)"
+          description: "Usługa systemd-timesyncd nie synchronizuje czasu (devops_ntp_synchronized=0) - ryzyko odrzucenia backupow S3/R2 i tokenow OAuth2 JWT."
+
+

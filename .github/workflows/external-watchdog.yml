@@ -1,0 +1,74 @@
+name: External Dead Man's Switch (WAN Watchdog)
+
+on:
+  schedule:
+    # Zewnętrzny strażnik uruchamiany z chmury GitHub (niezależnie od serwerowni Oracle Cloud)
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: external-wan-watchdog
+  cancel-in-progress: true
+
+jobs:
+  wan-heartbeat:
+    name: External WAN Probe (Cloudflare Tunnel & VPS SSH)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: 1. Weryfikacja dostępności krawędziowej AI Routera i Tunelu Cloudflare Zero Trust (WAN)
+        id: probe
+        env:
+          TARGET_URL: "https://ai.twojastronawww.pl/health"
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          set +e
+          TUNNEL_OK=0
+          LAST_CODE="000"
+          for attempt in 1 2 3; do
+            BODY_AND_CODE="$(curl -sS --max-time 8 -w "\n%{http_code}" "${TARGET_URL}" 2>/dev/null)"
+            HTTP_CODE="$(echo "${BODY_AND_CODE}" | tail -n1)"
+            BODY="$(echo "${BODY_AND_CODE}" | head -n -1)"
+            LAST_CODE="${HTTP_CODE}"
+            if [[ "${HTTP_CODE}" == "200" ]] && echo "${BODY}" | grep -q '"status":"UP"'; then
+              echo "✅ [Próba ${attempt}/3] Zewnętrzny probe WAN (${TARGET_URL}) -> HTTP 200 (status: UP)"
+              TUNNEL_OK=1
+              break
+            fi
+            echo "⚠️ [Próba ${attempt}/3] Brak poprawnej odpowiedzi z ${TARGET_URL} (HTTP ${HTTP_CODE}). Ponawianie za 5s..."
+            sleep 5
+          done
+
+          SSH_OK=1
+          if [[ -n "${VPS_HOST}" ]]; then
+            if nc -zv -w 6 "${VPS_HOST}" 22 >/dev/null 2>&1; then
+              echo "✅ Zewnętrzny probe TCP SSH (${VPS_HOST}:22) -> OTWARTY / ŻYWY"
+            else
+              echo "❌ Zewnętrzny probe TCP SSH (${VPS_HOST}:22) -> BRAK ODPOWIEDZI!"
+              SSH_OK=0
+            fi
+          fi
+
+          if [[ "${TUNNEL_OK}" -eq 1 && "${SSH_OK}" -eq 1 ]]; then
+            echo "🎯 Werdykt Dead Man's Switch: Infrastruktura VPS i Tunel Cloudflare działają prawidłowo z sieci WAN."
+            exit 0
+          fi
+
+          ALERT_MSG="Zewnętrzny strażnik (GitHub Cloud Dead Man's Switch) wykrył niedostępność serwera VPS z sieci WAN!
+          • Endpoint: ${TARGET_URL} -> HTTP ${LAST_CODE} (Tunnel OK=${TUNNEL_OK})
+          • Port SSH (22/tcp): OK=${SSH_OK}
+          • Czas wykrycia: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          Sprawdź konsolę Oracle Cloud Infrastructure (OCI) oraz panel Cloudflare Zero Trust."
+
+          if [[ -n "${NTFY_TOPIC}" ]]; then
+            curl -sS --max-time 8 \
+              -H "Title: 🚨 DEAD MAN'S SWITCH: Serwer VPS / Tunel NIE ODPOWIADA z WAN!" \
+              -H "Priority: urgent" \
+              -H "Tags: rotating_light,skull" \
+              -d "${ALERT_MSG}" \
+              "https://ntfy.sh/${NTFY_TOPIC}" >/dev/null 2>&1 || true
+          fi
+
+          echo "::error::${ALERT_MSG}"
+          exit 1

@@ -176,11 +176,27 @@ kernel.kptr_restrict = 2
 kernel.dmesg_restrict = 1
 kernel.unprivileged_bpf_disabled = 2
 net.core.bpf_jit_harden = 2
+
+# Algorytm kontroli przeciążenia Google TCP BBR (wyższa przepustowość i niższe opóźnienia tunelu Cloudflare i R2)
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+
+# Zwiększone limity inotify dla 12+ kontenerów Docker i runnerów CI/CD (ochrona przed "inotify watch limit reached")
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+
+# Optymalizacja zarządzania pamięcią wirtualną i Page Cache (dla SQLite FTS5 i TSDB)
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
 EOF
 
+modprobe tcp_bbr 2>/dev/null || true
 sysctl --system >/dev/null 2>&1 || true
 
 # Ochrona łańcucha DOCKER-USER przed przypadkowym wystawieniem portu kontenera na interfejs WAN
+# + Natychmiastowy hook systemd (ExecStartPost) nakładający regułę w 0ms po każdym starcie/restarcie docker.service
+cat << 'EOF' > /usr/local/sbin/devops-docker-user-guard.sh
+#!/usr/bin/env bash
 WAN_IFACE="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
 if [[ -n "${WAN_IFACE}" ]] && iptables -L DOCKER-USER -n >/dev/null 2>&1; then
     iptables -D DOCKER-USER -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
@@ -188,6 +204,16 @@ if [[ -n "${WAN_IFACE}" ]] && iptables -L DOCKER-USER -n >/dev/null 2>&1; then
     iptables -I DOCKER-USER 1 -i "${WAN_IFACE}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
     iptables -I DOCKER-USER 2 -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
 fi
+EOF
+chmod 700 /usr/local/sbin/devops-docker-user-guard.sh
+
+mkdir -p /etc/systemd/system/docker.service.d
+cat << 'EOF' > /etc/systemd/system/docker.service.d/10-docker-user-guard.conf
+[Service]
+ExecStartPost=-/usr/local/sbin/devops-docker-user-guard.sh
+EOF
+systemctl daemon-reload 2>/dev/null || true
+/usr/local/sbin/devops-docker-user-guard.sh 2>/dev/null || true
 
 # Zabezpieczenie pamięci współdzielonej /dev/shm przed uruchamianiem exploitów
 if grep -q " /dev/shm " /etc/fstab 2>/dev/null; then
@@ -198,29 +224,31 @@ fi
 mount -o remount,noexec,nosuid,nodev /dev/shm 2>/dev/null || true
 
 echo "======================================================================"
-echo ">> [9/9] Optymalizacja pamięci SWAP (Ochrona przed OOM Killerem)..."
+echo ">> [9/9] Optymalizacja pamięci SWAP, NTP (ISO 27001 A.8.17) i Journald..."
 echo "======================================================================"
+# Wymuszenie synchronizacji zegara atomowego NTP (wymóg ISO 27001 A.8.17 / S3 R2 / OAuth2 JWT)
+timedatectl set-ntp true 2>/dev/null || true
+systemctl enable --now systemd-timesyncd 2>/dev/null || true
+
 TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
 CURRENT_SWAP_MB=$(free -m | awk '/^Swap:/{print $2}')
 
-if [[ "${TOTAL_MEM_MB}" -le 2048 ]] && [[ "${CURRENT_SWAP_MB}" -lt 1024 ]]; then
-    echo "Wykryto serwer z małą ilością pamięci RAM (${TOTAL_MEM_MB}MB). Konfiguracja 2GB pliku SWAP..."
+if [[ "${CURRENT_SWAP_MB}" -lt 1024 ]]; then
+    echo "Brak aktywnego pliku SWAP (RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB). Konfiguracja 2GB poduszki SWAP..."
     if [[ ! -f /swapfile ]]; then
         fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048
         chmod 600 /swapfile
         mkswap /swapfile
-        swapon /swapfile
-        if ! grep -q '/swapfile' /etc/fstab; then
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
-        fi
-        sysctl vm.swappiness=10
-        sysctl vm.vfs_cache_pressure=50
-        echo "vm.swappiness=10" >> /etc/sysctl.d/99-security-hardening.conf
-        echo "vm.vfs_cache_pressure=50" >> /etc/sysctl.d/99-security-hardening.conf
-        echo ">> Utworzono i aktywowano 2GB SWAP (swappiness=10)."
     fi
+    swapon /swapfile 2>/dev/null || true
+    if ! grep -q '/swapfile' /etc/fstab; then
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+    sysctl vm.swappiness=10 >/dev/null 2>&1 || true
+    sysctl vm.vfs_cache_pressure=50 >/dev/null 2>&1 || true
+    echo ">> Utworzono i aktywowano 2GB SWAP (swappiness=10, vfs_cache_pressure=50)."
 else
-    echo "Dostępny RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB - pomijanie tworzenia pliku SWAP."
+    echo "Dostępny RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB - poduszka SWAP aktywna."
 fi
 
 # Ograniczenie rozmiaru logów systemowych systemd-journald do 200 MB (ochrona dysku 96 GB)

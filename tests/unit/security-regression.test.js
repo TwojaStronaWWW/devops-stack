@@ -100,6 +100,11 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(hardenScript, /net\.ipv4\.conf\.all\.rp_filter\s*=\s*1/);
       assert.match(hardenScript, /kernel\.kptr_restrict\s*=\s*2/);
       assert.match(hardenScript, /net\.core\.bpf_jit_harden\s*=\s*2/);
+      assert.match(hardenScript, /net\.ipv4\.tcp_congestion_control\s*=\s*bbr/);
+      assert.match(hardenScript, /fs\.inotify\.max_user_instances\s*=\s*512/);
+      assert.match(hardenScript, /vm\.swappiness\s*=\s*10/);
+      assert.match(hardenScript, /devops-docker-user-guard\.sh/);
+      assert.match(hardenScript, /timedatectl set-ntp true/);
       assert.match(hardenScript, /noexec,nosuid,nodev/);
       assert.match(hardenScript, /SystemMaxUse=200M/);
 

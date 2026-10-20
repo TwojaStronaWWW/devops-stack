@@ -414,7 +414,7 @@ else
          "sudo journalctl -k --since '24 hours ago' | grep -i oom"
 fi
 
-# 5. Kernel sysctl & /dev/shm
+# 5. Kernel sysctl (Anti-Spoofing, Google TCP BBR, fs.inotify) & /dev/shm
 SYNC_COOKIES="$(sysctl -n net.ipv4.tcp_syncookies 2>/dev/null || echo '0')"
 RP_FILTER="$(sysctl -n net.ipv4.conf.all.rp_filter 2>/dev/null || echo '0')"
 if [[ "${SYNC_COOKIES}" == "1" && "${RP_FILTER}" == "1" ]]; then
@@ -422,6 +422,56 @@ if [[ "${SYNC_COOKIES}" == "1" && "${RP_FILTER}" == "1" ]]; then
 else
     warn "Parametry sysctl nie są w pełni utwardzone (syncookies=${SYNC_COOKIES}, rp_filter=${RP_FILTER})." \
          "sudo sysctl --system"
+fi
+
+# 5a. Kontrola i samonaprawa sterownika Google TCP BBR oraz limitów fs.inotify (dla 12+ kontenerów i runnerów CI/CD)
+TCP_CC="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 'cubic')"
+INOTIFY_INST="$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo '128')"
+if [[ "${TCP_CC}" != "bbr" || "${INOTIFY_INST:-0}" -lt 512 ]]; then
+    sudo -n modprobe tcp_bbr 2>/dev/null || true
+    sudo -n sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+    sudo -n sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+    sudo -n sysctl -w fs.inotify.max_user_watches=524288 >/dev/null 2>&1 || true
+    sudo -n sysctl -w fs.inotify.max_user_instances=512 >/dev/null 2>&1 || true
+    sudo -n sysctl -w vm.swappiness=10 >/dev/null 2>&1 || true
+    sudo -n sysctl -w vm.vfs_cache_pressure=50 >/dev/null 2>&1 || true
+    if [[ -f /etc/sysctl.d/99-security-hardening.conf ]] && ! grep -q "tcp_congestion_control" /etc/sysctl.d/99-security-hardening.conf 2>/dev/null; then
+        sudo -n bash -c 'cat << "EOF" >> /etc/sysctl.d/99-security-hardening.conf
+
+# Algorytm kontroli przeciazenia Google TCP BBR i limity inotify
+net.core.default_qdisc = fq
+net.ipv4.tcp_congestion_control = bbr
+fs.inotify.max_user_watches = 524288
+fs.inotify.max_user_instances = 512
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+EOF' 2>/dev/null || true
+    fi
+    TCP_CC="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo 'cubic')"
+    INOTIFY_INST="$(sysctl -n fs.inotify.max_user_instances 2>/dev/null || echo '128')"
+fi
+if [[ "${TCP_CC}" == "bbr" && "${INOTIFY_INST:-0}" -ge 512 ]]; then
+    pass "Optymalizacja sieci i kontenerów jądra: Google TCP BBR (${TCP_CC}) oraz fs.inotify (instances=${INOTIFY_INST}) są aktywne."
+else
+    warn "Brak aktywnego sterownika TCP BBR (${TCP_CC}) lub niski limit inotify (${INOTIFY_INST})." \
+         "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
+fi
+
+# 5b. Kontrola synchronizacji zegara atomowego NTP (wymóg ISO 27001 A.8.17 / Cloudflare R2 SigV4 / OAuth2 JWT)
+NTP_SYNCED=0
+NTP_STATE="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo 'no')"
+if [[ "${NTP_STATE}" != "yes" ]]; then
+    sudo -n timedatectl set-ntp true 2>/dev/null || true
+    sudo -n systemctl restart systemd-timesyncd 2>/dev/null || true
+    sleep 1
+    NTP_STATE="$(timedatectl show -p NTPSynchronized --value 2>/dev/null || echo 'no')"
+fi
+if [[ "${NTP_STATE}" == "yes" ]]; then
+    NTP_SYNCED=1
+    pass "Synchronizacja czasu atomowego NTP (ISO 27001 A.8.17): zegar zsynchronizowany (NTPSynchronized=yes)."
+else
+    warn "Zegar systemowy nie jest zsynchronizowany przez NTP (NTPSynchronized=${NTP_STATE} — ryzyko błędów S3 R2 i JWT)!" \
+         "sudo timedatectl set-ntp true && sudo systemctl restart systemd-timesyncd"
 fi
 
 if mount | grep " /dev/shm " | grep -q "noexec"; then
@@ -438,10 +488,30 @@ else
     pass "Jądro systemu jest aktualne (brak oczekującego restartu /var/run/reboot-required)."
 fi
 
-# 6. Kontrola i automatyczna samonaprawa oczekujących aktualizacji bezpieczeństwa APT oraz łańcucha DOCKER-USER
+# 6. Kontrola i automatyczna samonaprawa oczekujących aktualizacji bezpieczeństwa APT oraz łańcucha DOCKER-USER (+ systemd ExecStartPost hook)
 chmod 640 "${STACK_ROOT}"/compose/*.yml 2>/dev/null || true
 chmod 644 "${STACK_ROOT}"/services/ai-router/data/* 2>/dev/null || true
 chmod 750 "${STACK_ROOT}"/services/ai-router/storage 2>/dev/null || true
+
+if [[ ! -f /etc/systemd/system/docker.service.d/10-docker-user-guard.conf ]]; then
+    sudo -n bash -c 'cat << "EOF" > /usr/local/sbin/devops-docker-user-guard.sh
+#!/usr/bin/env bash
+WAN_IFACE="$(ip route show default 2>/dev/null | awk '\''{print $5; exit}'\'')"
+if [[ -n "${WAN_IFACE}" ]] && iptables -L DOCKER-USER -n >/dev/null 2>&1; then
+    iptables -D DOCKER-USER -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
+    iptables -D DOCKER-USER -i "${WAN_IFACE}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
+    iptables -I DOCKER-USER 1 -i "${WAN_IFACE}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
+    iptables -I DOCKER-USER 2 -i "${WAN_IFACE}" -j DROP 2>/dev/null || true
+fi
+EOF
+chmod 700 /usr/local/sbin/devops-docker-user-guard.sh
+mkdir -p /etc/systemd/system/docker.service.d
+cat << "EOF" > /etc/systemd/system/docker.service.d/10-docker-user-guard.conf
+[Service]
+ExecStartPost=-/usr/local/sbin/devops-docker-user-guard.sh
+EOF
+systemctl daemon-reload' 2>/dev/null || true
+fi
 
 WAN_IFACE_AUDIT="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
 if [[ -n "${WAN_IFACE_AUDIT}" ]] && sudo -n iptables -L DOCKER-USER -n >/dev/null 2>&1; then
@@ -449,10 +519,10 @@ if [[ -n "${WAN_IFACE_AUDIT}" ]] && sudo -n iptables -L DOCKER-USER -n >/dev/nul
         sudo -n iptables -I DOCKER-USER 1 -i "${WAN_IFACE_AUDIT}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN 2>/dev/null || true
         sudo -n iptables -I DOCKER-USER 2 -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null || true
     fi
-    if sudo -n iptables -C DOCKER-USER -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null; then
-        pass "Zapora DOCKER-USER WAN Guard (${WAN_IFACE_AUDIT} -> DROP) oraz uprawnienia plików Compose (640) są aktywne."
+    if sudo -n iptables -C DOCKER-USER -i "${WAN_IFACE_AUDIT}" -j DROP 2>/dev/null && [[ -f /etc/systemd/system/docker.service.d/10-docker-user-guard.conf ]]; then
+        pass "Zapora DOCKER-USER WAN Guard (${WAN_IFACE_AUDIT} -> DROP + systemd ExecStartPost hook) oraz uprawnienia Compose (640) są aktywne."
     else
-        warn "Brak reguły ochronnej DROP w łańcuchu DOCKER-USER dla interfejsu ${WAN_IFACE_AUDIT}." \
+        warn "Brak reguły ochronnej DROP lub hooka systemd w łańcuchu DOCKER-USER dla interfejsu ${WAN_IFACE_AUDIT}." \
              "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
     fi
 fi
@@ -814,6 +884,32 @@ fi
 MEM_INFO="$(free -h | awk '/^Mem:/ {print "Użyte przez usługi: "$3" / "$2" (Dostępne: "$7")"}')"
 pass "Pamięć RAM hosta: ${MEM_INFO} + Bufor Ochronny OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB (>20% RAM)."
 
+# 2-swap. Kontrola i automatyczna samonaprawa poduszki bezpieczeństwa SWAP (2 GB) oraz vm.swappiness=10
+SWAP_TOTAL_MB="$(free -m | awk '/^Swap:/ {print $2}')"
+if [[ "${SWAP_TOTAL_MB:-0}" -lt 1024 ]]; then
+    sudo -n bash -c '
+        if [[ ! -f /swapfile ]]; then
+            fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null 2>&1
+        fi
+        swapon /swapfile 2>/dev/null || true
+        if ! grep -q "/swapfile" /etc/fstab 2>/dev/null; then
+            echo "/swapfile none swap sw 0 0" >> /etc/fstab
+        fi
+        sysctl -w vm.swappiness=10 >/dev/null 2>&1 || true
+        sysctl -w vm.vfs_cache_pressure=50 >/dev/null 2>&1 || true
+    ' 2>/dev/null || true
+    SWAP_TOTAL_MB="$(free -m | awk '/^Swap:/ {print $2}')"
+fi
+SWAPPINESS_VAL="$(sysctl -n vm.swappiness 2>/dev/null || echo '60')"
+if [[ "${SWAP_TOTAL_MB:-0}" -ge 1024 ]]; then
+    pass "Poduszka bezpieczeństwa SWAP: aktywna (${SWAP_TOTAL_MB} MiB, vm.swappiness=${SWAPPINESS_VAL} — ochrona Page Cache dla SQLite FTS5 i OOM)."
+else
+    warn "Brak aktywnej przestrzeni SWAP (${SWAP_TOTAL_MB:-0} MiB < 1024 MiB)!" \
+         "sudo bash ${STACK_ROOT}/scripts/01-harden-os.sh"
+fi
+
 # 2a. Higiena obrazów Dockera (wykrywanie i samonaprawa osieroconych warstw <none>)
 DANGLING_IMAGES="$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')"
 if [[ "${DANGLING_IMAGES:-0}" -gt 0 ]]; then
@@ -986,6 +1082,10 @@ devops_log_critical_24h_total ${LOG_CRITICAL_24H:-0}
 # HELP devops_apt_upgradable_packages Liczba oczekujacych aktualizacji pakietow APT na hoscie
 # TYPE devops_apt_upgradable_packages gauge
 devops_apt_upgradable_packages ${APT_PENDING_COUNT:-0}
+
+# HELP devops_ntp_synchronized Status synchronizacji zegara atomowego NTP (1 = zsynchronizowany, 0 = brak synchronizacji)
+# TYPE devops_ntp_synchronized gauge
+devops_ntp_synchronized ${NTP_SYNCED:-1}
 EOF
     mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
     chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
@@ -1306,12 +1406,13 @@ PYEOF
                 rm -f "${XRAY_FILE}" 2>/dev/null || true
             fi
 
-            MORNING_BODY="✅ Wynik (68 testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+            TOTAL_TESTS=$((OK_COUNT + WARN_COUNT + FAIL_COUNT))
+            MORNING_BODY="✅ Wynik (${TOTAL_TESTS} testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
-🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | ${MEM_INFO}
+🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | SWAP ${SWAP_TOTAL_MB:-0}M | ${MEM_INFO}
 📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}
 🔍 Puls SEO & AI: Top temat AI: ${WA_TOP_TOPIC:-brak} | Top fraza: ${WA_TOP_TERM:-brak}
-🛡️ Ochrona: Kuma Auth OK (401) | WAF L7 blokady: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
+🛡️ Ochrona: NTP=${NTP_STATE:-yes} | BBR=${TCP_CC:-bbr} | WAF L7: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
                 MORNING_BODY="${MORNING_BODY}
 
