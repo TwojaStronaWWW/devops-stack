@@ -119,7 +119,8 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── dependabot.yml             # Comiesięczny nadzór nad wersjami akcji i obrazów Docker
 │   └── workflows/
 │       ├── lint-compose.yml       # Quality Gate: walidacja Compose, składni skryptów i higieny
-│       └── deploy.yml             # Automatyczny deploy po SSH + flush DNS nscd + audyt powykonawczy
+│       ├── deploy.yml             # Automatyczny deploy po SSH + flush DNS nscd + audyt powykonawczy
+│       └── external-watchdog.yml  # Zewnętrzny Dead Man's Switch (WAN Watchdog z chmury GitHub -> Ntfy.sh)
 ├── .githooks/
 │   ├── pre-commit                 # Git hook blokujący wycieki sekretów (.env, .env.bak*, *.pem, *.key)
 │   └── commit-msg                 # Git hook wymuszający format Conventional Commits
@@ -131,7 +132,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── prometheus/
 │   │   ├── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter, AI Router (/metrics co 5s)
 │   │   └── rules/
-│   │       └── ai-router.yml      # 18 reguł alertów Prometheusa (kaskada AI, WAF, Fail2Ban IPS, IoC, certyfikaty, dysk, RAM, backupy)
+│   │       └── ai-router.yml      # 21 reguł alertów Prometheusa (kaskada AI, WAF, Fail2Ban IPS, IoC, CPU, Inodes, NTP, certyfikaty, dysk, RAM, backupy)
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/       # Automatyczne podpinanie Prometheus API (uid: prometheus)
@@ -140,10 +141,10 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── AI_ROUTER_RAPORT.md        # Dokumentacja telemetrii, metryk, cache'u RAG, WAF, Analityki WWW i raportowania AI Routera
 │   └── CLOUDFLARE_STAGING_GUIDE.md# Poradnik testowania stagingu bez publicznych subdomen
 ├── scripts/
-│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001, Fail2ban progresywny 1h->7d, journald 200M)
+│   ├── 01-harden-os.sh            # Skrypt pełnego hardeningu systemu Ubuntu (ISO 27001, Fail2ban 1h->7d, TCP BBR, inotify, NTP, SWAP 2GB, DOCKER-USER systemd hook, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Compose v2 z optymalizacją pod VPS
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # 5-warstwowy audyt (68 testów, IoC/IPS/WAF, AMMS Zero-Trust, Web Analytics v3, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
+│   ├── audit-server.sh            # 5-warstwowy audyt (78 testów, IoC/SUID/IPS/WAF, NTP, BBR, SWAP, AMMS Zero-Trust, Web Analytics v3, 24h Log Hunter) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do chmury R2
 │   ├── backup-volumes.sh          # Bezpieczny lokalny backup wolumenów :ro z retencją 7 dni
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z hostingu LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256)

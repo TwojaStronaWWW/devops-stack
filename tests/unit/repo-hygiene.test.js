@@ -317,6 +317,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'devops_backup_websites_db_verified',
       'devops_audit_status',
       'devops_fail2ban_banned_total',
+      'devops_ntp_synchronized',
+      'devops_security_ioc_clean',
+      'devops_backup_restore_drill_verified',
       'ai_router_amms_sqlite_status',
       'ai_router_amms_sqlite_size_bytes',
     ]) {
