@@ -278,8 +278,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const router = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
     assert.match(router, /require_once __DIR__ \. '\/ai-stats\.php'/);
     assert.match(router, /register_shutdown_function/);
-    // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey/$cerebrasApiKey/$cfAiToken
-    assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|cerebrasApiKey|cfAiToken|openRouterApiKey)/.test(router), false);
+    // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey/$cerebrasApiKey/$mistralApiKey/$cfAiToken
+    assert.strictEqual(/aiLog\([^;]*\$(question|knowledgeContent|geminiApiKey|groqApiKey|cerebrasApiKey|mistralApiKey|cfAiToken|openRouterApiKey)/.test(router), false);
     assert.strictEqual(router.includes('csk-'), false, 'Wykryto zahardkodowany klucz Cerebras API w chat-router.php');
     assert.strictEqual(router.includes('cfut_'), false, 'Wykryto zahardkodowany token Cloudflare Workers AI w chat-router.php');
   });
@@ -563,6 +563,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(routerPhp, /\/amms-page/);
     assert.match(routerPhp, /\['sources'\]\s*=\s*\$ammsSources/);
     assert.match(routerPhp, /\['reasoning_tier'\]\s*=\s*\$ammsReasoningTier/);
+    // Gwarancja izolacji modeli SQL (codestral-latest / cohere/north-mini-code:free) wyłącznie dla Asystenta AMMS ($isAmmsSite && $isAmmsDbQuery)
+    assert.match(routerPhp, /\$isAmmsSite\s*&&\s*\$isAmmsDbQuery\s*&&\s*\$mistralApiKey\s*!==\s*''/);
+    assert.match(routerPhp, /\$orModel\s*===\s*'cohere\/north-mini-code:free'\s*&&\s*!\(\$isAmmsSite\s*&&\s*\$isAmmsDbQuery\)/);
 
     assert.match(teamsHtml, /renderPageSnapshotDataUrl/);
     assert.match(teamsHtml, /openLightboxForSource/);

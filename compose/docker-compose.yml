@@ -311,6 +311,8 @@ services:
       - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
       - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
       - CEREBRAS_MODEL=${CEREBRAS_MODEL:-gpt-oss-120b}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - MISTRAL_SQL_MODEL=${MISTRAL_SQL_MODEL:-codestral-latest}
       - CF_AI_API_TOKEN=${CF_AI_API_TOKEN:-}
       - CF_ACCOUNT_ID=${CF_ACCOUNT_ID:-}
       - CF_AI_MODEL=${CF_AI_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}

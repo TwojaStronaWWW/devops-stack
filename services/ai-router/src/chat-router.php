@@ -910,13 +910,14 @@ if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheF
 $geminiApiKey = getenv('GEMINI_API_KEY') ?: '';
 $groqApiKey = getenv('GROQ_API_KEY') ?: '';
 $cerebrasApiKey = getenv('CEREBRAS_API_KEY') ?: '';
+$mistralApiKey = getenv('MISTRAL_API_KEY') ?: '';
 $cfAiToken = getenv('CF_AI_API_TOKEN') ?: '';
 $cfAccountId = preg_replace('/[^a-f0-9]/i', '', (string)(getenv('CF_ACCOUNT_ID') ?: ''));
 $openRouterApiKey = getenv('OPENROUTER_API_KEY') ?: '';
 $anthropicApiKey = getenv('ANTHROPIC_API_KEY') ?: '';
 $hasFastFallback = ($groqApiKey !== '' || $cerebrasApiKey !== '');
 
-if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && ($cfAiToken === '' || $cfAccountId === '') && $openRouterApiKey === '' && $anthropicApiKey === '') {
+if ($geminiApiKey === '' && $groqApiKey === '' && $cerebrasApiKey === '' && $mistralApiKey === '' && ($cfAiToken === '' || $cfAccountId === '') && $openRouterApiKey === '' && $anthropicApiKey === '') {
     http_response_code(500);
     echo json_encode([
         'success' => false,
@@ -1020,6 +1021,11 @@ $geminiContents[] = [
 ];
 
 $isAmmsHighReasoning = ($isAmmsSite && $ammsReasoningTier === 'high');
+// Flaga gwarantująca, że specjalistyczne modele SQL (Codestral / Cohere Code) są wywoływane WYŁĄCZNIE dla Asystenta AMMS & Oracle DBA
+$isAmmsDbQuery = $isAmmsSite && (
+    !empty($ammsRagStats['is_db_mode'])
+    || (class_exists('AmmsRagSearch') && AmmsRagSearch::isDatabaseOrArchitectureQuery($question))
+);
 $geminiMaxOutputTokens = $isAmmsSite ? ($isAmmsHighReasoning ? 8192 : 4096) : 2048;
 $geminiTimeoutSec = $isAmmsSite ? ($isAmmsHighReasoning ? 14 : 8) : 4;
 $fallbackMaxTokens = $isAmmsSite ? 3200 : 900;
@@ -1055,9 +1061,64 @@ foreach (aiFullChain() as $aiChainItem) {
     }
 }
 
+// Dedykowany Silnik SQL/Oracle WYŁĄCZNIE dla Asystenta AMMS ($isAmmsSite && $isAmmsDbQuery):
+// Mistral Codestral (codestral-latest) — nigdy nie jest wywoływany dla publicznych czatbotów stron WWW!
+if ($answer === null && $isAmmsSite && $isAmmsDbQuery && $mistralApiKey !== '') {
+    $mistralSqlModel = trim((string)(getenv('MISTRAL_SQL_MODEL') ?: 'codestral-latest'));
+    $mistralLabel = "mistral/{$mistralSqlModel}";
+    $cdLeft = aiCooldownRemaining($aiStats, $mistralLabel);
+    if ($cdLeft > 0 && !$allCooling) {
+        aiRecordSkip('mistral', $mistralLabel, $cdLeft);
+    } else {
+        $messages = [['role' => 'system', 'content' => $systemInstruction]];
+        foreach ($sanitizedHistory as $turn) {
+            $messages[] = [
+                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+                'content' => $turn['text']
+            ];
+        }
+        $messages[] = ['role' => 'user', 'content' => $question];
+
+        $t0 = microtime(true);
+        $res = executeJsonPost(
+            'https://api.mistral.ai/v1/chat/completions',
+            [
+                'model'       => $mistralSqlModel,
+                'messages'    => $messages,
+                'temperature' => 0.15,
+                'max_tokens'  => 4096,
+            ],
+            ["Authorization: Bearer {$mistralApiKey}"],
+            12
+        );
+        $ms = (microtime(true) - $t0) * 1000;
+        $aiAttempts++;
+
+        $candidateText = null;
+        $finishReason = 'stop';
+        if ($res['httpCode'] === 200 && is_array($res['json'])) {
+            $finishReason = (string)($res['json']['choices'][0]['finish_reason'] ?? 'stop');
+            $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+        }
+        if ($finishReason === 'length') {
+            aiRecordAttempt('mistral', $mistralLabel, 'empty', 200, $ms, 120);
+        } elseif ($candidateText !== null && trim($candidateText) !== '') {
+            $answer = trim($candidateText);
+            $usedModel = $mistralLabel;
+            $aiDepth = 0;
+            aiRecordAttempt('mistral', $mistralLabel, 'ok', 200, $ms);
+        } elseif ($res['httpCode'] === 200) {
+            aiRecordAttempt('mistral', $mistralLabel, 'empty', 200, $ms);
+        } else {
+            [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
+            aiRecordAttempt('mistral', $mistralLabel, $cls, $res['httpCode'], $ms, $cd);
+        }
+    }
+}
+
 // Kaskada aktywnych darmowych modeli Gemini 3.x / Gemma 4 (każdy posiada osobną pulę Free Tier RPM/RPD)
 // Model zawieszony po 429/5xx/404 jest pomijany do końca cooldownu (chyba że wszystkie są zawieszone).
-if ($geminiApiKey !== '') {
+if ($answer === null && $geminiApiKey !== '') {
     $geminiModelChain = aiGeminiChain($configuredModel);
     $geminiTransientFailures = 0;
     $geminiSkipped = 0;
@@ -1166,29 +1227,33 @@ if ($geminiApiKey !== '') {
     $chainPos = count($geminiModelChain) - 1;
 }
 
-// Darmowy Fallback 2: Groq Cloud API (Free Tier LPU)
+// Darmowy Fallback 2: Groq Cloud API (Free Tier LPU: openai/gpt-oss-120b + qwen/qwen3.8-27b)
 if ($answer === null && $groqApiKey !== '') {
-    $groqModel = getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b';
-    $groqLabel = "groq/{$groqModel}";
-    $chainPos++;
-    $cdLeft = aiCooldownRemaining($aiStats, $groqLabel);
-    if ($cdLeft > 0 && !$allCooling) {
-        aiRecordSkip('groq', $groqLabel, $cdLeft);
-    } else {
-        // Ochrona przed HTTP 413 na Groq Free Tier (limit okna 8000 TPM = prompt + max_tokens)
-        $groqSysPrompt = mb_strlen($systemInstruction, 'UTF-8') > 18000
-            ? mb_substr($systemInstruction, 0, 18000, 'UTF-8') . "\n[...przycięto dalsze fragmenty dla okna 8000 TPM Groq LPU...]"
-            : $systemInstruction;
-        $groqMaxTokens = $isAmmsSite ? 1800 : $fallbackMaxTokens;
+    // Ochrona przed HTTP 413 na Groq Free Tier (limit okna 8000 TPM = prompt + max_tokens)
+    $groqSysPrompt = mb_strlen($systemInstruction, 'UTF-8') > 18000
+        ? mb_substr($systemInstruction, 0, 18000, 'UTF-8') . "\n[...przycięto dalsze fragmenty dla okna 8000 TPM Groq LPU...]"
+        : $systemInstruction;
+    $groqMaxTokens = $isAmmsSite ? 1800 : $fallbackMaxTokens;
 
-        $messages = [['role' => 'system', 'content' => $groqSysPrompt]];
-        foreach ($sanitizedHistory as $turn) {
-            $messages[] = [
-                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
-                'content' => $turn['text']
-            ];
+    $messages = [['role' => 'system', 'content' => $groqSysPrompt]];
+    foreach ($sanitizedHistory as $turn) {
+        $messages[] = [
+            'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+            'content' => $turn['text']
+        ];
+    }
+    $messages[] = ['role' => 'user', 'content' => $question];
+
+    $groqBasePos = $chainPos;
+    $groqChain = aiGroqChain();
+    foreach ($groqChain as $gqIdx => $groqModel) {
+        $groqLabel = "groq/{$groqModel}";
+        $chainPos = $groqBasePos + 1 + $gqIdx;
+        $cdLeft = aiCooldownRemaining($aiStats, $groqLabel);
+        if ($cdLeft > 0 && !$allCooling) {
+            aiRecordSkip('groq', $groqLabel, $cdLeft);
+            continue;
         }
-        $messages[] = ['role' => 'user', 'content' => $question];
 
         $groqPayload = [
             'model'       => $groqModel,
@@ -1213,19 +1278,28 @@ if ($answer === null && $groqApiKey !== '') {
         $candidateText = null;
         if ($res['httpCode'] === 200 && is_array($res['json'])) {
             $candidateText = $res['json']['choices'][0]['message']['content'] ?? null;
+            if (is_string($candidateText) && str_contains($candidateText, '<think>') && str_contains($candidateText, '</think>')) {
+                $partsThink = explode('</think>', $candidateText, 2);
+                $candidateText = $partsThink[1] ?? $candidateText;
+            }
         }
         if ($candidateText !== null && trim($candidateText) !== '') {
             $answer = trim($candidateText);
             $usedModel = $groqLabel;
             $aiDepth = $chainPos;
             aiRecordAttempt('groq', $groqLabel, 'ok', 200, $ms);
+            break;
         } elseif ($res['httpCode'] === 200) {
             aiRecordAttempt('groq', $groqLabel, 'empty', 200, $ms);
         } else {
             [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
             aiRecordAttempt('groq', $groqLabel, $cls, $res['httpCode'], $ms, $cd);
+            if ($res['httpCode'] === 401 || $res['httpCode'] === 403) {
+                break;
+            }
         }
     }
+    $chainPos = $groqBasePos + count($groqChain);
 }
 
 // Darmowy Fallback 3: Cerebras Wafer-Scale Engine API (~2000 tok/s, gpt-oss-120b + qwen-3.8-27b)
@@ -1352,32 +1426,40 @@ if ($answer === null && $cfAiToken !== '' && $cfAccountId !== '') {
     }
 }
 
-// Darmowy Fallback 5: OpenRouter Free Models (np. nvidia/nemotron-3-super-120b-a12b:free)
+// Darmowy Fallback 5: OpenRouter Free Models (cohere/north-mini-code:free [TYLKO AMMS SQL] + nemotron-3-super-120b + nemotron-3-ultra-550b)
 if ($answer === null && $openRouterApiKey !== '') {
-    $orModel = getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free';
-    $orLabel = "openrouter/{$orModel}";
-    $chainPos++;
-    $cdLeft = aiCooldownRemaining($aiStats, $orLabel);
-    if ($cdLeft > 0 && !$allCooling) {
-        aiRecordSkip('openrouter', $orLabel, $cdLeft);
-    } else {
-        $messages = [['role' => 'system', 'content' => $systemInstruction]];
-        foreach ($sanitizedHistory as $turn) {
-            $messages[] = [
-                'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
-                'content' => $turn['text']
-            ];
+    $messages = [['role' => 'system', 'content' => $systemInstruction]];
+    foreach ($sanitizedHistory as $turn) {
+        $messages[] = [
+            'role'    => ($turn['role'] === 'model') ? 'assistant' : 'user',
+            'content' => $turn['text']
+        ];
+    }
+    $messages[] = ['role' => 'user', 'content' => $question];
+
+    $orBasePos = $chainPos;
+    $orChain = aiOpenRouterChain($isAmmsSite && $isAmmsDbQuery);
+    foreach ($orChain as $orIdx => $orModel) {
+        // Dodatkowy bezpiecznik: model kodujący SQL (cohere/north-mini-code:free) nigdy nie może być użyty poza AMMS SQL
+        if ($orModel === 'cohere/north-mini-code:free' && !($isAmmsSite && $isAmmsDbQuery)) {
+            continue;
         }
-        $messages[] = ['role' => 'user', 'content' => $question];
+        $orLabel = "openrouter/{$orModel}";
+        $chainPos = $orBasePos + 1 + $orIdx;
+        $cdLeft = aiCooldownRemaining($aiStats, $orLabel);
+        if ($cdLeft > 0 && !$allCooling) {
+            aiRecordSkip('openrouter', $orLabel, $cdLeft);
+            continue;
+        }
 
         $orPayload = [
             'model'       => $orModel,
             'messages'    => $messages,
-            'temperature' => 0.25,
+            'temperature' => ($orModel === 'cohere/north-mini-code:free') ? 0.15 : 0.25,
             'max_tokens'  => $fallbackMaxTokens,
             'reasoning'   => ['effort' => 'none']
         ];
-        if ($isAmmsHighReasoning) {
+        if ($isAmmsHighReasoning && str_contains($orModel, 'nemotron')) {
             $orPayload['reasoning'] = ['effort' => 'high'];
         }
 
@@ -1404,13 +1486,18 @@ if ($answer === null && $openRouterApiKey !== '') {
             $usedModel = $orLabel;
             $aiDepth = $chainPos;
             aiRecordAttempt('openrouter', $orLabel, 'ok', 200, $ms);
+            break;
         } elseif ($res['httpCode'] === 200) {
             aiRecordAttempt('openrouter', $orLabel, 'empty', 200, $ms);
         } else {
             [$cls, $cd] = aiClassify($res['httpCode'], $res['json'], (string)$res['error'], is_string($res['body']) ? $res['body'] : '');
             aiRecordAttempt('openrouter', $orLabel, $cls, $res['httpCode'], $ms, $cd);
+            if ($res['httpCode'] === 401 || $res['httpCode'] === 403) {
+                break;
+            }
         }
     }
+    $chainPos = $orBasePos + count($orChain);
 }
 
 // Ostatni Bezpiecznik (Fallback 6 - pozycja 10): Anthropic Claude Haiku 4.5 (Pre-paid $5, Extended Thinking: disabled, Prompt Caching: ephemeral -90%)

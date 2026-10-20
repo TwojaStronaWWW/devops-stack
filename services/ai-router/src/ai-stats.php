@@ -41,6 +41,17 @@ function aiGeminiChain(string $configured): array
     ]));
 }
 
+/** Kaskada modeli Groq LPU (osobna pula RPD na każdy model). */
+function aiGroqChain(): array
+{
+    $primary = trim((string)(getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b'));
+    return array_values(array_unique([
+        $primary,
+        'openai/gpt-oss-120b',
+        'qwen/qwen3.8-27b',
+    ]));
+}
+
 /** Kaskada modeli Cerebras Wafer-Scale Engine (osobna pula RPD na każdy model). */
 function aiCerebrasChain(): array
 {
@@ -50,6 +61,23 @@ function aiCerebrasChain(): array
         'gpt-oss-120b',
         'qwen-3.8-27b',
     ]));
+}
+
+/**
+ * Kaskada darmowych modeli OpenRouter (:free).
+ * Model specjalistyczny SQL/Code (cohere/north-mini-code:free) jest włączany WYŁĄCZNIE dla zapytań SQL w Asystencie AMMS.
+ */
+function aiOpenRouterChain(bool $includeAmmsSql = false): array
+{
+    $primary = trim((string)(getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'));
+    $models = [];
+    if ($includeAmmsSql) {
+        $models[] = 'cohere/north-mini-code:free';
+    }
+    $models[] = $primary;
+    $models[] = 'nvidia/nemotron-3-super-120b-a12b:free';
+    $models[] = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+    return array_values(array_unique($models));
 }
 
 /** Pełna kaskada (z providerami) w kolejności prób - tylko aktywne providery. */
@@ -62,18 +90,30 @@ function aiFullChain(): array
         }
     }
     if ((getenv('GROQ_API_KEY') ?: '') !== '') {
-        $chain[] = ['model' => 'groq/' . (getenv('GROQ_MODEL') ?: 'openai/gpt-oss-120b'), 'provider' => 'groq'];
+        foreach (aiGroqChain() as $gm) {
+            $chain[] = ['model' => 'groq/' . $gm, 'provider' => 'groq'];
+        }
     }
     if ((getenv('CEREBRAS_API_KEY') ?: '') !== '') {
         foreach (aiCerebrasChain() as $cm) {
             $chain[] = ['model' => 'cerebras/' . $cm, 'provider' => 'cerebras'];
         }
     }
+    if ((getenv('MISTRAL_API_KEY') ?: '') !== '') {
+        $sqlModel = trim((string)(getenv('MISTRAL_SQL_MODEL') ?: 'codestral-latest'));
+        $chain[] = ['model' => 'mistral/' . $sqlModel, 'provider' => 'mistral', 'amms_sql_only' => true];
+    }
     if ((getenv('CF_AI_API_TOKEN') ?: '') !== '' && (getenv('CF_ACCOUNT_ID') ?: '') !== '') {
         $chain[] = ['model' => 'cloudflare/' . (getenv('CF_AI_MODEL') ?: '@cf/meta/llama-3.3-70b-instruct-fp8-fast'), 'provider' => 'cloudflare'];
     }
     if ((getenv('OPENROUTER_API_KEY') ?: '') !== '') {
-        $chain[] = ['model' => 'openrouter/' . (getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'), 'provider' => 'openrouter'];
+        foreach (aiOpenRouterChain(true) as $orm) {
+            $chain[] = [
+                'model'         => 'openrouter/' . $orm,
+                'provider'      => 'openrouter',
+                'amms_sql_only' => ($orm === 'cohere/north-mini-code:free'),
+            ];
+        }
     }
     if ((getenv('ANTHROPIC_API_KEY') ?: '') !== '') {
         $chain[] = ['model' => 'anthropic/' . (getenv('ANTHROPIC_MODEL') ?: 'claude-haiku-4-5'), 'provider' => 'anthropic'];
@@ -576,10 +616,14 @@ function aiDailyLimits(): array
         'gemma-4-31b-it'                                   => 14400,
         'gemma-3-27b-it'                                   => 14400,
         'groq/openai/gpt-oss-120b'                         => 1000,
+        'groq/qwen/qwen3.8-27b'                            => 1000,
         'cerebras/gpt-oss-120b'                            => 2400,
         'cerebras/qwen-3.8-27b'                            => 648000,
+        'mistral/codestral-latest'                         => 1500,
         'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 1000,
+        'openrouter/cohere/north-mini-code:free'           => 200,
         'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
+        'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' => 200,
         'anthropic/claude-haiku-4-5'                       => 1000,
     ];
     foreach (explode(',', (string)(getenv('MODEL_DAILY_LIMITS') ?: '')) as $pair) {
@@ -609,10 +653,14 @@ function aiReadableSourceLabel(int $pos, string $model): string
         'gemini-3.8-flash'                                    => 'Gemini 3.8 Flash',
         'gemma-4-31b-it'                                      => 'Gemma 4 31B',
         'groq/openai/gpt-oss-120b'                            => 'Groq GPT-120B',
+        'groq/qwen/qwen3.8-27b'                               => 'Groq Qwen 3.8 27B',
         'cerebras/gpt-oss-120b'                               => 'Cerebras 120B',
         'cerebras/qwen-3.8-27b'                               => 'Cerebras Qwen 27B',
+        'mistral/codestral-latest'                            => 'Codestral SQL (AMMS)',
         'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 'CF Llama 3.3 70B',
+        'openrouter/cohere/north-mini-code:free'              => 'Cohere Code SQL (AMMS)',
         'openrouter/nvidia/nemotron-3-super-120b-a12b:free'   => 'Nemotron 120B',
+        'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'   => 'Nemotron Ultra 550B',
         'anthropic/claude-haiku-4-5'                          => 'Claude Haiku 4.5',
     ];
     $short = $map[$model] ?? $model;
@@ -632,13 +680,16 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_status Status dostepnosci mikro-routera AI (1 = UP)';
     $o[] = '# TYPE ai_router_status gauge';
     $o[] = 'ai_router_status 1';
-    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'cloudflare' => 'CF_AI_API_TOKEN', 'openrouter' => 'OPENROUTER_API_KEY', 'anthropic' => 'ANTHROPIC_API_KEY'] as $prov => $env) {
+    foreach (['gemini' => 'GEMINI_API_KEY', 'groq' => 'GROQ_API_KEY', 'cerebras' => 'CEREBRAS_API_KEY', 'mistral' => 'MISTRAL_API_KEY', 'cloudflare' => 'CF_AI_API_TOKEN', 'openrouter' => 'OPENROUTER_API_KEY', 'anthropic' => 'ANTHROPIC_API_KEY'] as $prov => $env) {
         if ($prov === 'gemini') {
             $o[] = '# HELP ai_router_api_key_configured Czy klucz GEMINI_API_KEY jest skonfigurowany (1 = tak, 0 = nie)';
             $o[] = '# TYPE ai_router_api_key_configured gauge';
             $o[] = 'ai_router_api_key_configured ' . ((getenv($env) ?: '') !== '' ? 1 : 0);
             $o[] = '# HELP ai_router_provider_configured Czy klucz API providera jest skonfigurowany (1/0)';
             $o[] = '# TYPE ai_router_provider_configured gauge';
+        }
+        if ($prov === 'mistral' && (getenv($env) ?: '') === '') {
+            continue;
         }
         $o[] = 'ai_router_provider_configured{provider="' . $prov . '"} ' . ((getenv($env) ?: '') !== '' ? 1 : 0);
     }
