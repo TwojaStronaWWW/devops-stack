@@ -42,12 +42,18 @@
   - **Wolni Ludzie — Pod dachem (Katowice, ul. Mariacka 2, róg ul. Mielęckiego):** nasza główna całoroczna miejscówka pod dachem — spotykamy się tu **w każdą niedzielę w godz. 15:00–18:00** na otwartych potańcówkach i praktykach (Salsa Cubana, Timba, Rueda de Casino, Son, Bachata, Kizomba). W niedziele ulice wokół są darmowe, a jako główny Parking Rekomendowany polecamy ogromny, bezpłatny w niedzielę parking pod NOSPR-em (12 min pieszo przez kładkę).
   - **Dolina Trzech Stawów — Kamienny Krąg (Katowice, ul. Trzech Stawów 22):** kultowe wiosenno-letnie potańcówki plenerowe pod gołym niebem (w razie deszczu tańczymy pod zadaszoną wiatą UKS 4 / SUP Tomi przy ul. Trzech Stawów 10; darmowy Parking Rekomendowany Południe / Rolkostrada 13 min pieszo).
   - **Amfiteatr NOSPR w Strefie Kultury (Katowice, pl. Wojciecha Kilara 1):** plenerowy parkiet od wschodniej strony NOSPR przy fontannach z darmowym w weekendy parkingiem od ul. Olimpijskiej.
-  - **La Clave (Katowice, ul. Chorzowska 11):** serce śląskiej sceny kubańskiej i bachatowej (Salsa, Casino, Rueda, Timba, Son, Rumba, Bachata, imprezy *Bachata meets Impro*).
-  - **Mil Pasos (Katowice, ul. Kamienna 4):** kursy Bachaty, Salsy, Casino i Kizomby oraz weekendy *B Experience* i *K Experience*.
+  - **La Clave (Katowice, ul. Chorzowska 11):** serce śląskiej sceny kubańskiej i bachatowej (Salsa, Casino, Rueda, Timba, Son, Rumba, Salsa NY On2, Bachata, Kizomba, Taniec Brzucha, imprezy *Bachata meets Impro*).
+  - **Szkoła Tańca Good Mood (Katowice, ul. Paderewskiego 35 oraz Gravitacja ul. Gliwicka 44):** kursy Salsy Cubana (Daniel „Kokosz” Machalica na ul. Gliwickiej 44), Bachaty, Kizomby (Mili Jakubowska), Zouka Brazylijskiego (Kasia Terech i Brajan Nosal, Sporki), West Coast Swingu, Latino Solo, Tanga i Shuffle Dance.
+  - **Mil Pasos (Katowice, ul. Kamienna 4):** kursy Bachaty, Salsy Kubańskiej (Daniel Galas, Anita i Grzegorz, Monika), Kizomby Fusion, Urban Kiz, Zouka Brazylijskiego, Bachazouka, High Heels i House oraz weekendy *B Experience* i *K Experience*.
   - **Evolution Dance Studio (Katowice, al. Korfantego 4):** ścisłe centrum Katowic, Casino, Rueda, Timba, Rumba, Bachata, warsztaty *Cuban Day*.
   - **KIZLAB (Katowice, ul. Sobieskiego 11) & VAMULA.pl:** centrum Kizomby, Urban Kiz i Semby (spotkania *KIZLAB Sundays*, imprezy *Kizombada*).
-  - **Gravitacja / Dance++ (Katowice, ul. Gliwicka 44):** imprezy socialowe łączące Kizombę, Bachatę i Salsę.
+  - **Gravitacja / Dance++ (Katowice, ul. Gliwicka 44):** imprezy socialowe łączące Kizombę, Bachatę i Salsę oraz sala kursowa Good Mood.
   - **Szkoła Tańca Mohito (Gliwice, ul. Zwycięstwa 52A / Tychy, al. Jana Pawła II 14)**, **Śląska Szkoła Tańca Dariusz Kurzeja**, **DANCE#LOVEit & Corazon (Bielsko-Biała, ul. Grażyńskiego 12)**.
+- **Wspólny Grafik Szkół Tańca w Katowicach & Kalendarz Imprez (`https://katosalsahub.pl/grafik.html`):**
+  - Dedykowana podstrona `grafik.html` (w estetyce Salsopedii, bez zbędnych sekcji pod spodem) łącząca w jednym miejscu:
+    1. **Grafik Szkół (130 kursów tygodniowo):** La Clave (47 kursów), Good Mood (41 kursów na Paderewskiego 35 i Gliwickiej 44), Mil Pasos (40 kursów na Kamiennej 4) oraz Evolution/KIZLAB/KSH (2 pozycje).
+    2. **Ustandaryzowaną 5-stopniową skalę poziomów KSH:** `P0` (Od zera / Start, 0–2 mies.), `P1` (Podstawowy, 2–5 mies.), `P2` (Podstawowy+ / P2–P3, 6–9 mies.), `S1` (Średniozaawansowany i Zaawansowany / P4–P5 / S3, 9–12+ mies.) oraz `OPEN` (Open / Solo / Praktis).
+    3. **Kalendarz Imprez DancePuls** (filtrowany po Katowicach, całym Śląsku i Krakowie) oraz **Interaktywną Mapę Szkół i Parkietów KSH**.
 - **DancePuls (`https://dancepuls.katosalsahub.pl/`):**
   - Oficjalny agregator i kalendarz wydarzeń tanecznych powiązany z Kato Salsa Hub. Zbiera aktualne imprezy (sociale), warsztaty weekendowe i festiwale Salsy, Bachaty i Kizomby w województwie śląskim i Krakowie.
 
