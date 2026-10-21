@@ -93,8 +93,11 @@ docker network create --driver=bridge --subnet=10.20.40.0/24 --gateway=10.20.40.
        container_name: szpital-pc01-desktop
        hostname: pc01.szpital.lab
        restart: unless-stopped
+       cap_add:
+         - SYS_ADMIN
        security_opt:
          - seccomp:unconfined
+         - apparmor:unconfined
        environment:
          - PUID=1000
          - PGID=1000

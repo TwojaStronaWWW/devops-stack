@@ -17,8 +17,11 @@ services:
       dev.dozzle.name: "szpital-pc01 • Stacja Robocza (10.20.40.50)"
       org.opencontainers.image.description: "Graficzna stacja robocza XFCE w sieci szpitalnej (10.20.40.50)"
     restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
     security_opt:
       - seccomp:unconfined
+      - apparmor:unconfined
     environment:
       - PUID=1000
       - PGID=1000
