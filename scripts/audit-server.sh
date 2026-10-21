@@ -1437,9 +1437,9 @@ PYEOF
 
             TOTAL_TESTS=$((OK_COUNT + WARN_COUNT + FAIL_COUNT))
 
-            # Zbieranie danych ze wszystkich 3 scraperów Kato Salsa Hub & DancePuls (Wydarzenia + Grafiki + Cenniki)
+            # Zbieranie danych ze wszystkich 3 scraperów Kato Salsa Hub & DancePuls (Wydarzenia + Grafiki + Cenniki + Delta zmian 24h)
             KSH_SCRAPER_DATA="$(sudo ENV_FILE="${ENV_FILE}" PL_DATE="${PL_DATE}" python3 - << 'PYKSH' 2>/dev/null || true
-import json, os, re, time, urllib.request
+import datetime, json, os, re, time, urllib.request
 
 env_vars = {}
 env_path = os.environ.get("ENV_FILE", "/opt/devops-stack/.env")
@@ -1467,7 +1467,6 @@ try:
     if runs:
         latest = runs[0]
         created = str(latest.get("created_at", ""))
-        # Jeśli dzisiejszy skan jeszcze się nie wykonał, wyzwól go teraz i zaczekaj do 30s
         if gh_tok and not created.startswith(pl_date):
             disp_url = "https://api.github.com/repos/TwojaStronaWWW/katosalsahub/actions/workflows/weekly-report.yml/dispatches"
             req = urllib.request.Request(disp_url, data=json.dumps({"ref": "main"}).encode("utf-8"), headers={**hdrs, "Content-Type": "application/json"}, method="POST")
@@ -1485,11 +1484,46 @@ try:
 except Exception:
     pass
 
-def fetch_text(path):
+# Sprawdzenie commitów i modyfikacji strony z ostatnich 24h oraz dzisiejszego commita bota scraperów
+bot_modified_today = False
+bot_commit_sha = ""
+bot_commit_time = ""
+base_ref_sha = ""
+commits_24h_cnt = 0
+latest_commit_info = "brak zmian w ciągu 24h"
+
+try:
+    since_iso = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    c_url = f"https://api.github.com/repos/TwojaStronaWWW/katosalsahub/commits?sha=main&since={since_iso}&per_page=30"
+    with urllib.request.urlopen(urllib.request.Request(c_url, headers=hdrs), timeout=8) as rc:
+        c_list = json.loads(rc.read().decode("utf-8")) or []
+    commits_24h_cnt = len(c_list)
+    if c_list:
+        top_c = c_list[0]
+        top_sha = str(top_c.get("sha", ""))[:7]
+        top_msg = str(((top_c.get("commit") or {}).get("message") or "")).splitlines()[0][:65]
+        latest_commit_info = f"{commits_24h_cnt} wdrożeń (ostatnie: {top_sha} — \"{top_msg}\")"
+        # Szukamy dzisiejszego commita automatycznego ze scraperów
+        for c in c_list:
+            c_date = str(((c.get("commit") or {}).get("author") or {}).get("date", ""))
+            c_msg = str(((c.get("commit") or {}).get("message") or ""))
+            if c_date.startswith(pl_date) and ("automatyczna aktualizacja raportu" in c_msg or "dancepuls" in c_msg):
+                bot_modified_today = True
+                bot_commit_sha = str(c.get("sha", ""))[:7]
+                bot_commit_time = c_date.replace("T", " ").replace("Z", " UTC")
+                parents = c.get("parents") or []
+                if parents:
+                    base_ref_sha = str(parents[0].get("sha", ""))
+                break
+except Exception:
+    pass
+
+def fetch_text(path, ref="main"):
     urls = [
-        f"https://raw.githubusercontent.com/TwojaStronaWWW/katosalsahub/main/katosalsahub.pl/assets/data/{path}",
-        f"https://katosalsahub.pl/assets/data/{path}"
+        f"https://raw.githubusercontent.com/TwojaStronaWWW/katosalsahub/{ref}/katosalsahub.pl/assets/data/{path}",
     ]
+    if ref == "main":
+        urls.append(f"https://katosalsahub.pl/assets/data/{path}")
     for u in urls:
         try:
             h = {"User-Agent": ua, "Cache-Control": "no-cache"}
@@ -1501,41 +1535,68 @@ def fetch_text(path):
             continue
     return ""
 
-events_raw = fetch_text("events.json")
-sched_raw = fetch_text("schedule.json")
-report_raw = fetch_text("latest_report.md")
+events_raw = fetch_text("events.json", "main")
+sched_raw = fetch_text("schedule.json", "main")
+report_raw = fetch_text("latest_report.md", "main")
+
+old_events_raw = fetch_text("events.json", base_ref_sha) if base_ref_sha else ""
+old_sched_raw = fetch_text("schedule.json", base_ref_sha) if base_ref_sha else ""
 
 days_cnt = 0
 events_cnt = 0
+new_ev_set = {}
 try:
     ev_obj = json.loads(events_raw)
-    if isinstance(ev_obj, list):
-        days_cnt = len(ev_obj)
-        events_cnt = sum(len(d.get("events") or []) for d in ev_obj if isinstance(d, dict))
-    elif isinstance(ev_obj, dict):
-        ev_map = ev_obj.get("events") or {}
-        days_cnt = len(ev_map)
-        events_cnt = sum(len(v) for v in ev_map.values() if isinstance(v, list))
+    day_list = ev_obj if isinstance(ev_obj, list) else []
+    days_cnt = len(day_list)
+    for d in day_list:
+        if isinstance(d, dict):
+            dt = str(d.get("date", ""))
+            for ev in (d.get("events") or []):
+                if isinstance(ev, dict):
+                    events_cnt += 1
+                    key = f"{dt}|{ev.get('opis','')[:40]}|{ev.get('miasto','')}"
+                    new_ev_set[key] = f"{ev.get('opis','?')[:38]} ({dt}, {ev.get('miasto','?')})"
 except Exception:
     pass
+
+old_ev_set = {}
+if old_events_raw:
+    try:
+        old_ev_obj = json.loads(old_events_raw)
+        for d in (old_ev_obj if isinstance(old_ev_obj, list) else []):
+            if isinstance(d, dict):
+                dt = str(d.get("date", ""))
+                for ev in (d.get("events") or []):
+                    if isinstance(ev, dict):
+                        key = f"{dt}|{ev.get('opis','')[:40]}|{ev.get('miasto','')}"
+                        old_ev_set[key] = f"{ev.get('opis','?')[:38]} ({dt}, {ev.get('miasto','?')})"
+    except Exception:
+        pass
+
+added_ev = [v for k, v in new_ev_set.items() if k not in old_ev_set] if old_ev_set else []
+removed_ev = [v for k, v in old_ev_set.items() if k not in new_ev_set] if old_ev_set else []
 
 classes_cnt = 0
 sched_updated = pl_date
 by_school = {}
 by_level = {}
 pricing_parts = []
+new_cls_map = {}
+new_pricing_map = {}
 try:
     sc_obj = json.loads(sched_raw)
     sched_updated = str(sc_obj.get("updatedAt") or sc_obj.get("lastUpdated") or pl_date)
     cls_list = sc_obj.get("classes") or []
     classes_cnt = len(cls_list)
     for c in cls_list:
+        cid = str(c.get("id", ""))
         s = c.get("schoolId", "?")
         lv = c.get("levelCode") or c.get("kshLevel") or "?"
         by_school[s] = by_school.get(s, 0) + 1
         by_level[lv] = by_level.get(lv, 0) + 1
-    schools_list = sc_obj.get("schools") or []
-    for sch in schools_list:
+        new_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}"
+    for sch in (sc_obj.get("schools") or []):
         pr = sch.get("pricing") or {}
         if pr:
             s_name = sch.get("name") or sch.get("id")
@@ -1545,8 +1606,44 @@ try:
             op_suffix = f", OPEN {op} zł" if op else ""
             if prices_slash:
                 pricing_parts.append(f"{s_name} ({prices_slash} zł{op_suffix})")
+                new_pricing_map[s_name] = f"{prices_slash} zł{op_suffix}"
 except Exception:
     pass
+
+added_cls_cnt = 0
+removed_cls_cnt = 0
+modified_cls_cnt = 0
+pricing_changes = []
+if old_sched_raw:
+    try:
+        old_sc_obj = json.loads(old_sched_raw)
+        old_cls_map = {}
+        for c in (old_sc_obj.get("classes") or []):
+            cid = str(c.get("id", ""))
+            s = c.get("schoolId", "?")
+            lv = c.get("levelCode") or c.get("kshLevel") or "?"
+            old_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}"
+        for cid, sig in new_cls_map.items():
+            if cid not in old_cls_map:
+                added_cls_cnt += 1
+            elif old_cls_map[cid] != sig:
+                modified_cls_cnt += 1
+        for cid in old_cls_map:
+            if cid not in new_cls_map:
+                removed_cls_cnt += 1
+        for sch in (old_sc_obj.get("schools") or []):
+            pr = sch.get("pricing") or {}
+            if pr:
+                s_name = sch.get("name") or sch.get("id")
+                passes = pr.get("passes") or []
+                prices_slash = "/".join(str(p.get("price")) for p in passes[:3] if isinstance(p, dict) and p.get("price"))
+                op = pr.get("openPassPrice")
+                op_suffix = f", OPEN {op} zł" if op else ""
+                old_p_str = f"{prices_slash} zł{op_suffix}"
+                if s_name in new_pricing_map and new_pricing_map[s_name] != old_p_str:
+                    pricing_changes.append(f"{s_name}: {old_p_str} -> {new_pricing_map[s_name]}")
+    except Exception:
+        pass
 
 wknd_info = "brak danych"
 future_info = "0"
@@ -1568,17 +1665,31 @@ if report_raw:
         raw_c = m_c.group(1).strip()
         csv_cnt = 0 if "brak" in raw_c.lower() else len([u for u in raw_c.split(",") if "http" in u])
 
-short_line = f"🕺 Scrapery KSH: {events_cnt} impr. ({days_cnt} dni) | Weekend: {wknd_info} | Grafiki: {classes_cnt} kursów | Cenniki: OK"
+if bot_modified_today:
+    mod_status_line = f"🔄 Modyfikacja ze scraperów (dziś): TAK — wdrożono na LH.pl (commit {bot_commit_sha}, {bot_commit_time})"
+else:
+    mod_status_line = f"🔄 Modyfikacja ze scraperów (dziś): BRAK ZMIAN (strona na LH.pl nie wymagała aktualizacji, skan #{run_id} {run_status})"
+
+ev_delta_str = f"+{len(added_ev)} nowych | -{len(removed_ev)} minionych usuniętych"
+if added_ev:
+    ev_delta_str += " (" + ", ".join(added_ev[:3]) + (f" i +{len(added_ev)-3} więcej" if len(added_ev) > 3 else "") + ")"
+
+cls_delta_str = f"+{added_cls_cnt} nowych | ~{modified_cls_cnt} zaktualizowanych (np. daty START) | -{removed_cls_cnt} usuniętych"
+price_delta_str = (", ".join(pricing_changes)) if pricing_changes else "0 zmian (stawki w szkołach bez zmian)"
+
+short_mod_tag = "ZAKTUALIZOWANO LH.pl" if bot_modified_today else "BEZ ZMIAN"
+short_line = f"🕺 Scrapery KSH ({short_mod_tag}): {events_cnt} impr. (+{len(added_ev)}/-{len(removed_ev)}) | Grafiki: {classes_cnt} kursów (~{modified_cls_cnt} zm.) | Cenniki: OK"
 
 lines = [
-    f"✅ Potok GitHub Actions: {run_status} (run #{run_id}, {run_time})",
-    f"📅 Kalendarz Imprez: {events_cnt} wydarzeń ({days_cnt} dni) | Weekend: {wknd_info} | Kolejne tyg.: {future_info} | Pn–Cz: {pncz_info}",
-    f"🏫 Grafiki Szkół ({classes_cnt} kursów, akt. {sched_updated}): La Clave: {by_school.get('LC', 0)} (PNG OK) | Good Mood: {by_school.get('GM', 0)} (CSV OK) | Mil Pasos: {by_school.get('MP', 0)} (CDN OK)",
-    f"🎓 Poziomy KSH: P0: {by_level.get('P0',0)} | P1: {by_level.get('P1',0)} | P2: {by_level.get('P2',0)} | S1: {by_level.get('S1',0)} | OPEN: {by_level.get('OPEN',0)} | Formularz CSV: {csv_cnt} zgłosz.",
+    mod_status_line,
+    f"📝 Zmiany ze scraperów: Imprezy [{ev_delta_str}] | Grafiki [{cls_delta_str}] | Cenniki [{price_delta_str}]",
+    f"🚀 Modyfikacje strony (ostatnie 24h): {latest_commit_info}",
+    f"📅 Kalendarz Imprez: {events_cnt} wydarzeń ({days_cnt} dni) | Weekend: {wknd_info} | Kolejne tyg.: {future_info} | Formularz CSV: {csv_cnt} zgłosz.",
+    f"🏫 Grafiki Szkół ({classes_cnt} kursów): La Clave: {by_school.get('LC', 0)} | Good Mood: {by_school.get('GM', 0)} | Mil Pasos: {by_school.get('MP', 0)} (P0:{by_level.get('P0',0)}, P1:{by_level.get('P1',0)}, P2:{by_level.get('P2',0)}, S1:{by_level.get('S1',0)}, OPEN:{by_level.get('OPEN',0)})",
     f"💰 Cenniki (Live OK): " + (" | ".join(pricing_parts) if pricing_parts else "Zweryfikowane")
 ]
 
-print(json.dumps({"short": short_line, "full": "\n".join(lines), "events_cnt": events_cnt, "classes_cnt": classes_cnt}, ensure_ascii=False))
+print(json.dumps({"short": short_line, "full": "\n".join(lines), "events_cnt": events_cnt, "classes_cnt": classes_cnt, "modified": bot_modified_today}, ensure_ascii=False))
 PYKSH
 )"
 
