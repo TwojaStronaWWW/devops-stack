@@ -34,8 +34,8 @@ Description=Run TwojaStronaWWW DevOps Audit every 15 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=15min
-AccuracySec=1min
+OnCalendar=*:00/15
+AccuracySec=5s
 Persistent=true
 
 [Install]
