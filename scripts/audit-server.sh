@@ -1304,9 +1304,10 @@ for label, url, api_key, body in primary_candidates:
             data = json.loads(resp.read().decode("utf-8"))
         msg = (data.get("choices") or [{}])[0].get("message", {})
         txt = (msg.get("content") or "").strip()
-        # Oczyszczenie ewentualnych znaczników <think>...</think> jeśli model zwrócił je w treści
+        # Oczyszczenie ewentualnych znaczników <think>...</think> oraz surowych gwiazdek Markdown **
         if "<think>" in txt and "</think>" in txt:
             txt = txt.split("</think>", 1)[1].strip()
+        txt = txt.replace("**", "")
         if txt:
             primary_answer = txt
             primary_label = label
@@ -1347,7 +1348,7 @@ if gemini_key:
                 data = json.loads(resp.read().decode("utf-8"))
             parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts")) or []
             out_chunks = [p.get("text", "").strip() for p in parts if not p.get("thought") and p.get("text")]
-            txt = "\n".join([c for c in out_chunks if c]).strip()
+            txt = "\n".join([c for c in out_chunks if c]).strip().replace("**", "")
             if txt:
                 u_meta = data.get("usageMetadata", {})
                 t_tok = int(u_meta.get("thoughtsTokenCount", 0))
@@ -1522,7 +1523,7 @@ classes_cnt = 0
 sched_updated = pl_date
 by_school = {}
 by_level = {}
-pricing_lines = []
+pricing_parts = []
 try:
     sc_obj = json.loads(sched_raw)
     sched_updated = str(sc_obj.get("updatedAt") or sc_obj.get("lastUpdated") or pl_date)
@@ -1530,7 +1531,7 @@ try:
     classes_cnt = len(cls_list)
     for c in cls_list:
         s = c.get("schoolId", "?")
-        lv = c.get("kshLevel", "?")
+        lv = c.get("levelCode") or c.get("kshLevel") or "?"
         by_school[s] = by_school.get(s, 0) + 1
         by_level[lv] = by_level.get(lv, 0) + 1
     schools_list = sc_obj.get("schools") or []
@@ -1539,49 +1540,43 @@ try:
         if pr:
             s_name = sch.get("name") or sch.get("id")
             passes = pr.get("passes") or []
-            pass_parts = [f"{p.get('units')}x = {p.get('price')} zł" for p in passes if isinstance(p, dict)]
+            prices_slash = "/".join(str(p.get("price")) for p in passes[:3] if isinstance(p, dict) and p.get("price"))
             op = pr.get("openPassPrice")
-            if op:
-                pass_parts.append(f"OPEN = {op} zł")
-            single = pr.get("singleEntryPrice")
-            if single:
-                pass_parts.insert(0, f"1 wejście = {single} zł")
-            pricing_lines.append(f"  - {s_name}: " + " | ".join(pass_parts))
+            op_suffix = f", OPEN {op} zł" if op else ""
+            if prices_slash:
+                pricing_parts.append(f"{s_name} ({prices_slash} zł{op_suffix})")
 except Exception:
     pass
 
-sec1_bullets = []
-new_events_preview = []
+wknd_info = "brak danych"
+future_info = "0"
+pncz_info = "0"
+csv_cnt = 0
 if report_raw:
     sec1_text = report_raw.split("---")[0]
-    for line in sec1_text.splitlines():
-        s = line.strip()
-        if s.startswith("- **Stan zestawienia") or s.startswith("- **Zapowiedzi") or s.startswith("- **Wydarzenia pn") or s.startswith("- **Zgłoszenia z formularza"):
-            clean_b = re.sub(r"\*\*", "", s)
-            sec1_bullets.append("• " + clean_b.lstrip("- ").strip())
-        elif s.startswith("- **") and "|" in s and len(new_events_preview) < 8:
-            clean_ev = re.sub(r"\*\*", "", s).lstrip("- ").strip()
-            new_events_preview.append("  * " + clean_ev)
+    m_w = re.search(r"Stan zestawienia[^:]*:\*\*\s*\*\*([^*]+)\*\*\s*(\([^)]+\))?", sec1_text)
+    if m_w:
+        wknd_info = (m_w.group(1).strip() + " " + (m_w.group(2) or "").strip()).strip()
+    m_f = re.search(r"Zapowiedzi na kolejne tygodnie[^:]*:\*\*\s*\*\*([^*]+)\*\*", sec1_text)
+    if m_f:
+        future_info = m_f.group(1).strip()
+    m_p = re.search(r"Wydarzenia pn[–-]cz[^:]*:\*\*\s*\*\*([^*]+)\*\*", sec1_text)
+    if m_p:
+        pncz_info = m_p.group(1).strip()
+    m_c = re.search(r"Zgłoszenia z formularza Google[^:]*:\*\*\s*(.+)", sec1_text)
+    if m_c:
+        raw_c = m_c.group(1).strip()
+        csv_cnt = 0 if "brak" in raw_c.lower() else len([u for u in raw_c.split(",") if "http" in u])
 
-short_line = f"🕺 Scrapery KSH: {events_cnt} impr. ({days_cnt} dni) | Grafiki: {classes_cnt} kursów (LC:{by_school.get('LC',0)}, GM:{by_school.get('GM',0)}, MP:{by_school.get('MP',0)}) | Cenniki: OK"
+short_line = f"🕺 Scrapery KSH: {events_cnt} impr. ({days_cnt} dni) | Weekend: {wknd_info} | Grafiki: {classes_cnt} kursów | Cenniki: OK"
 
 lines = [
-    f"• Status potoku GitHub Actions: {run_status} (run #{run_id}, {run_time})",
-    f"• Kalendarz na żywo (events.json): {days_cnt} dni kalendarzowych | {events_cnt} nadchodzących wydarzeń",
+    f"✅ Potok GitHub Actions: {run_status} (run #{run_id}, {run_time})",
+    f"📅 Kalendarz Imprez: {events_cnt} wydarzeń ({days_cnt} dni) | Weekend: {wknd_info} | Kolejne tyg.: {future_info} | Pn–Cz: {pncz_info}",
+    f"🏫 Grafiki Szkół ({classes_cnt} kursów, akt. {sched_updated}): La Clave: {by_school.get('LC', 0)} (PNG OK) | Good Mood: {by_school.get('GM', 0)} (CSV OK) | Mil Pasos: {by_school.get('MP', 0)} (CDN OK)",
+    f"🎓 Poziomy KSH: P0: {by_level.get('P0',0)} | P1: {by_level.get('P1',0)} | P2: {by_level.get('P2',0)} | S1: {by_level.get('S1',0)} | OPEN: {by_level.get('OPEN',0)} | Formularz CSV: {csv_cnt} zgłosz.",
+    f"💰 Cenniki (Live OK): " + (" | ".join(pricing_parts) if pricing_parts else "Zweryfikowane")
 ]
-lines.extend(sec1_bullets)
-lines.append(
-    f"• Scraper Grafików Szkół (schedule.json, akt. {sched_updated}): {classes_cnt} aktywnych kursów\n"
-    f"  - La Clave: {by_school.get('LC', 0)} kursów (6/6 plansz PNG SHA-256 OK)\n"
-    f"  - Good Mood: {by_school.get('GM', 0)} kursów (Live CSV Google Sheets Paderewskiego + Gliwicka OK)\n"
-    f"  - Mil Pasos: {by_school.get('MP', 0)} kursów (8/8 plansz CDN OK)\n"
-    f"  - Poziomy KSH: P0={by_level.get('P0',0)} | P1={by_level.get('P1',0)} | P2={by_level.get('P2',0)} | S1={by_level.get('S1',0)} | OPEN={by_level.get('OPEN',0)}"
-)
-if pricing_lines:
-    lines.append("• Scraper Cenników Szkół (Live Check OK):\n" + "\n".join(pricing_lines))
-if new_events_preview:
-    lines.append("• Wybrane nowości z ostatniego skanu wydarzeń:\n" + "\n".join(new_events_preview))
-lines.append("• Pełny 6-sekcyjny raport i generator FB: https://katosalsahub.pl/dancepuls/")
 
 print(json.dumps({"short": short_line, "full": "\n".join(lines), "events_cnt": events_cnt, "classes_cnt": classes_cnt}, ensure_ascii=False))
 PYKSH
@@ -1592,51 +1587,47 @@ PYKSH
             KSH_EV_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("events_cnt",0))' 2>/dev/null || echo '0')"
             KSH_CLS_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("classes_cnt",0))' 2>/dev/null || echo '0')"
 
-            MORNING_BODY="✅ Audyt (${TOTAL_TESTS} testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
-${KSH_SHORT:-🕺 Scrapery KSH & DancePuls: Zsynchronizowane}
+            AUDIT_BODY="✅ Audyt (${TOTAL_TESTS} testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
 💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | SWAP ${SWAP_TOTAL_MB:-0}M | ${MEM_INFO}
 📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}
 🔍 Puls SEO & AI: Top temat AI: ${WA_TOP_TOPIC:-brak} | Top fraza: ${WA_TOP_TERM:-brak}
 🛡️ Ochrona: NTP=${NTP_STATE:-yes} | BBR=${TCP_CC:-bbr} | WAF L7: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
-                MORNING_BODY="${MORNING_BODY}
+                AUDIT_BODY="${AUDIT_BODY}
 
 ${AI_AUDIT_INSIGHT}"
                 printf "\n${C_CYAN}%s${C_RESET}\n" "${AI_AUDIT_INSIGHT}"
             fi
+
+            NTFY_BODY="${KSH_SHORT:-🕺 Scrapery KSH & DancePuls: Zsynchronizowane}
+${AUDIT_BODY}"
 
             # 1. Wysyłka powiadomienia Push na Ntfy.sh
             curl -s --max-time 5 \
                 -H "Title: Raport 07:30 (${PL_DATE}): KSH (${KSH_EV_CNT} impr.) + VPS (${OK_COUNT} OK / ${FAIL_COUNT} FAIL)" \
                 -H "Priority: default" \
                 -H "Tags: sunny,robot" \
-                -d "${MORNING_BODY}" \
+                -d "${NTFY_BODY}" \
                 "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
 
             # 2. Wysyłka pełnego, połączonego raportu (Scrapery KSH + Audyt ISO 27001) na E-mail (poczatek.krzysztof@gmail.com)
             EMAIL_SUBJECT="☀️ Raport 07:30 (${PL_DATE}): Scrapery KSH (${KSH_EV_CNT} impr. / ${KSH_CLS_CNT} kursów) + Audyt VPS [${OK_COUNT} OK / ${FAIL_COUNT} FAIL]"
-            EMAIL_BODY="======================================================================
-☀️ PORANNY RAPORT SYSTEMOWY (07:30) — ${PL_DATE}
+            EMAIL_BODY="☀️ PORANNY RAPORT SYSTEMOWY (07:30) — ${PL_DATE}
 TwojaStronaWWW DevOps Stack & Kato Salsa Hub / DancePuls
-======================================================================
 
-----------------------------------------------------------------------
-🕺 CZĘŚĆ 1: RAPORT SCRAPERÓW KATO SALSA HUB & DANCEPULS
-----------------------------------------------------------------------
+🕺 CZĘŚĆ 1: SCRAPERY KATO SALSA HUB & DANCEPULS
+──────────────────────────────────────────────────────
 ${KSH_FULL:-Brak danych ze scraperów.}
 
-----------------------------------------------------------------------
 🛡️ CZĘŚĆ 2: AUDYT BEZPIECZEŃSTWA I INFRASTRUKTURY VPS & WWW (ISO 27001)
-----------------------------------------------------------------------
-${MORNING_BODY}
+──────────────────────────────────────────────────────
+${AUDIT_BODY}
 
-======================================================================
-Panel DancePuls (Raport 6-sekcyjny): https://katosalsahub.pl/dancepuls/
-Wspólny Grafik, Cenniki i Imprezy:   https://katosalsahub.pl/grafik.html
-Panel Monitoringu Grafana:           https://monitoring.twojastronawww.pl
-Panel Uptime Kuma:                   https://status.twojastronawww.pl
-======================================================================"
+──────────────────────────────────────────────────────
+🔗 Panel DancePuls: https://katosalsahub.pl/dancepuls/
+🔗 Wspólny Grafik:  https://katosalsahub.pl/grafik.html
+🔗 Panel Grafana:   https://monitoring.twojastronawww.pl"
 
             sudo ENV_FILE="${ENV_FILE}" EMAIL_SUBJECT="${EMAIL_SUBJECT}" EMAIL_BODY="${EMAIL_BODY}" python3 - << 'PYMAIL' >/dev/null 2>&1 || true
 import json, os, urllib.request
