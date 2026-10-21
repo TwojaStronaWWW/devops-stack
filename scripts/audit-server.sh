@@ -1507,7 +1507,7 @@ try:
         for c in c_list:
             c_date = str(((c.get("commit") or {}).get("author") or {}).get("date", ""))
             c_msg = str(((c.get("commit") or {}).get("message") or ""))
-            if c_date.startswith(pl_date) and ("automatyczna aktualizacja raportu" in c_msg or "dancepuls" in c_msg):
+            if c_date.startswith(pl_date) and "automatyczna aktualizacja raportu" in c_msg:
                 bot_modified_today = True
                 bot_commit_sha = str(c.get("sha", ""))[:7]
                 bot_commit_time = c_date.replace("T", " ").replace("Z", " UTC")
@@ -1595,7 +1595,7 @@ try:
         lv = c.get("levelCode") or c.get("kshLevel") or "?"
         by_school[s] = by_school.get(s, 0) + 1
         by_level[lv] = by_level.get(lv, 0) + 1
-        new_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}"
+        new_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}|{c.get('levelLabel','')}"
     for sch in (sc_obj.get("schools") or []):
         pr = sch.get("pricing") or {}
         if pr:
@@ -1622,7 +1622,7 @@ if old_sched_raw:
             cid = str(c.get("id", ""))
             s = c.get("schoolId", "?")
             lv = c.get("levelCode") or c.get("kshLevel") or "?"
-            old_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}"
+            old_cls_map[cid] = f"{s}|{c.get('dayName','')}|{c.get('startTime','')}|{c.get('title','')}|{lv}|{c.get('levelLabel','')}"
         for cid, sig in new_cls_map.items():
             if cid not in old_cls_map:
                 added_cls_cnt += 1
