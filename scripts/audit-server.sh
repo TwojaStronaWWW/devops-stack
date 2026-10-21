@@ -1508,9 +1508,13 @@ days_cnt = 0
 events_cnt = 0
 try:
     ev_obj = json.loads(events_raw)
-    ev_map = ev_obj.get("events") or {}
-    days_cnt = len(ev_map)
-    events_cnt = sum(len(v) for v in ev_map.values() if isinstance(v, list))
+    if isinstance(ev_obj, list):
+        days_cnt = len(ev_obj)
+        events_cnt = sum(len(d.get("events") or []) for d in ev_obj if isinstance(d, dict))
+    elif isinstance(ev_obj, dict):
+        ev_map = ev_obj.get("events") or {}
+        days_cnt = len(ev_map)
+        events_cnt = sum(len(v) for v in ev_map.values() if isinstance(v, list))
 except Exception:
     pass
 
@@ -1521,7 +1525,7 @@ by_level = {}
 pricing_lines = []
 try:
     sc_obj = json.loads(sched_raw)
-    sched_updated = str(sc_obj.get("lastUpdated", pl_date))
+    sched_updated = str(sc_obj.get("updatedAt") or sc_obj.get("lastUpdated") or pl_date)
     cls_list = sc_obj.get("classes") or []
     classes_cnt = len(cls_list)
     for c in cls_list:
@@ -1533,13 +1537,16 @@ try:
     for sch in schools_list:
         pr = sch.get("pricing") or {}
         if pr:
-            s_name = sch.get("shortName") or sch.get("name") or sch.get("id")
-            p4 = (pr.get("pass4") or {}).get("price", "?")
-            p8 = (pr.get("pass8") or {}).get("price", "?")
-            op = (pr.get("open") or {}).get("price")
-            cards = ", ".join(pr.get("sportCards") or [])
-            op_str = f" | OPEN: {op} zł" if op else ""
-            pricing_lines.append(f"  - {s_name}: 4 wejścia = {p4} zł | 8 wejść = {p8} zł{op_str} ({cards})")
+            s_name = sch.get("name") or sch.get("id")
+            passes = pr.get("passes") or []
+            pass_parts = [f"{p.get('units')}x = {p.get('price')} zł" for p in passes if isinstance(p, dict)]
+            op = pr.get("openPassPrice")
+            if op:
+                pass_parts.append(f"OPEN = {op} zł")
+            single = pr.get("singleEntryPrice")
+            if single:
+                pass_parts.insert(0, f"1 wejście = {single} zł")
+            pricing_lines.append(f"  - {s_name}: " + " | ".join(pass_parts))
 except Exception:
     pass
 
