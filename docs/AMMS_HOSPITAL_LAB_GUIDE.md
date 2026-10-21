@@ -95,6 +95,7 @@ docker network create --driver=bridge --subnet=10.20.40.0/24 --gateway=10.20.40.
        restart: unless-stopped
        cap_add:
          - SYS_ADMIN
+         - NET_ADMIN
        security_opt:
          - seccomp:unconfined
          - apparmor:unconfined
