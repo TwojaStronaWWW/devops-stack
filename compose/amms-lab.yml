@@ -1,0 +1,167 @@
+# ==============================================================================
+# Wielostrefowe Laboratorium Szpitalne Asseco AMMS (Wirtualna Serwerownia)
+# Ścieżka docelowa na VPS: /opt/amms-lab/docker-compose.yml
+# Architektura: 4 odseparowane podsieci VLAN (10.20.10.0/24 - 10.20.40.0/24)
+# Bezpieczeństwo Zero Trust: Wszystkie porty bindowane wyłącznie do 127.0.0.1
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # [VLAN 40] Stacja Robocza Lekarza / Administratora (pc01.szpital.lab)
+  # ============================================================================
+  pc01-desktop:
+    image: lscr.io/linuxserver/webtop:ubuntu-xfce
+    container_name: szpital-pc01-desktop
+    hostname: pc01.szpital.lab
+    labels:
+      dev.dozzle.name: "szpital-pc01 • Stacja Robocza (10.20.40.50)"
+      org.opencontainers.image.description: "Graficzna stacja robocza XFCE w sieci szpitalnej (10.20.40.50)"
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-Europe/Warsaw}
+      - SUBFOLDER=/
+      - TITLE=PC01-Szpital-Lab (10.20.40.50)
+      - LC_ALL=pl_PL.UTF-8
+    volumes:
+      - /opt/amms-lab/desktop-pc01:/config
+    ports:
+      - "127.0.0.1:3010:3000"
+    shm_size: "1gb"
+    extra_hosts:
+      - "db.szpital.lab:10.20.10.10"
+      - "amms.szpital.lab:10.20.20.10"
+      - "int.szpital.lab:10.20.30.10"
+      - "pc01.szpital.lab:10.20.40.50"
+    networks:
+      szpital_vlan_lan:
+        ipv4_address: 10.20.40.50
+      szpital_vlan_his:
+        ipv4_address: 10.20.20.50
+      szpital_vlan_dmz:
+        ipv4_address: 10.20.30.50
+      szpital_vlan_db:
+        ipv4_address: 10.20.10.50
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2048M
+        reservations:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:3000/ > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================================
+  # [VLAN 30] Serwer Platformy Integracyjnej Asseco (int.szpital.lab)
+  # ============================================================================
+  srv-integracja:
+    image: eclipse-temurin:8-jdk-jammy
+    container_name: szpital-integracja
+    hostname: int.szpital.lab
+    labels:
+      dev.dozzle.name: "szpital-integracja • Tomcat DMZ (10.20.30.10)"
+      org.opencontainers.image.description: "Platforma Integracyjna Asseco (Apache Tomcat) w strefie DMZ (10.20.30.10)"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    working_dir: /opt/tomcat
+    command: ["/bin/bash", "-c", "if [ -x /opt/tomcat/apache-tomcat/bin/catalina.sh ]; then exec /opt/tomcat/apache-tomcat/bin/catalina.sh run; else echo 'Oczekiwanie na pliki Tomcat w /opt/amms-lab/integracja-tomcat...' && sleep infinity; fi"]
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+      - JAVA_OPTS=-Xms512m -Xmx1536m -Duser.language=pl -Duser.country=PL -Dfile.encoding=UTF-8
+    volumes:
+      - /opt/amms-lab/integracja-tomcat:/opt/tomcat
+    ports:
+      - "127.0.0.1:18081:8080"
+    extra_hosts:
+      - "db.szpital.lab:10.20.10.10"
+      - "amms.szpital.lab:10.20.20.10"
+      - "int.szpital.lab:10.20.30.10"
+      - "pc01.szpital.lab:10.20.40.50"
+    networks:
+      szpital_vlan_dmz:
+        ipv4_address: 10.20.30.10
+      szpital_vlan_his:
+        ipv4_address: 10.20.20.30
+      szpital_vlan_db:
+        ipv4_address: 10.20.10.30
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2048M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f java > /dev/null || pgrep -f sleep > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ============================================================================
+  # [VLAN 20] Serwer Aplikacyjny HIS Asseco AMMS (amms.szpital.lab)
+  # ============================================================================
+  srv-amms-his:
+    image: eclipse-temurin:8-jdk-jammy
+    container_name: szpital-amms-his
+    hostname: amms.szpital.lab
+    labels:
+      dev.dozzle.name: "szpital-amms-his • WildFly 26 (10.20.20.10)"
+      org.opencontainers.image.description: "Serwer aplikacyjny Asseco AMMS (WildFly 26.0.1.Final + amms.ear) w strefie HIS (10.20.20.10)"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    working_dir: /opt/wildfly
+    command: ["/bin/bash", "-c", "if [ -x /opt/wildfly/wildfly-26.0.1.Final/bin/standalone.sh ]; then exec /opt/wildfly/wildfly-26.0.1.Final/bin/standalone.sh -b 0.0.0.0 -bmanagement 0.0.0.0; else echo 'Oczekiwanie na pliki WildFly w /opt/amms-lab/amms-wildfly...' && sleep infinity; fi"]
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+      - JAVA_OPTS=-Xms2g -Xmx4g -XX:MetaspaceSize=512M -XX:MaxMetaspaceSize=2g -Djava.net.preferIPv4Stack=true -Djboss.modules.system.pkgs=org.jboss.byteman -Djava.awt.headless=true -DappServerIntegration=true -Duser.language=pl -Duser.country=PL -Duser.region=PL -XX:+UseG1GC -XX:+UseStringDeduplication -Djboss.modules.lockless=true -Djava.security.egd=file:/dev/./urandom -Doracle.jdbc.disableOob=true -Doracle.net.disableOob=true -Xbootclasspath/a:/opt/wildfly/wildfly-26.0.1.Final/modules/system/layers/base/pl/asseco/amms/main/amms-charsets-1.0.0.jar
+    volumes:
+      - /opt/amms-lab/amms-wildfly:/opt/wildfly
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:19990:9990"
+    extra_hosts:
+      - "db.szpital.lab:10.20.10.10"
+      - "amms.szpital.lab:10.20.20.10"
+      - "int.szpital.lab:10.20.30.10"
+      - "pc01.szpital.lab:10.20.40.50"
+    networks:
+      szpital_vlan_his:
+        ipv4_address: 10.20.20.10
+      szpital_vlan_db:
+        ipv4_address: 10.20.10.20
+      szpital_vlan_dmz:
+        ipv4_address: 10.20.30.20
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 5120M
+        reservations:
+          memory: 1024M
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f java > /dev/null || pgrep -f sleep > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  szpital_vlan_db:
+    external: true
+  szpital_vlan_his:
+    external: true
+  szpital_vlan_dmz:
+    external: true
+  szpital_vlan_lan:
+    external: true
