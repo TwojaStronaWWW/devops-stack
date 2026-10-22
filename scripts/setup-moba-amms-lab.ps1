@@ -51,15 +51,15 @@ Host $HostIp vps-szpital
             [string]$RemoteCmd,
             [int]$Icon = 109
         )
-        return "$Name=#$Icon#0%$HostIp%22%$User%%-1%-1%$RemoteCmd%%%%0%-1%0%$KeyPath%%-1%-1%0%0%%1080%%0%0%1%%0%%%%0%-1%-1%0%%%0#MobaFont%10%0%0%-1%15%236,236,236%30,30,30%180,180,192%0%-1%0%%xterm%-1%0%_Std_Colors_0_%80%24%0%1%-1%<none>%%0%0%-1%0%#0# #-1"
+        return "$Name=#$Icon#0%$HostIp%22%$User%%-1%-1%$RemoteCmd%%%%0%-1%0%$KeyPath%%-1%-1%0%0%%1080%%0%0%1%%0%%%%0%-1%-1%0%%%0#MobaFont%10%0%0%-1%15%236,236,236%30,30,30%180,180,192%0%-1%0%UTF-8%xterm%-1%0%_Std_Colors_0_%80%24%0%1%-1%<none>%%0%0%-1%0%#0# #-1"
     }
 
     $BookmarkBlock = @(
         "[Bookmarks_1]",
         "SubRep=VPS - Szpital AMMS Lab",
         "ImgNum=41",
-        (New-MobaSshLine -Name "0. ZESTAWIENIE SERWEROWNI (Status Labu)" -RemoteCmd "/opt/amms-lab/status-lab.sh; exec bash" -Icon 93),
-        (New-MobaSshLine -Name "1. VPS-HOST Glowny (/opt/amms-lab)" -RemoteCmd "cd /opt/amms-lab && exec bash" -Icon 109),
+        (New-MobaSshLine -Name "0. ZESTAWIENIE SERWEROWNI (Status + SFTP)" -RemoteCmd "" -Icon 93),
+        (New-MobaSshLine -Name "1. VPS-HOST Glowny (Pełne Drzewo Plików SFTP)" -RemoteCmd "" -Icon 109),
         (New-MobaSshLine -Name "2. SRV-ORACLE-DB (10.20.10.10 - db.szpital.lab)" -RemoteCmd "docker exec -it szpital-oracle-db bash 2>/dev/null || (echo 'Kontener szpital-oracle-db jeszcze nie uruchomiony'; cd /opt/amms-lab; exec bash)" -Icon 140),
         (New-MobaSshLine -Name "3. SRV-AMMS-HIS (10.20.20.10 - amms.szpital.lab)" -RemoteCmd "docker exec -it szpital-amms-his bash 2>/dev/null || (echo 'Kontener szpital-amms-his jeszcze nie uruchomiony'; cd /opt/amms-lab; exec bash)" -Icon 109),
         (New-MobaSshLine -Name "4. SRV-INTEGRACJA (10.20.30.10 - int.szpital.lab)" -RemoteCmd "docker exec -it szpital-integracja bash 2>/dev/null || (echo 'Kontener szpital-integracja jeszcze nie uruchomiony'; cd /opt/amms-lab; exec bash)" -Icon 109),

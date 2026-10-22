@@ -4,6 +4,8 @@
 # Wyświetla na żywo topologię 4 VLAN-ów, status serwerów, adresy IP, RAM i dysk
 # ==============================================================================
 set -euo pipefail
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 
 C_RESET="\033[0m"
 C_BOLD="\033[1m"
