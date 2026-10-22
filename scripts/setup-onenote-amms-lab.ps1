@@ -54,9 +54,16 @@ function Set-ClipboardHtml {
 }
 
 try {
+    $runningOn = Get-Process ONENOTE -ErrorAction SilentlyContinue
+    if ($runningOn) {
+        $runningOn | ForEach-Object { [void]$_.CloseMainWindow() }
+        Start-Sleep -Seconds 2
+        Get-Process ONENOTE -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Office\16.0\OneNote\General" -Name "ConsecutiveBootCrashes" -Value 0 -ErrorAction SilentlyContinue
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Office\16.0\OneNote\General" -Name "ConsecutiveEarlyCrashes" -Value 0 -ErrorAction SilentlyContinue
     New-Item -ItemType Directory -Path $NotebookPath -Force | Out-Null
+    Remove-Item -Path (Join-Path $NotebookPath "OneNote_RecycleBin") -Recurse -Force -ErrorAction SilentlyContinue
 
     # Rejestracja Notesu w OpenNotebooks obok MaxBit
     $regPath = "HKCU:\Software\Microsoft\Office\16.0\OneNote\OpenNotebooks"
@@ -360,9 +367,7 @@ try {
     foreach ($p in $pages) {
         $fullBookHtml += "<div class='card'>$($p.Html)</div>`r`n"
         $secPath = Join-Path $NotebookPath $p.File
-        if (-not (Test-Path $secPath)) {
-            Copy-Item -Path $blankOne -Destination $secPath -Force
-        }
+        Copy-Item -Path $blankOne -Destination $secPath -Force
     }
     $fullBookHtml += "</body></html>"
     Set-Content -Path (Join-Path $NotebookPath "Kompendium-Laboratorium-AMMS.html") -Value $fullBookHtml -Encoding UTF8
@@ -373,7 +378,7 @@ try {
 
         if (Test-Path $tocPath) {
             Start-Process -FilePath $oneNoteExe -ArgumentList "`"$tocPath`""
-            Start-Sleep -Milliseconds 2000
+            Start-Sleep -Milliseconds 3500
         }
 
         foreach ($p in $pages) {
