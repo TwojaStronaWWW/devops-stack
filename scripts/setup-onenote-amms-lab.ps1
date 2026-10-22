@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Tworzy dedykowany Notes OneNote "Laboratorium AMMS" z 6 zakładkami tematycznymi
@@ -16,17 +16,27 @@ Add-Type -AssemblyName System.Windows.Forms
 
 function ConvertTo-CfHtml {
     Param([Parameter(Mandatory)][string]$HtmlFragment)
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $HtmlFragment.ToCharArray()) {
+        $code = [int][char]$ch
+        if ($code -gt 127) {
+            [void]$sb.Append("&#$code;")
+        } else {
+            [void]$sb.Append($ch)
+        }
+    }
+    $asciiHtml = $sb.ToString()
     $headerTemplate = "Version:0.9`r`nStartHTML:{0:D10}`r`nEndHTML:{1:D10}`r`nStartFragment:{2:D10}`r`nEndFragment:{3:D10}`r`n"
     $pre = "<html><head><meta charset='utf-8'></head><body><!--StartFragment-->"
     $post = "<!--EndFragment--></body></html>"
     $dummyHeader = $headerTemplate -f 0, 0, 0, 0
     $startHtml = [System.Text.Encoding]::UTF8.GetByteCount($dummyHeader)
     $startFrag = $startHtml + [System.Text.Encoding]::UTF8.GetByteCount($pre)
-    $fragBytes = [System.Text.Encoding]::UTF8.GetByteCount($HtmlFragment)
+    $fragBytes = [System.Text.Encoding]::UTF8.GetByteCount($asciiHtml)
     $endFrag = $startFrag + $fragBytes
     $endHtml = $endFrag + [System.Text.Encoding]::UTF8.GetByteCount($post)
     $header = $headerTemplate -f $startHtml, $endHtml, $startFrag, $endFrag
-    return ($header + $pre + $HtmlFragment + $post)
+    return ($header + $pre + $asciiHtml + $post)
 }
 
 function Set-ClipboardHtml {
