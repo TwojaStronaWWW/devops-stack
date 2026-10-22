@@ -7,6 +7,53 @@
 
 services:
   # ============================================================================
+  # [VLAN 10] Serwer Bazy Danych Oracle ARM64 (db.szpital.lab / SID: moja)
+  # ============================================================================
+  srv-oracle-db:
+    image: gvenzl/oracle-free:23-slim
+    container_name: szpital-oracle-db
+    hostname: db.szpital.lab
+    labels:
+      dev.dozzle.name: "szpital-oracle-db • Oracle DB (10.20.10.10)"
+      org.opencontainers.image.description: "Natywny serwer bazy danych Oracle ARM64 (Service: moja) w strefie VLAN 10 (10.20.10.10)"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+      - ORACLE_PASSWORD=sysadm
+      - ORACLE_DATABASE=moja
+      - APP_USER=SYSADM
+      - APP_USER_PASSWORD=sysadm
+    volumes:
+      - /opt/amms-lab/oracle-db:/opt/oracle/oradata
+      - /opt/amms-lab/transfer:/opt/oracle/dpdump
+    ports:
+      - "127.0.0.1:11521:1521"
+    shm_size: "1gb"
+    extra_hosts:
+      - "db.szpital.lab:10.20.10.10"
+      - "amms.szpital.lab:10.20.20.10"
+      - "int.szpital.lab:10.20.30.10"
+      - "pc01.szpital.lab:10.20.40.50"
+    networks:
+      szpital_vlan_db:
+        ipv4_address: 10.20.10.10
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+        reservations:
+          memory: 1536M
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================================
   # [VLAN 40] Stacja Robocza Lekarza / Administratora (pc01.szpital.lab)
   # ============================================================================
   pc01-desktop:
@@ -84,7 +131,7 @@ services:
     volumes:
       - /opt/amms-lab/integracja-tomcat:/opt/tomcat
     ports:
-      - "127.0.0.1:18081:8080"
+      - "127.0.0.1:18081:8181"
     extra_hosts:
       - "db.szpital.lab:10.20.10.10"
       - "amms.szpital.lab:10.20.20.10"

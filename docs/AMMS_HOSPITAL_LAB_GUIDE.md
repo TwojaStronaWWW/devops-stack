@@ -161,8 +161,8 @@ docker network create --driver=bridge --subnet=10.20.40.0/24 --gateway=10.20.40.
    # 2. Spakowanie WildFly 26.0.1.Final + amms.ear bez katalogów tymczasowych tmp/data/log (~1.2 GB)
    tar -czf "$env:TEMP\amms-wildfly.tar.gz" -C "C:\WildflyAMMS" --exclude="wildfly-26.0.1.Final/standalone/tmp/*" --exclude="wildfly-26.0.1.Final/standalone/data/*" --exclude="wildfly-26.0.1.Final/standalone/log/*" wildfly-26.0.1.Final
 
-   # 3. Wysłanie obu paczek po szyfrowanym SSH do /opt/amms-lab/transfer na VPS
-   scp -i "$HOME\.ssh\id_ed25519" "$env:TEMP\integracja-tomcat.tar.gz" "$env:TEMP\amms-wildfly.tar.gz" ubuntu@89.168.62.31:/opt/amms-lab/transfer/
+   # 3. Wysłanie obu paczek po szyfrowanym SSH z auto-wznawianiem (rsync --append-verify)
+   until rsync -avP --append-verify -e "ssh -i $HOME\.ssh\id_ed25519 -o ServerAliveInterval=10" "$env:TEMP\integracja-tomcat.tar.gz" "$env:TEMP\amms-wildfly.tar.gz" ubuntu@89.168.62.31:/opt/amms-lab/transfer/; do sleep 2; done
    ```
 
 2. **Na serwerze VPS** rozpakuj archiwa do katalogów docelowych i przestaw adres bazy danych w `standalone.xml` z `127.0.0.1:1521/moja` na szpitalny adres `db.szpital.lab:1521/moja`:
