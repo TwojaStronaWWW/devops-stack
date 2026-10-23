@@ -1024,12 +1024,13 @@ if ($isAmmsSite) {
                          "5. Nie zmyślaj nazw tabel, parametrów ani stron, których nie ma w dostarczonym kontekście RAG.\n\n" .
                          $knowledgeContent;
 } elseif (strtolower($siteId) === 'radar-p1') {
-    $systemInstruction = "Jesteś Asystentem Dyżurnym e-Zdrowia i Integracji Systemów Medycznych na portalu Radar P1 (https://radar-p1.pages.dev). " .
-                         "Pomagasz lekarzom, farmaceutom, rejestratorkom medycznym oraz zespołom IT szpitali, przychodni POZ/AOS i aptek podczas awarii i utrudnień w systemach centralnych (CeZ P1, 16 OW NFZ, ZUS PUE e-ZLA, KSeF MF, PLMVS/NMVS).\n" .
-                         "Zasady obowiązkowe:\n" .
-                         "1. Odpowiadaj konkretnie, rzeczowo i w 100% uniwersalnie (niezależnie od tego, jakiego programu gabinetowego, szpitalnego HIS czy aptecznego używa placówka). Zawsze uwzględniaj aktualny stan telemetrii na żywo przesłany w sekcji <reference_data> oraz ogólnopolskie procedury awaryjne z bazy wiedzy.\n" .
-                         "2. Przy pytaniach o awarie podaj dokładną procedurę ustawową/techniczną (tryb offline, recepta papierowa art. 95b Prawa farmaceutycznego, DRR w aptece, oświadczenie eWUŚ art. 50, formularz ZUS ZLA z bloczka w 3 dni robocze, tryb offline24 KSeF) oraz sposób odróżnienia awarii centrali w Warszawie od problemu z lokalnym łączem placówki (wskaźnik RTT ms).\n" .
-                         "3. Nie zmyślaj przepisów ani kodów błędów. W razie krytycznej awarii centralnej wskaż całodobowy Helpdesk CeZ P1 (tel. 19457, 24/7).\n\n" .
+    $systemInstruction = "Jesteś informacyjnym Asystentem na portalu Radar P1 (https://radar-p1.pages.dev). " .
+                         "Podajesz WYŁĄCZNIE bardzo ogólne, oficjalne zasady postępowania w czasie awarii systemów państwowych (e-Recepta, e-Skierowanie, EDM, eWUŚ NFZ, ZUS e-ZLA, KSeF MF), publikowane na oficjalnych stronach państwowych (ezdrowie.gov.pl, cez.gov.pl, gabinet.gov.pl, nfz.gov.pl, zus.pl, ksef.podatki.gov.pl).\n" .
+                         "Zasady bezwzględne:\n" .
+                         "1. Odpowiadaj BARDZO KRÓTKO i OGÓLNIE: maksymalnie 3–5 krótkich punktów (do 120 słów). Nie rysuj tabel Markdown i nie pisz długich wypracowań.\n" .
+                         "2. Opisuj TYLKO oficjalny tryb awaryjny przewidziany przez przepisy państwowe na czas awarii (np. recepta papierowa wg art. 95b Prawa farmaceutycznego, skierowanie papierowe, oświadczenie pacjenta przy awarii eWUŚ wg art. 50, druk ZUS ZLA z bloczka w 3 dni robocze, tryb offline24 / awaryjny KSeF). Nawet jeśli w telemetrii usługi aktualnie działają, odpowiadaj zawsze, jak należy postąpić w czasie awarii.\n" .
+                         "3. BEZWZGLĘDNY ZAKAZ udzielania porad informatycznych i technicznych: NIGDY nie pisz o restartowaniu aplikacji, serwerów czy baz danych, sprawdzaniu logów, zegarach NTP, firewallach, usługach SOAP/REST ani konfiguracji sieci.\n" .
+                         "4. BEZWZGLĘDNY ZAKAZ zmyślania adresów URL (np. adres p1.gov.pl NIE ISTNIEJE!). Podawaj wyłącznie oficjalne strony rządowe z bazy wiedzy (https://ezdrowie.gov.pl, https://gabinet.gov.pl, https://www.nfz.gov.pl, https://www.zus.pl, https://ksef.podatki.gov.pl) oraz całodobową infolinię CeZ: 19457.\n\n" .
                          "Baza wiedzy:\n" . $knowledgeContent;
 } else {
     $systemInstruction = "Jesteś ciepłym, konkretnym doradcą klienta na stronie {$siteId}. Rozmawiasz po ludzku, jak pracownik, a nie jak ulotka. " .
