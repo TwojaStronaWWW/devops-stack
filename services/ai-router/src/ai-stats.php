@@ -849,7 +849,7 @@ function aiRenderMetrics(): string
     // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
     $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];
     $waSameDay = (($wa['day'] ?? '') === aiAnalyticsDay());
-    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart'];
+    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1'];
 
     $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO, Europe/Warsaw)';
     $o[] = '# TYPE web_analytics_unique_visitors_today gauge';
@@ -878,7 +878,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP web_analytics_pageviews_total Laczna liczba odslon podstron i sekcji SPA (Cookieless)';
     $o[] = '# TYPE web_analytics_pageviews_total counter';
     $pvMap = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
-    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'katosalsahub|/grafik.html', 'dancepuls|/', 'fuegolingua|/', 'fuegolingua|/cennik.html', 'twojastronawww|/', 'twojastronawww|/jak-pracuje.html', 'raricart|/', 'raricart|/pakiety'] as $defPv) {
+    foreach (['katosalsahub|/', 'katosalsahub|/salsopedia.html', 'katosalsahub|/grafik.html', 'dancepuls|/', 'fuegolingua|/', 'fuegolingua|/cennik.html', 'twojastronawww|/', 'twojastronawww|/jak-pracuje.html', 'raricart|/', 'raricart|/pakiety', 'radar-p1|/'] as $defPv) {
         if (!isset($pvMap[$defPv])) {
             $pvMap[$defPv] = 0;
         }
@@ -911,6 +911,11 @@ function aiRenderMetrics(): string
         '/#contact'        => '📞 /#contact (Formularz wyceny)',
         '/#kontakt'        => '📞 /#kontakt (Sekcja kontaktu)',
         '/#kursy'          => '🇪🇸 /#kursy (Kursy językowe)',
+        '/#section-white'      => '🏥 /#section-white (Usługi kliniczne P1 & NFZ)',
+        '/#section-grey'       => '💊 /#section-grey (Usługi apteczne, KSeF & ERP)',
+        '/#geo-poland-section' => '🗺️ /#geo-poland-section (Mapa 16 OW NFZ)',
+        '/#section-watcher'    => '🔭 /#section-watcher (Zwiadowca zmian legislacyjnych)',
+        '/#faq-section'        => '❓ /#faq-section (Baza wiedzy i FAQ e-Zdrowia)',
     ];
     foreach ($pvMap as $pvKey => $pvCount) {
         [$pvSite, $pvPath] = array_pad(explode('|', (string)$pvKey, 2), 2, '/');
@@ -1049,6 +1054,10 @@ function aiRenderMetrics(): string
         'contact_form_submit' => '📝 Wysłanie formularza kontaktowego',
         'radio_play'          => '📻 Uruchomienie odtwarzacza Radio Salsa',
         'outbound_click'      => '↗️ Kliknięcie w link zewnętrzny (szkoła / wydarzenie)',
+        'copy_status_report'  => '📋 Skopiowanie raportu dostępności e-Zdrowia (Radar P1)',
+        'export_csv'          => '📥 Eksport pełnego raportu SLA do CSV (Radar P1)',
+        'nfz_region_select'   => '🗺️ Wybór regionu OW NFZ na mapie Polski (Radar P1)',
+        'wallboard_toggle'    => '📺 Przełączenie trybu TV / Wallboard NOC (Radar P1)',
     ];
     foreach ($evMap as $eKey => $eCount) {
         [$eSite, $eName] = array_pad(explode('|', (string)$eKey, 2), 2, 'chat_open');

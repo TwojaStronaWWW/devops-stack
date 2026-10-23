@@ -532,7 +532,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       });
       assert.strictEqual(evRes.status, 202);
 
-      // 4b. Zdarzenie konwersji CTA z aliasem event_name i search_term (kompatybilność z raricart)
+      // 4b. Zdarzenie konwersji CTA z aliasem event_name i search_term (kompatybilność z raricart i radar-p1)
       const raricartEvRes = await fetch(`${baseUrl}/analytics`, {
         method: 'POST',
         headers: {
@@ -547,6 +547,22 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
         }),
       });
       assert.strictEqual(raricartEvRes.status, 202);
+
+      const radarEvRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=UTF-8',
+          'Origin': 'https://radar-p1.pages.dev',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+        body: JSON.stringify({
+          site_id: 'radar-p1',
+          type: 'event',
+          event_name: 'nfz_region_select',
+        }),
+      });
+      assert.strictEqual(radarEvRes.status, 202);
 
       const engRes = await fetch(`${baseUrl}/analytics`, {
         method: 'POST',
@@ -620,6 +636,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="katosalsahub",event="cta_phone_click",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="raricart",event="contact_form_submit",label="[^"]+"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_events_total\{site="radar-p1",event="nfz_region_select",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_sources_total\{site="twojastronawww",source="direct",label="[^"]+"\}\s+\d+/);
       assert.match(metricsText, /web_analytics_devices_total\{site="twojastronawww",device="mobile",label="[^"]+"\}\s+\d+/);
       assert.match(metricsText, /web_analytics_countries_total\{site="twojastronawww",country="PL",label="[^"]+"\}\s+\d+/);

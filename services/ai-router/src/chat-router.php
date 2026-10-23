@@ -223,7 +223,8 @@ $defaultAllowedOrigins = [
     'https://goodmood.dance',
     'https://www.goodmood.dance',
     'https://tanecznakompania.pl',
-    'https://www.tanecznakompania.pl'
+    'https://www.tanecznakompania.pl',
+    'https://radar-p1.pages.dev'
 ];
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
@@ -318,7 +319,7 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
         exit;
     }
 
-    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart'];
+    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1'];
     $bSite = strtolower(trim((string)($beacon['site_id'] ?? '')));
     if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite) || !in_array($bSite, $allowedAnalyticsSites, true)) {
         http_response_code(400);
@@ -416,7 +417,7 @@ if ($requestUri === '/analytics' || $requestUri === '/collect') {
             $bSource = 'bing';
         } elseif (preg_match('/(google\.|gclid|yahoo\.|ecosia\.)/', $sourceProbe)) {
             $bSource = 'google';
-        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|raricart\.pl|localhost|127\.0\.0\.1)/', $sourceProbe)) {
+        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|raricart\.pl|radar-p1\.pages\.dev|localhost|127\.0\.0\.1)/', $sourceProbe)) {
             $bSource = 'other';
         }
     }

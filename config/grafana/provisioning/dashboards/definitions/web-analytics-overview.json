@@ -660,9 +660,10 @@
           { "selected": false, "text": "dancepuls", "value": "dancepuls" },
           { "selected": false, "text": "fuegolingua", "value": "fuegolingua" },
           { "selected": false, "text": "twojastronawww", "value": "twojastronawww" },
-          { "selected": false, "text": "raricart", "value": "raricart" }
+          { "selected": false, "text": "raricart", "value": "raricart" },
+          { "selected": false, "text": "radar-p1", "value": "radar-p1" }
         ],
-        "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww,raricart",
+        "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww,raricart,radar-p1",
         "type": "custom"
       }
     ]
