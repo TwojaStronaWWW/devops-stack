@@ -222,6 +222,35 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.strictEqual(body.status, 'UP');
     });
 
+    it('endpoint GET /radar-data powinien zwracać telemetrię P1/NFZ w formacie JSON (200 OK, Cache-Control: no-store)', async () => {
+      const radarJsonPath = path.join(ROUTER_STORAGE_DIR, 'p1_radar.json');
+      const existed = fs.existsSync(radarJsonPath);
+      const backup = existed ? fs.readFileSync(radarJsonPath) : null;
+      fs.mkdirSync(ROUTER_STORAGE_DIR, { recursive: true });
+      fs.writeFileSync(
+        radarJsonPath,
+        JSON.stringify({
+          updated_at: '2026-10-23 22:00:00',
+          summary: { white_up: 17, white_total: 17, grey_up: 5, grey_total: 5, degraded: [] },
+        }),
+        'utf8'
+      );
+      try {
+        const res = await fetch(`${baseUrl}/radar-data`);
+        assert.strictEqual(res.status, 200);
+        assert.match(res.headers.get('cache-control') || '', /no-store/);
+        const body = await res.json();
+        assert.strictEqual(body.success, true);
+        assert.strictEqual(body.data.updated_at, '2026-10-23 22:00:00');
+      } finally {
+        if (existed && backup !== null) {
+          fs.writeFileSync(radarJsonPath, backup);
+        } else if (!existed && fs.existsSync(radarJsonPath)) {
+          fs.unlinkSync(radarJsonPath);
+        }
+      }
+    });
+
     it('powinien blokować żądania z nieautoryzowanych domen oraz fałszowanie Origin: http://localhost przez Cloudflare (HTTP 403)', async () => {
       const res = await fetch(`${baseUrl}/chat-router.php`, {
         method: 'POST',

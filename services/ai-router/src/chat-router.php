@@ -33,6 +33,64 @@ if ($requestUri === '/widget.js') {
     exit;
 }
 
+// Serwowanie telemetrii JSON dla Radaru P1 (GET /radar-data) oraz panelu HTML (GET /radar | /p1-radar)
+if ($requestUri === '/radar-data') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-Robots-Tag: noindex, nofollow, noarchive');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+    $reqMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if ($reqMethod !== 'GET' && $reqMethod !== 'HEAD') {
+        http_response_code(405);
+        echo json_encode(['success' => false, 'error' => 'Method Not Allowed'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $radarCandidates = [
+        '/app/storage/p1_radar.json',
+        dirname(__DIR__) . '/storage/p1_radar.json',
+    ];
+    $radarJsonPath = '';
+    foreach ($radarCandidates as $candidate) {
+        if (is_file($candidate) && is_readable($candidate)) {
+            $radarJsonPath = $candidate;
+            break;
+        }
+    }
+    if ($radarJsonPath === '') {
+        http_response_code(503);
+        echo json_encode(['success' => false, 'error' => 'Telemetria P1 jest w trakcie inicjalizacji.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $rawRadar = @file_get_contents($radarJsonPath);
+    $decodedRadar = $rawRadar ? json_decode($rawRadar, true) : null;
+    if (!is_array($decodedRadar)) {
+        http_response_code(503);
+        echo json_encode(['success' => false, 'error' => 'Trwa odświeżanie pliku telemetrii P1.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    http_response_code(200);
+    echo json_encode([
+        'success' => true,
+        'data'    => $decodedRadar,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+if ($requestUri === '/radar' || $requestUri === '/p1-radar' || $requestUri === '/p1-radar.html') {
+    header('Content-Type: text/html; charset=UTF-8');
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-Robots-Tag: noindex, nofollow');
+    $radarHtmlPath = __DIR__ . '/p1-radar.html';
+    if (is_file($radarHtmlPath)) {
+        readfile($radarHtmlPath);
+    } else {
+        header('Location: https://radar-p1.pages.dev/', true, 302);
+    }
+    exit;
+}
+
 // Serwowanie interfejsu Asystenta AMMS w stylu Microsoft Teams (GET /amms | /amms-teams | /amms.html)
 // ZERO TRUST: Dostęp wyłącznie przez szyfrowany tunel SSH (127.0.0.1) — całkowita blokada ruchu z publicznego internetu (Cloudflare WAN)
 if ($requestUri === '/amms' || $requestUri === '/amms-teams' || $requestUri === '/amms.html' || str_starts_with($requestUri, '/docs-pdf/') || $requestUri === '/amms-page') {
