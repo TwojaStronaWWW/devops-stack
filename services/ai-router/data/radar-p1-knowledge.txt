@@ -1,0 +1,103 @@
+================================================================================
+BAZA WIEDZY: RADAR SYSTEMÓW E-ZDROWIA & LEGISLACJI (RADAR-P1)
+Adres produkcyjny: https://radar-p1.pages.dev/
+Rola: Niezależny, ogólnopolski panel telemetryczny i centrum diagnostyki awarii
+systemów centralnych e-Zdrowia w Polsce (CeZ P1, 16 OW NFZ, ZUS PUE, KSeF MF)
+================================================================================
+
+1. CZYM JEST RADAR P1 I JAK DZIAŁA DIAGNOSTYKA (CENTRALA VS LOKALNE ŁĄCZE)
+- Radar P1 monitoruje w cyklu 60-sekundowym dostępność (UP/DOWN), niezawodność (%) w oknie pomiarowym oraz czasy odpowiedzi (RTT/WAN w milisekundach) kluczowych systemów centralnych e-Zdrowia i finansów publicznych.
+- Główny problem w szpitalach, przychodniach POZ/AOS i aptekach brzmi: „Czy nie działa P1/NFZ w Warszawie, czy zawiesił się nasz lokalny internet / serwer HIS?”.
+- Jak to sprawdzić w 15 sekund na Radarze P1:
+  1) Spójrz na wskaźnik „🌐 Twoje łącze: X ms” na górnym pasku (mierzy czas odpowiedzi z przeglądarki placówki do brzegowego węzła Cloudflare). Jeśli wynosi 10–60 ms, lokalny internet w placówce działa prawidłowo.
+  2) Spójrz na kartę „Diagnoza Centrali (Warszawa)”:
+     - „✅ Warszawa Działa” — wszystkie usługi centralne CeZ P1, NFZ, ZUS i KSeF odpowiadają w normie. Jeśli system gabinetowy/szpitalny nadal zgłasza błąd, sprawdź lokalny serwer HIS, ważność certyfikatu WSS/TLS lub zegar NTP.
+     - „🚨 Problem w Centrali” — wykryto ogólnopolską awarię lub przeciążenie serwerów centralnych w Warszawie. Nie należy restartować serwerów bazodanowych w szpitalu; należy wdrożyć procedurę awaryjną (offline) i użyć przycisku „📋 Kopiuj status”, aby rozesłać komunikat personelowi medycznemu.
+- Progi statusów SLA na Radarze P1:
+  - 🟢 DZIAŁA (OK): usługa odpowiada (up = 1), niezawodność >= 90% oraz czas odpowiedzi <= 3000 ms (typowa norma dla P1 to 150–2200 ms).
+  - 🟠 SPOWOLNIENIE (WARN): czas odpowiedzi > 3000 ms lub niezawodność spadła do przedziału 20%–89.9%.
+  - 🔴 AWARIA / NIEDOSTĘPNA (ERR): brak odpowiedzi serwera centralnego (up = 0) lub niezawodność < 20%.
+
+2. SŁOWNIK AWARII, KODÓW BŁĘDÓW I PROCEDUR AWARYJNYCH E-ZDROWIA (TRYB OFFLINE)
+
+[2.1] Awaria e-Recepty w gabinecie lub szpitalu — Recepta papierowa (Art. 95b Prawa farmaceutycznego)
+- Objaw: System HIS/gabinetowy (Asseco AMMS, Kamsoft KS-SOMED/KS-PPS, mMedica, Optimed, CGM Clininet, DrEryk) zwraca błąd połączenia z P1, timeout (>10 s) lub błąd podpisu przy próbie wystawienia e-Recepty.
+- Procedura awaryjna: W przypadku braku dostępu do Systemu P1 lekarz lub uprawniony pracownik medyczny ma pełne prawo wystawić receptę w postaci papierowej (z danymi pacjenta, oznaczeniem podmiotu z RPWDL, numerem PWZ i własnoręcznym podpisem/pieczątką).
+- Realizacja w aptece: Apteka realizuje receptę papierową wystawioną w trybie awaryjnym z zachowaniem pełnej refundacji NFZ przysługującej pacjentowi.
+
+[2.2] Awaria DRR / e-Recepty w aptece (Tryb awaryjny realizacji e-Recepty)
+- Objaw: Pacjent okazuje w aptece wydruk informacyjny e-Recepty, kod SMS (4 cyfry + PESEL) lub kod QR w aplikacji mObywatel/IKP, ale system apteczny (np. Kamsoft KS-AOW, EuroSoft) nie może pobrać e-Recepty z P1 lub P1 odrzuca zapis Dokumentu Realizacji Recepty (DRR).
+- Procedura awaryjna: Gdy P1 odrzuca zapis DRR z powodu awarii centralnej, system apteczny zapisuje transakcję lokalnie w buforze i kolejkuje wysyłkę DRR do P1 natychmiast po ustąpieniu awarii. W przypadku całkowitego braku łączności z P1 i zagrożenia zdrowia pacjenta farmaceuta może wydać lek na podstawie wydruku informacyjnego lub wystawić receptę farmaceutyczną (Art. 96 ust. 4 Prawa farmaceutycznego).
+
+[2.3] Awaria eWUŚ NFZ w rejestracji, POZ, AOS, Izbie Przyjęć i SOR (Art. 50 ustawy o świadczeniach)
+- Objaw: Serwery eWUŚ nie odpowiadają (timeout, błąd WSDL/SOAP) lub zwracają błąd komunikacji przy weryfikacji numeru PESEL pacjenta.
+- Procedura awaryjna: Niedostępność systemu eWUŚ NIGDY nie stanowi podstawy do odmowy udzielenia świadczenia zdrowotnego. Prawo do świadczeń finansowanych przez NFZ potwierdza się na podstawie:
+  1) dowolnego dokumentu potwierdzającego ubezpieczenie (np. druk ZUS ZUA/ZZA, RMUA, legitymacja emeryta/rencisty, zaświadczenie pracodawcy, ekran mObywatel/IKP), lub
+  2) pisemnego oświadczenia pacjenta (lub opiekuna prawnego) o przysługującym prawie do świadczeń opieki zdrowotnej.
+
+[2.4] Awaria e-ZLA (ZUS PUE) — Zwolnienie lekarskie L4 na formularzu z bloczka
+- Objaw: Brak możliwości pobrania danych płatnika składek z ZUS lub wysłania elektronicznego zwolnienia lekarskiego e-ZLA z powodu awarii PUE ZUS lub braku internetu.
+- Procedura awaryjna: Lekarz wystawia pacjentowi zaświadczenie lekarskie na wcześniej wydrukowanym z PUE ZUS pustym formularzu (ZUS ZLA z bloczka), opatrując je podpisem i pieczątką. Lekarz ma ustawowy obowiązek wprowadzić (zelektronizować) to zwolnienie do systemu PUE ZUS w terminie 3 dni roboczych od dnia ustania przyczyny uniemożliwiającej wystawienie e-ZLA.
+
+[2.5] Awaria KSeF (Ministerstwo Finansów) — Tryb offline24 oraz Tryb Awaryjny KSeF
+- Objaw: System finansowo-księgowy ERP w szpitalu/przychodni lub system apteczny nie może wysłać lub odebrać faktury ustrukturyzowanej FA(3) w Krajowym Systemie e-Faktur.
+- Procedura awaryjna:
+  1) Tryb offline24 (przy lokalnych problemach z łączem lub chwilowej niedostępności API KSeF bez komunikatu w BIP MF): podatnik wystawia fakturę w swoim systemie ERP zgodnie ze schemą FA(3), opatruje ją kodem QR i ma obowiązek przesłać ją do KSeF najpóźniej w następnym dniu roboczym po dniu wystawienia.
+  2) Tryb awaryjny KSeF (ogłoszony w BIP Ministerstwa Finansów i komunikatach API): podatnik przesyła wystawione w tym okresie faktury do KSeF w terminie 7 dni roboczych od dnia zakończenia awarii wskazanej w komunikacie MF.
+
+[2.6] Awaria e-Skierowania w P1 — Skierowanie papierowe
+- Objaw: System gabinetowy lub szpitalny nie może zapisać e-Skierowania do poradni specjalistycznej (AOS), szpitala lub na badania kosztochłonne (TK, MR, endoskopia).
+- Procedura awaryjna: W przypadku braku dostępu do Systemu P1 dopuszczalne jest wystawienie skierowania w postaci papierowej. Placówka przyjmująca pacjenta rejestruje skierowanie papierowe i wpisuje pacjenta na listę oczekujących (AP-KOLCE) z zachowaniem daty zgłoszenia.
+
+[2.7] Błąd HTTP 502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout
+- Objaw: Komunikaty 502, 503 lub 504 podczas komunikacji z usługami sieciowymi CeZ P1 (SOAP/REST) lub bramkami NFZ.
+- Diagnoza i działanie: Kod 502/503/504 pochodzi z brzegowych serwerów proxy/load-balancerów w Warszawie (CeZ/NFZ) i oznacza przeciążenie puli serwerów aplikacyjnych lub trwające wdrożenie nowej wersji. Nie należy modyfikować konfiguracji sieciowej w placówce ani restartować bazy danych HIS. Dokumenty należy pozostawić w buforze do ponowienia wysyłki.
+
+[2.8] Błąd WSP / OCSP / WSS 401 Unauthorized — Problemy z certyfikatem P1, ZUS lub zegarem NTP
+- Objaw: Błąd weryfikacji podpisu elektronicznego (WSP), błąd odpytania listy OCSP lub błąd autoryzacji nagłówka WSS/OAuth2 podczas wysyłki e-Recepty, e-Skierowania lub EDM.
+- Diagnoza i działanie:
+  1) Sprawdź na Radarze P1 kartę „Podpisy i certyfikaty P1 (WSP)”. Jeśli świeci na czerwono/pomarańczowo — trwa awaria usługi walidacji podpisów w CeZ.
+  2) Jeśli karta WSP na Radarze P1 świeci na zielono (DZIAŁA), problem leży lokalnie w placówce:
+     - Sprawdź synchronizację czasu systemowego NTP na serwerze HIS i końcówce lekarza (odchyłka czasu > 5 minut powoduje natychmiastowe odrzucanie tokenów WSS SAML/OAuth2 przez P1!).
+     - Sprawdź datę ważności certyfikatu podmiotu leczniczego (WSS i TLS) wygenerowanego w RPWDL (certyfikaty P1 są ważne maksymalnie 24 miesiące).
+     - Sprawdź ważność osobistego certyfikatu ZUS lub podpisu kwalifikowanego lekarza.
+
+[2.9] Kolejki wysyłki EDM i RZM (Rejestr Zdarzeń Medycznych HL7 CDA / FHIR)
+- Objaw: Zdarzenia Medyczne (RZM), indeksy Elektronicznej Dokumentacji Medycznej (EDM), Karty Informacyjne z Leczenia Szpitalnego lub dokumenty IPOM wiszą w kolejce ze statusem „Do wysłania” lub „Błąd komunikacji”.
+- Diagnoza i działanie: Usługa RZM/EDM działa asynchronicznie — harmonogram zadań w systemie HIS (demon wysyłki w AMMS, Kamsoft, mMedica) automatycznie ponowi wysyłkę po ustąpieniu spowolnienia w P1. Jeżeli błąd dotyczy wyłącznie jednego rekordu pacjenta (kod błędu walidacji reguł biznesowych P1), zweryfikuj poprawność numeru PESEL, identyfikatora wizyty oraz zgodność dokumentu ze standardem Polskiej Implementacji Krajowej HL7 CDA (PIK).
+
+[2.10] Awaria PLMVS / NMVS (KOWAL) — Skanowanie kodów 2D DataMatrix w aptece
+- Objaw: Skaner w aptece ogólnodostępnej lub szpitalnej nie może zweryfikować lub wycofać unikalnego identyfikatora leku (UI) w systemie PLMVS (serializacja leków).
+- Diagnoza i działanie: Jeśli na Radarze P1 usługa „Kody 2D leków (NMVS Apteka)” wykazuje awarię lub wysokie opóźnienie, oprogramowanie apteczne przełącza się w tryb buforowania offline i wysyła paczkę wycofań kodów po przywróceniu łączności z chmurą KOWAL. Należy odróżnić błąd łączności sieciowej od faktycznego alertu potencjalnego sfałszowania leku (Alert L5).
+
+[2.11] Niedostępność Portalu SZOI / ISI NFZ (01R–16R) i wymiana komunikatów XML (SWIAD, LIOCZ, UMX)
+- Objaw: Dział rozliczeń nie może zalogować się do SZOI/ISI lub przesłać raportów statystycznych SWIAD, rachunków RACH i kolejek LIOCZ.
+- Diagnoza i działanie: Sprawdź na interaktywnej Mapie Polski 16 Oddziałów Wojewódzkich NFZ w Radarze P1, czy awaria dotyczy tylko konkretnego oddziału wojewódzkiego (np. 12R Śląski OW NFZ w Katowicach, 06R Małopolski OW NFZ w Krakowie), czy całej sieci NFZ. Podczas okien serwisowych OW NFZ wygenerowane i podpisane paczki XML zachowaj na dysku i prześlij po odblokowaniu bramki oddziału.
+
+3. LISTA 16 ODDZIAŁÓW WOJEWÓDZKICH NFZ MONITOROWANYCH NA MAPIE POLSKI (01R–16R)
+- 01R — Dolnośląski OW NFZ (Wrocław, Wałbrzych, Legnica, Jelenia Góra) — https://www.nfz-wroclaw.pl/
+- 02R — Kujawsko-Pomorski OW NFZ (Bydgoszcz, Toruń, Włocławek, Grudziądz) — https://nfz-bydgoszcz.pl/
+- 03R — Lubelski OW NFZ (Lublin, Zamość, Chełm, Biała Podlaska) — https://www.nfz-lublin.pl/
+- 04R — Lubuski OW NFZ (Zielona Góra, Gorzów Wielkopolski) — https://portal.nfz-zielonagora.pl/
+- 05R — Łódzki OW NFZ (Łódź, Piotrków Trybunalski, Pabianice, Skierniewice) — https://www.nfz-lodz.pl/
+- 06R — Małopolski OW NFZ (Kraków, Tarnów, Nowy Sącz, Oświęcim, Zakopane) — https://isi.nfz-krakow.pl/
+- 07R — Mazowiecki OW NFZ + Centrala CeZ P1 / ZUS / MF (Warszawa, Radom, Płock, Siedlce, Ostrołęka) — https://szoi.nfz-warszawa.pl/
+- 08R — Opolski OW NFZ (Opole, Kędzierzyn-Koźle, Nysa, Brzeg) — https://www.nfz-opole.pl/
+- 09R — Podkarpacki OW NFZ (Rzeszów, Przemyśl, Stalowa Wola, Mielec, Krosno) — https://portal.nfz-rzeszow.pl/
+- 10R — Podlaski OW NFZ (Białystok, Suwałki, Łomża) — https://www.nfz-bialystok.pl/
+- 11R — Pomorski OW NFZ (Gdańsk, Gdynia, Sopot, Słupsk, Tczew) — https://www.nfz-gdansk.pl/
+- 12R — Śląski OW NFZ (Katowice, Częstochowa, Sosnowiec, Gliwice, Zabrze, Bielsko-Biała, Bytom, Rybnik, Tychy) — https://www.nfz-katowice.pl/
+- 13R — Świętokrzyski OW NFZ (Kielce, Ostrowiec Świętokrzyski, Starachowice) — https://www.nfz-kielce.pl/
+- 14R — Warmińsko-Mazurski OW NFZ (Olsztyn, Elbląg, Ełk, Iława) — https://www.nfz-olsztyn.pl/
+- 15R — Wielkopolski OW NFZ (Poznań, Kalisz, Konin, Piła, Leszno, Gniezno) — https://www.nfz-poznan.pl/
+- 16R — Zachodniopomorski OW NFZ (Szczecin, Koszalin, Świnoujście, Stargard, Kołobrzeg) — https://szoi.nfz-szczecin.pl/
+
+4. FUNKCJE PANELU RADAR P1 DLA DZIAŁÓW IT I REJESTRACJI MEDYCZNEJ
+- Wyszukiwarka błyskawiczna (Ctrl+K): wyszukuje jednocześnie miasta i oddziały NFZ, usługi kliniczne (Część Biała), usługi ERP/Apteka (Część Szara), komunikaty legislacyjne oraz hasła w Słowniku Awarii (odporna na brak polskich znaków i myślników).
+- Interaktywne wykresy SVG: powiększanie kółkiem myszy (scroll 100%–400%), dwuklik resetujący zoom, podświetlanie pojedynczej linii po najechaniu kursorem na wykres lub legendę.
+- Eksport i raportowanie: przycisk „📋 Kopiuj status” (generuje gotowy komunikat tekstowy dla lekarzy i rejestracji) oraz „📥 Eksport CSV” (pobiera tabelę SLA z ochroną przed CSV Formula Injection do raportów ISO 27001).
+- Tryb TV / Wallboard NOC: pełnoekranowy widok dla dyżurnych administratorów IT z blokadą wygaszania ekranu (WakeLock API) i opcjonalnym alertem dźwiękowym Web Audio API.
+
+5. OFICJALNY HELPDESK CENTRUM E-ZDROWIA (P1 CeZ — 24/7)
+- Całodobowa infolinia techniczna CeZ (P1): 19457 (z zagranicy lub sieci nieobsługujących numerów skróconych: +48 515 239 239 — czynna 24 godziny na dobę, 7 dni w tygodniu).
+- Adresy e-mail wsparcia technicznego CeZ: e-recepta@csioz.gov.pl, e-skierowanie@csioz.gov.pl, edm-pomoc@cez.gov.pl.

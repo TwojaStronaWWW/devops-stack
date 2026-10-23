@@ -48,6 +48,10 @@ PROMPTS=(
     "dancepuls|Jakie style tańca obsługuje DancePuls?"
     "dancepuls|Jak działa trening rytmu i clave?"
     "dancepuls|Czy DancePuls jest darmowy?"
+    "radar-p1|Co zrobić w gabinecie lub aptece, gdy nie działa e-Recepta (P1)?"
+    "radar-p1|Jak odróżnić awarię centralną P1/NFZ od problemu z lokalnym łączem?"
+    "radar-p1|Co zrobić w rejestracji, gdy nie działa eWUŚ?"
+    "radar-p1|Jak działa tryb awaryjny i offline24 w KSeF oraz ZUS e-ZLA?"
 )
 
 echo "==> [warm-ai-cache] Rozgrzewanie pamięci podręcznej RAG (${#PROMPTS[@]} pytań startowych)..."

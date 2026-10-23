@@ -505,6 +505,10 @@ function aiExtractAndRecordTopics(string $site, string $question, bool $hasConta
         ['seo_google',    '/\b(seo\b|pozycjon|widocznos\w*\s*w\s*google)/u',                      '🤖 AI: pozycjonowanie seo'],
         ['pricing',       '/\b(cen[ay]|cennik|koszt|ile\s*kosztuj|wycen|pakiet|stawk)/u',         '🤖 AI: cennik i koszty'],
         ['cooperation',   '/\b(wspolprac|jak\s*wyglada|czas\s*realizac|umow\b|zapis[ay])/u',      '🤖 AI: jak wygląda współpraca'],
+        ['p1_erecepta',   '/\b(erecept|e-recept|recept[ay]|drr\b|eskierowan|e-skierowan|apte[kc])/u', '🤖 AI: awaria e-recepty / DRR'],
+        ['nfz_ewus_szoi', '/\b(ewus|szoi\b|isi\b|swiad\b|nfz|oswiadczen)/u',                      '🤖 AI: awaria eWUŚ / SZOI NFZ'],
+        ['ksef_ezla',     '/\b(ksef|offline24|ezla|e-zla|zwolnien|l4\b|zus)/u',                   '🤖 AI: tryb awaryjny KSeF / e-ZLA'],
+        ['p1_errors_sla', '/\b(502\b|503\b|504\b|timeout|wsp\b|ocsp|edm\b|rzm\b|nmvs|rtt\b)/u',   '🤖 AI: kody błędów P1 (502/WSP/RZM)'],
     ];
 
     $matchedTopics = [];
@@ -703,7 +707,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_requests_total Zadania czatu wg strony i wyniku';
     $o[] = '# TYPE ai_router_requests_total counter';
     $reqMap = is_array($s['requests'] ?? null) ? $s['requests'] : [];
-    foreach (['amms', 'katosalsahub', 'dancepuls', 'raricart', 'fuegolingua', 'twojastronawww'] as $defaultSite) {
+    foreach (['amms', 'katosalsahub', 'dancepuls', 'raricart', 'fuegolingua', 'twojastronawww', 'radar-p1'] as $defaultSite) {
         if (!isset($reqMap[$defaultSite . '|success'])) {
             $reqMap[$defaultSite . '|success'] = 0;
         }
@@ -716,7 +720,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_cache_hits_total Odpowiedzi zwrocone z pamieci podrecznej RAG (0 tokenow API)';
     $o[] = '# TYPE ai_router_cache_hits_total counter';
     $cacheHitsMap = is_array($s['cache_hits'] ?? null) ? $s['cache_hits'] : [];
-    foreach (['amms', 'fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls'] as $defaultSite) {
+    foreach (['amms', 'fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls', 'radar-p1'] as $defaultSite) {
         if (!isset($cacheHitsMap[$defaultSite])) {
             $cacheHitsMap[$defaultSite] = 0;
         }
@@ -728,7 +732,7 @@ function aiRenderMetrics(): string
     $o[] = '# HELP ai_router_leads_total Pozyskane leady kontaktowe i zaangazowane sesje czatu (Zero-PII)';
     $o[] = '# TYPE ai_router_leads_total counter';
     $leadsMap = is_array($s['leads'] ?? null) ? $s['leads'] : [];
-    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls'] as $defaultSite) {
+    foreach (['fuegolingua', 'katosalsahub', 'twojastronawww', 'raricart', 'dancepuls', 'radar-p1'] as $defaultSite) {
         foreach (['contact', 'hot_lead'] as $lType) {
             $lKey = $defaultSite . '|' . $lType;
             if (!isset($leadsMap[$lKey])) {
@@ -915,6 +919,7 @@ function aiRenderMetrics(): string
         '/#section-grey'       => '💊 /#section-grey (Usługi apteczne, KSeF & ERP)',
         '/#geo-poland-section' => '🗺️ /#geo-poland-section (Mapa 16 OW NFZ)',
         '/#section-watcher'    => '🔭 /#section-watcher (Zwiadowca zmian legislacyjnych)',
+        '/#glossary-section'   => '📖 /#glossary-section (Słownik awarii i procedur e-Zdrowia)',
         '/#faq-section'        => '❓ /#faq-section (Baza wiedzy i FAQ e-Zdrowia)',
     ];
     foreach ($pvMap as $pvKey => $pvCount) {
@@ -1054,10 +1059,12 @@ function aiRenderMetrics(): string
         'contact_form_submit' => '📝 Wysłanie formularza kontaktowego',
         'radio_play'          => '📻 Uruchomienie odtwarzacza Radio Salsa',
         'outbound_click'      => '↗️ Kliknięcie w link zewnętrzny (szkoła / wydarzenie)',
-        'copy_status_report'  => '📋 Skopiowanie raportu dostępności e-Zdrowia (Radar P1)',
-        'export_csv'          => '📥 Eksport pełnego raportu SLA do CSV (Radar P1)',
-        'nfz_region_select'   => '🗺️ Wybór regionu OW NFZ na mapie Polski (Radar P1)',
-        'wallboard_toggle'    => '📺 Przełączenie trybu TV / Wallboard NOC (Radar P1)',
+        'copy_status_report'       => '📋 Skopiowanie raportu dostępności e-Zdrowia (Radar P1)',
+        'export_csv'               => '📥 Eksport pełnego raportu SLA do CSV (Radar P1)',
+        'nfz_region_select'        => '🗺️ Wybór regionu OW NFZ na mapie Polski (Radar P1)',
+        'wallboard_toggle'         => '📺 Przełączenie trybu TV / Wallboard NOC (Radar P1)',
+        'glossary_category_select' => '📖 Filtrowanie kategorii Słownika Awarii (Radar P1)',
+        'glossary_scroll_click'    => '📖 Przejście do Słownika Awarii e-Zdrowia (Radar P1)',
     ];
     foreach ($evMap as $eKey => $eCount) {
         [$eSite, $eName] = array_pad(explode('|', (string)$eKey, 2), 2, 'chat_open');
@@ -1097,10 +1104,14 @@ function aiRenderMetrics(): string
         'seo_google'      => '🔍 Pozycjonowanie SEO i widoczność w Google',
         'pricing'         => '💰 Cennik i wycena (Ile kosztuje?)',
         'cooperation'     => '🤝 Współpraca, zapisy i czas realizacji',
+        'p1_erecepta'     => '💊 Awaria e-Recepty / DRR / e-Skierowania (Radar P1)',
+        'nfz_ewus_szoi'   => '🏥 Awaria eWUŚ / SZOI / Rozliczenia NFZ (Radar P1)',
+        'ksef_ezla'       => '📑 Tryb awaryjny KSeF offline24 / ZUS e-ZLA (Radar P1)',
+        'p1_errors_sla'   => '⚠️ Kody błędów P1 (502/504, WSP/OCSP, RZM) (Radar P1)',
         'contact_lead'    => '📞 Pozyskany namiar kontaktowy (Telefon / E-mail)',
         'general_inquiry' => '💬 Inne pytanie ogólne o ofertę',
     ];
-    foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'dancepuls|events_party', 'fuegolingua|spanish_course', 'twojastronawww|pricing', 'raricart|pricing'] as $defTop) {
+    foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'dancepuls|events_party', 'fuegolingua|spanish_course', 'twojastronawww|pricing', 'raricart|pricing', 'radar-p1|p1_erecepta'] as $defTop) {
         if (!isset($topicsMap[$defTop])) {
             $topicsMap[$defTop] = 0;
         }

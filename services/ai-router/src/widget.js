@@ -55,6 +55,12 @@
       'Jakie style tańca obsługuje DancePuls?',
       'Jak działa trening rytmu i clave?',
       'Czy DancePuls jest darmowy?'
+    ],
+    'radar-p1': [
+      'Co zrobić w gabinecie lub aptece, gdy nie działa e-Recepta (P1)?',
+      'Jak odróżnić awarię centralną P1/NFZ od problemu z lokalnym łączem?',
+      'Co zrobić w rejestracji, gdy nie działa eWUŚ?',
+      'Jak działa tryb awaryjny i offline24 w KSeF oraz ZUS e-ZLA?'
     ]
   };
   const quickPrompts = QUICK_PROMPTS_MAP[SITE_ID] || QUICK_PROMPTS_MAP.twojastronawww;

@@ -184,6 +184,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'fuegolingua-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'amms-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'radar-p1-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'storage', 'rate_limits', '.gitkeep'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'),
