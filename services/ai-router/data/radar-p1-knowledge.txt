@@ -21,12 +21,12 @@ systemów centralnych e-Zdrowia w Polsce (CeZ P1, 16 OW NFZ, ZUS PUE, KSeF MF)
 2. SŁOWNIK AWARII, KODÓW BŁĘDÓW I PROCEDUR AWARYJNYCH E-ZDROWIA (TRYB OFFLINE)
 
 [2.1] Awaria e-Recepty w gabinecie lub szpitalu — Recepta papierowa (Art. 95b Prawa farmaceutycznego)
-- Objaw: System HIS/gabinetowy (Asseco AMMS, Kamsoft KS-SOMED/KS-PPS, mMedica, Optimed, CGM Clininet, DrEryk) zwraca błąd połączenia z P1, timeout (>10 s) lub błąd podpisu przy próbie wystawienia e-Recepty.
-- Procedura awaryjna: W przypadku braku dostępu do Systemu P1 lekarz lub uprawniony pracownik medyczny ma pełne prawo wystawić receptę w postaci papierowej (z danymi pacjenta, oznaczeniem podmiotu z RPWDL, numerem PWZ i własnoręcznym podpisem/pieczątką).
+- Objaw: Oprogramowanie gabinetowe lub szpitalne (HIS) zwraca błąd połączenia z P1, timeout (>10 s) lub błąd podpisu przy próbie wystawienia e-Recepty.
+- Procedura awaryjna (uniwersalna dla każdego systemu medycznego): W przypadku braku dostępu do Systemu P1 lekarz lub uprawniony pracownik medyczny ma pełne prawo wystawić receptę w postaci papierowej (z danymi pacjenta, oznaczeniem podmiotu z RPWDL, numerem PWZ i własnoręcznym podpisem/pieczątką).
 - Realizacja w aptece: Apteka realizuje receptę papierową wystawioną w trybie awaryjnym z zachowaniem pełnej refundacji NFZ przysługującej pacjentowi.
 
 [2.2] Awaria DRR / e-Recepty w aptece (Tryb awaryjny realizacji e-Recepty)
-- Objaw: Pacjent okazuje w aptece wydruk informacyjny e-Recepty, kod SMS (4 cyfry + PESEL) lub kod QR w aplikacji mObywatel/IKP, ale system apteczny (np. Kamsoft KS-AOW, EuroSoft) nie może pobrać e-Recepty z P1 lub P1 odrzuca zapis Dokumentu Realizacji Recepty (DRR).
+- Objaw: Pacjent okazuje w aptece wydruk informacyjny e-Recepty, kod SMS (4 cyfry + PESEL) lub kod QR w aplikacji mObywatel/IKP, ale system apteczny nie może pobrać e-Recepty z P1 lub P1 odrzuca zapis Dokumentu Realizacji Recepty (DRR).
 - Procedura awaryjna: Gdy P1 odrzuca zapis DRR z powodu awarii centralnej, system apteczny zapisuje transakcję lokalnie w buforze i kolejkuje wysyłkę DRR do P1 natychmiast po ustąpieniu awarii. W przypadku całkowitego braku łączności z P1 i zagrożenia zdrowia pacjenta farmaceuta może wydać lek na podstawie wydruku informacyjnego lub wystawić receptę farmaceutyczną (Art. 96 ust. 4 Prawa farmaceutycznego).
 
 [2.3] Awaria eWUŚ NFZ w rejestracji, POZ, AOS, Izbie Przyjęć i SOR (Art. 50 ustawy o świadczeniach)
@@ -64,7 +64,7 @@ systemów centralnych e-Zdrowia w Polsce (CeZ P1, 16 OW NFZ, ZUS PUE, KSeF MF)
 
 [2.9] Kolejki wysyłki EDM i RZM (Rejestr Zdarzeń Medycznych HL7 CDA / FHIR)
 - Objaw: Zdarzenia Medyczne (RZM), indeksy Elektronicznej Dokumentacji Medycznej (EDM), Karty Informacyjne z Leczenia Szpitalnego lub dokumenty IPOM wiszą w kolejce ze statusem „Do wysłania” lub „Błąd komunikacji”.
-- Diagnoza i działanie: Usługa RZM/EDM działa asynchronicznie — harmonogram zadań w systemie HIS (demon wysyłki w AMMS, Kamsoft, mMedica) automatycznie ponowi wysyłkę po ustąpieniu spowolnienia w P1. Jeżeli błąd dotyczy wyłącznie jednego rekordu pacjenta (kod błędu walidacji reguł biznesowych P1), zweryfikuj poprawność numeru PESEL, identyfikatora wizyty oraz zgodność dokumentu ze standardem Polskiej Implementacji Krajowej HL7 CDA (PIK).
+- Diagnoza i działanie: Usługa RZM/EDM działa asynchronicznie — w każdym systemie gabinetowym i szpitalnym (HIS) harmonogram zadań automatycznie ponowi wysyłkę po ustąpieniu spowolnienia w P1. Jeżeli błąd dotyczy wyłącznie jednego rekordu pacjenta (kod błędu walidacji reguł biznesowych P1), zweryfikuj poprawność numeru PESEL, identyfikatora wizyty oraz zgodność dokumentu ze standardem Polskiej Implementacji Krajowej HL7 CDA (PIK).
 
 [2.10] Awaria PLMVS / NMVS (KOWAL) — Skanowanie kodów 2D DataMatrix w aptece
 - Objaw: Skaner w aptece ogólnodostępnej lub szpitalnej nie może zweryfikować lub wycofać unikalnego identyfikatora leku (UI) w systemie PLMVS (serializacja leków).
