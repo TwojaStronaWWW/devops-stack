@@ -65,7 +65,7 @@ jobs:
             cd compose
             docker compose --env-file "${DEPLOY_PATH}/.env" -f extensions.yml pull -q cloudflared || true
             docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
-            docker exec prometheus wget -q -O /dev/null --post-data='' http://localhost:9090/-/reload || true
+            docker kill -s HUP prometheus >/dev/null 2>&1 || true
 
             # Automatyczny Garbage Collector po wdrożeniu: usunięcie osieroconych warstw <none> i starego build cache'u (>7 dni)
             docker image prune -f >/dev/null 2>&1 || true
