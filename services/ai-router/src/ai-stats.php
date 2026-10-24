@@ -190,6 +190,7 @@ function aiModelDefault(string $provider): array
         'today_day'       => aiQuotaDay(),
         'today_attempts'  => 0,
         'today_ok'        => 0,
+        'today_skipped'   => 0,
         'last_ok'         => 0,
         'last_err'        => 0,
         'last_err_result' => '',
@@ -307,6 +308,7 @@ function aiRecordAttempt(string $provider, string $model, string $result, int $h
             $m['today_day'] = $day;
             $m['today_attempts'] = 0;
             $m['today_ok'] = 0;
+            $m['today_skipped'] = 0;
         }
         $m['attempts'][$result] = (int)($m['attempts'][$result] ?? 0) + 1;
         if ($httpCode > 0) {
@@ -342,7 +344,16 @@ function aiRecordSkip(string $provider, string $model, int $remaining): void
         if (!isset($s['models'][$model])) {
             $s['models'][$model] = aiModelDefault($provider);
         }
-        $s['models'][$model]['skipped']++;
+        $m = &$s['models'][$model];
+        $day = aiQuotaDay();
+        if (($m['today_day'] ?? '') !== $day) {
+            $m['today_day'] = $day;
+            $m['today_attempts'] = 0;
+            $m['today_ok'] = 0;
+            $m['today_skipped'] = 0;
+        }
+        $m['skipped'] = (int)($m['skipped'] ?? 0) + 1;
+        $m['today_skipped'] = (int)($m['today_skipped'] ?? 0) + 1;
     });
     aiLog('skip_cooldown', ['provider' => $provider, 'model' => $model, 'remaining_s' => $remaining]);
 }
@@ -762,7 +773,8 @@ function aiRenderMetrics(): string
     // Definicje metryk per model: nazwa => [typ, opis]. Próbki grupowane pod jednym nagłówkiem HELP/TYPE.
     $meta = [
         'ai_router_model_attempts_total'                   => ['counter', 'Proby uzycia modelu wg wyniku'],
-        'ai_router_model_skipped_total'                    => ['counter', 'Pominiecia modelu z powodu cooldownu'],
+        'ai_router_model_skipped_total'                    => ['counter', 'Pominiecia modelu z powodu cooldownu (lacznie)'],
+        'ai_router_model_skipped_today'                    => ['gauge', 'Pominiecia modelu z powodu cooldownu w biezacej dobie kwotowej'],
         'ai_router_model_suspended'                        => ['gauge', 'Czy model jest zawieszony (cooldown) 1/0'],
         'ai_router_model_cooldown_remaining_seconds'       => ['gauge', 'Pozostaly czas zawieszenia modelu'],
         'ai_router_model_requests_today'                   => ['gauge', 'Zadania do API modelu w biezacej dobie kwotowej (reset o polnocy czasu Pacyficznego)'],
@@ -794,6 +806,7 @@ function aiRenderMetrics(): string
         $series['ai_router_model_suspended'][] = 'ai_router_model_suspended{' . $l . '} ' . ($rem > 0 ? 1 : 0);
         $series['ai_router_model_cooldown_remaining_seconds'][] = 'ai_router_model_cooldown_remaining_seconds{' . $l . '} ' . $rem;
         $sameDay = ($m['today_day'] ?? '') === $day;
+        $series['ai_router_model_skipped_today'][] = 'ai_router_model_skipped_today{' . $l . '} ' . ($sameDay ? (int)($m['today_skipped'] ?? 0) : 0);
         $series['ai_router_model_requests_today'][] = 'ai_router_model_requests_today{' . $l . '} ' . ($sameDay ? (int)$m['today_attempts'] : 0);
         $series['ai_router_model_ok_today'][] = 'ai_router_model_ok_today{' . $l . '} ' . ($sameDay ? (int)$m['today_ok'] : 0);
         $limitVal = $limits[$name] ?? 500;

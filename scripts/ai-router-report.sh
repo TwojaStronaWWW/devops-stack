@@ -131,9 +131,12 @@ met ai_router_model_attempts_total | awk '$NF > 0 {print}' | while read -r line;
   printf '  %-34s %-14s %s\n' "$(printf '%s' "$line" | lbl model)" "$(printf '%s' "$line" | lbl result)" "${line##* }"
 done | sort
 echo "  Legenda: ok | rate_limited/quota_daily=429 | unavailable=5xx | not_found=404 | auth=zly klucz | network=timeout | empty=pusta odpowiedz"
-echo "  Pominiecia z powodu cooldownu:"
+echo "  Pominiecia z powodu cooldownu (dzis / lacznie):"
 met ai_router_model_skipped_total | awk '$NF > 0 {print}' | while read -r line; do
-  printf '    %-34s %s\n' "$(printf '%s' "$line" | lbl model)" "${line##* }"
+  m_sk="$(printf '%s' "$line" | lbl model)"
+  tot_sk="${line##* }"
+  tod_sk="$(met ai_router_model_skipped_today | grep "model=\"$m_sk\"" | head -1 | awk '{print $NF}' || echo 0)"
+  printf '    %-34s dzis: %-6s | lacznie: %s\n' "$m_sk" "${tod_sk:-0}" "${tot_sk:-0}"
 done
 
 # ------------------------------------------------------------------------------

@@ -62,8 +62,8 @@ for entry in "${PROMPTS[@]}"; do
     site="${entry%%|*}"
     question="${entry#*|}"
 
-    # Wyczyść lokalny licznik rate-limit (127.0.0.1), aby seria pre-warmingu nie odbiła się od limitu 5/min
-    docker exec ai-router sh -c 'rm -f /app/storage/rate_limits/*' 2>/dev/null || true
+    # Wyczyść lokalny licznik rate-limit (127.0.0.1 / Docker bridge) bez naruszania aktywnych blokad WAF Penalty Box ("blocked_until")
+    docker exec ai-router sh -c 'for f in /app/storage/rate_limits/*.json; do [ -f "$f" ] && ! grep -q "\"blocked_until\"" "$f" && rm -f "$f"; done' 2>/dev/null || true
 
     payload=$(printf '{"site_id":"%s","question":"%s","history":[]}' "$site" "$question")
     resp=$(curl -s -m 12 -X POST "$ROUTER_URL" \
@@ -81,7 +81,7 @@ for entry in "${PROMPTS[@]}"; do
     fi
 done
 
-# Wyczyść lokalny plik rate-limit po zakończeniu pre-warmingu
-docker exec ai-router sh -c 'rm -f /app/storage/rate_limits/*' 2>/dev/null || true
+# Wyczyść lokalny plik rate-limit po zakończeniu pre-warmingu (z zachowaniem aktywnych banów Penalty Box)
+docker exec ai-router sh -c 'for f in /app/storage/rate_limits/*.json; do [ -f "$f" ] && ! grep -q "\"blocked_until\"" "$f" && rm -f "$f"; done' 2>/dev/null || true
 
 echo "==> [warm-ai-cache] Gotowe (już w cache: ${hits}, nowo wygenerowane: ${warmed})."

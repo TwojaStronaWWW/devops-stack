@@ -296,6 +296,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     for (const metric of [
       'ai_router_model_suspended',
       'ai_router_model_requests_today',
+      'ai_router_model_skipped_today',
       'ai_router_answers_by_depth_total',
       'ai_router_model_attempts_total',
       'ai_router_cache_hits_total',
@@ -441,7 +442,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const warmCacheSh = path.join(ROOT_DIR, 'scripts', 'warm-ai-cache.sh');
     assert.ok(fs.existsSync(warmCacheSh), 'Brak scripts/warm-ai-cache.sh');
-    assert.match(fs.readFileSync(warmCacheSh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    const warmCacheContent = fs.readFileSync(warmCacheSh, 'utf-8');
+    assert.match(warmCacheContent.split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    assert.match(warmCacheContent, /blocked_until/, 'warm-ai-cache.sh musi chronić aktywne blokady Penalty Box (blocked_until)');
 
     const runnersYml = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'runners.yml'), 'utf-8');
     assert.match(runnersYml, /name:\s*devops_runners_network/);
