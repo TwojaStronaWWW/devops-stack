@@ -1,0 +1,18 @@
+# Oficjalna konfiguracja Google Gemini Code Assist (gemini-code-assist[bot]) na GitHubie
+have_fun: false
+code_review:
+  disable: false
+  comment_severity_threshold: MEDIUM
+  max_review_comments: 10
+  pull_request_opened:
+    help: false
+    summary: true
+    code_review: true
+ignore_patterns:
+  - "node_modules/**"
+  - "api/sessions/**"
+  - "api/rate_limits/**"
+  - "api/leads_*.csv"
+  - "*.bak"
+  - "*.log"
+  - "package-lock.json"

@@ -1,0 +1,117 @@
+name: AI Security Review Gate (Claude + VPS AI Router)
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'api/**'
+      - '.htaccess'
+      - '.well-known/security.txt'
+      - 'sw.js'
+      - 'assets/js/ai-widget.js'
+      - '.github/workflows/**'
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ai-security-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  security-audit:
+    name: 🛡️ Niezależny Audyt Bezpieczeństwa PR (Claude / VPS AI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       (contains(github.event.comment.body, '@claude review') || contains(github.event.comment.body, '@ai review')))
+
+    steps:
+      - name: 1. Pobranie kodu repozytorium (bez zapisu poświadczeń)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: 2. Wygenerowanie diffu bezpieczeństwa i uruchomienie audytu (Claude Haiku 4.5 Prompt Cache -> VPS AI Router Fallback)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PR_DIFF=$(gh pr diff "$PR_NUMBER" --repo "$REPO" | head -c 28000 || true)
+          if [ -z "$PR_DIFF" ]; then
+            echo "Brak zmian w diffie PR — pomijanie audytu."
+            exit 0
+          fi
+
+          RULES_SUMMARY=$(head -n 110 AGENTS.md 2>/dev/null || echo "ISO 27001, LOCK_EX, Sec-Fetch-Site, NoRedirect, XSS protection.")
+
+          PROMPT_TEXT="Przeprowadź zwięzły audyt bezpieczeństwa i jakości poniższego diffu z Pull Requestu #${PR_NUMBER} zgodnie z wytycznymi projektu TwojaStronaWWW (ISO 27001, LOCK_EX, Sec-Fetch-Site, CURLOPT_FOLLOWLOCATION=false, brak XSS/style inline, zegar monotoniczny). Jeśli kod jest bezpieczny, napisz krótko: '✅ Brak zastrzeżeń bezpieczeństwa (ISO 27001 / OWASP).' Jeśli wykryjesz realny błąd P1/P2, wskaż plik, linię i konkretną poprawkę po polsku.\n\nDIFF:\n${PR_DIFF}"
+
+          REVIEW_BODY=""
+          ENGINE_USED=""
+
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "Uruchamianie audytu przez Anthropic Claude API (z Prompt Cachingiem)..."
+            PAYLOAD=$(jq -n \
+              --arg rules "$RULES_SUMMARY" \
+              --arg prompt "$PROMPT_TEXT" \
+              '{
+                model: "claude-haiku-4-5",
+                max_tokens: 900,
+                system: [
+                  {
+                    type: "text",
+                    text: ("Jesteś Głównym Architektem Bezpieczeństwa ISO 27001 w projekcie TwojaStronaWWW. Wytyczne:\n" + $rules),
+                    cache_control: { type: "ephemeral" }
+                  }
+                ],
+                messages: [
+                  { role: "user", content: $prompt }
+                ]
+              }')
+            RESPONSE=$(curl -sS --max-time 25 https://api.anthropic.com/v1/messages \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "content-type: application/json" \
+              -d "$PAYLOAD" || true)
+            REVIEW_BODY=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
+            if [ -n "$REVIEW_BODY" ]; then
+              ENGINE_USED="Anthropic Claude (Prompt Cached Security Gate)"
+            fi
+          fi
+
+          if [ -z "$REVIEW_BODY" ]; then
+            echo "Uruchamianie audytu przez centralny VPS AI Router (https://ai.twojastronawww.pl/chat-router.php)..."
+            VPS_PAYLOAD=$(jq -n \
+              --arg q "$PROMPT_TEXT" \
+              '{
+                site_id: "twojastronawww",
+                question: $q
+              }')
+            VPS_RES=$(curl -sS --max-time 20 https://ai.twojastronawww.pl/chat-router.php \
+              -H "Content-Type: application/json" \
+              -H "Origin: https://twojastronawww.pl" \
+              -d "$VPS_PAYLOAD" || true)
+            REVIEW_BODY=$(echo "$VPS_RES" | jq -r '.answer // empty' 2>/dev/null || true)
+            if [ -n "$REVIEW_BODY" ]; then
+              ENGINE_USED="VPS AI Router (11-Model Cascade)"
+            fi
+          fi
+
+          if [ -n "$REVIEW_BODY" ]; then
+            COMMENT_MD="### 🛡️ Automatyczny Audyt Bezpieczeństwa PR (\`${ENGINE_USED}\`)\n\n${REVIEW_BODY}\n\n---\n*Wyzwalacz: zmiana plików krytycznych (\`api/**\`, \`.htaccess\`, \`sw.js\`, \`.github/workflows/**\`) lub komenda \`@claude review\`.*"
+            gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$COMMENT_MD"
+          else
+            echo "Brak odpowiedzi z bramek AI — pominięto komentarz bez blokowania PR."
+          fi
