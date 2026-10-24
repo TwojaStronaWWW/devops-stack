@@ -251,7 +251,7 @@ else
     echo "Dostępny RAM: ${TOTAL_MEM_MB}MB, SWAP: ${CURRENT_SWAP_MB}MB - poduszka SWAP aktywna."
 fi
 
-# Ograniczenie rozmiaru logów systemowych systemd-journald do 200 MB (ochrona dysku 96 GB)
+# Ograniczenie rozmiaru logów systemowych systemd-journald do 200 MB (ochrona dysku 200 GB Always Free)
 mkdir -p /etc/systemd/journald.conf.d
 cat << 'EOF' > /etc/systemd/journald.conf.d/size-limit.conf
 [Journal]
@@ -260,6 +260,14 @@ RuntimeMaxUse=50M
 MaxRetentionSec=14day
 EOF
 systemctl restart systemd-journald 2>/dev/null || true
+
+# Automatyczne rozszerzenie partycji root (/dev/sda1, ext4) online do pełnego rozmiaru Boot Volume OCI Always Free (do 200 GB)
+if [[ -e /sys/class/block/sda/device/rescan ]]; then
+    echo 1 > /sys/class/block/sda/device/rescan 2>/dev/null || true
+    partprobe /dev/sda 2>/dev/null || true
+    growpart /dev/sda 1 2>/dev/null || true
+    resize2fs /dev/sda1 2>/dev/null || true
+fi
 
 echo "======================================================================"
 echo ">> [SUKCES] Pełny hardening systemu zakończony pomyślnie."

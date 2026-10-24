@@ -198,9 +198,14 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
       - /etc/machine-id:/etc/machine-id:ro
-    privileged: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYS_PTRACE
+      - DAC_READ_SEARCH
+      - SYSLOG
     devices:
-      - /dev/kmsg
+      - /dev/kmsg:/dev/kmsg:r
     command:
       - "--docker_only=true"
       - "--housekeeping_interval=15s"

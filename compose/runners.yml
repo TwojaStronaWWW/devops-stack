@@ -15,6 +15,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - SYS_MODULE
+      - SYS_RAWIO
+      - MKNOD
+      - AUDIT_CONTROL
     networks:
       - runners_network
     environment:
@@ -58,6 +64,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - SYS_MODULE
+      - SYS_RAWIO
+      - MKNOD
+      - AUDIT_CONTROL
     networks:
       - runners_network
     environment:
@@ -70,9 +82,9 @@ services:
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww
       - CONFIGURED_ACTIONS_RUNNER_FILES_DIR=/runner-data
       - DISABLE_AUTOMATIC_DEREGISTRATION=true
-      - DOCKER_PRUNE=true
+      - DOCKER_PRUNE=false
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - runner_twojastronawww_data:/runner-data
     deploy:
       resources:
@@ -101,6 +113,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - SYS_MODULE
+      - SYS_RAWIO
+      - MKNOD
+      - AUDIT_CONTROL
     networks:
       - runners_network
     environment:
@@ -108,9 +126,9 @@ services:
       - RUNNER_TOKEN=${RUNNER_DESKTOP_TOKEN}
       - RUNNER_NAME=vps-runner-desktop
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps
-      - DOCKER_PRUNE=true
+      - DOCKER_PRUNE=false
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     deploy:
       resources:
         limits:
@@ -134,6 +152,12 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - SYS_MODULE
+      - SYS_RAWIO
+      - MKNOD
+      - AUDIT_CONTROL
     networks:
       - runners_network
     environment:

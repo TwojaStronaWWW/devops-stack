@@ -36,7 +36,7 @@ LH_FTP_USERNAME="${LH_FTP_USERNAME:-}"
 LH_FTP_PASSWORD="${LH_FTP_PASSWORD:-}"
 LH_REMOTE_DIR="${LH_REMOTE_DIR:-/public_html}"
 LH_FTP_SSL="${LH_FTP_SSL:-true}"
-LH_FTP_VERIFY_CERT="${LH_FTP_VERIFY_CERT:-no}"
+LH_FTP_VERIFY_CERT="${LH_FTP_VERIFY_CERT:-yes}"
 
 # Opcjonalny backup baz danych MySQL/MariaDB z LH.pl (np. osTicket Helpdesk, WordPress - lista po przecinku LH_DB_NAMES lub pojedyncza LH_DB_NAME)
 LH_DB_HOST="${LH_DB_HOST:-}"

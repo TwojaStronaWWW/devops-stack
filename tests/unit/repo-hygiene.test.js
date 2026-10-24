@@ -405,6 +405,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.strictEqual(lhBackup.includes('set ftp:ssl-allow no'), false, 'Skrypt backup-websites-lh.sh nie może wymuszać nieszyfrowanego FTP');
     assert.match(lhBackup, /set ftp:ssl-protect-data true/);
+    assert.match(lhBackup, /LH_FTP_VERIFY_CERT="\$\{LH_FTP_VERIFY_CERT:-yes\}"/);
     assert.match(lhBackup, /openssl enc -aes-256-cbc -pbkdf2/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');

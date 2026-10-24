@@ -70,6 +70,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.ok(noNewPrivCount >= 8, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 8)`);
       assert.ok(memLimitCount >= 8, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 8)`);
       assert.strictEqual(mainHealthCount, 8, `Wszystkie 8 usług w docker-compose.yml musi posiadać zdefiniowany healthcheck (znaleziono: ${mainHealthCount})`);
+      assert.strictEqual(/^\s*privileged:\s*true\s*$/m.test(mainCompose), false, 'CIS Docker Benchmark 5.4: kontenery w docker-compose.yml nie mogą używać privileged: true (użyj cap_add)');
       assert.match(mainCompose, /referenced_memory/, 'cAdvisor powinien wyłączać metrykę referenced_memory (ochrona przed spamem smaps w logach)');
 
       const extCompose = fs.readFileSync(path.join(ROOT_DIR, 'compose', 'extensions.yml'), 'utf-8');
@@ -81,6 +82,8 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const runnersHealthCount = (runnersCompose.match(/^\s*healthcheck:\s*$/gm) || []).length;
       assert.ok(runnersNoNewPriv >= 4, `Brak deklaracji no-new-privileges:true dla wszystkich runnerów w compose/runners.yml (${runnersNoNewPriv} < 4)`);
       assert.strictEqual(runnersHealthCount, 4, `Wszystkie 4 definicje runnerów w compose/runners.yml muszą posiadać zdefiniowany healthcheck (znaleziono: ${runnersHealthCount})`);
+      assert.match(runnersCompose, /\/var\/run\/docker\.sock:\/var\/run\/docker\.sock:ro/, 'Runner TwojaStronaWWW powinien montować docker.sock w trybie tylko do odczytu (:ro)');
+      assert.match(runnersCompose, /cap_drop:/, 'Runnery CI/CD powinny jawnie ograniczać niebezpieczne zdolności jądra (cap_drop)');
     });
 
     it('skrypt 01-harden-os.sh powinien wymuszać twardą politykę SSH, UFW, Fail2ban, wyłączenie rpcbind oraz ochronę jądra (sysctl / noexec)', () => {

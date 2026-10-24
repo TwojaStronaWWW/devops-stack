@@ -45,4 +45,38 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now devops-audit.timer
 echo "[OK] Harmonogram devops-audit.timer został zainstalowany i aktywowany (co 15 min)."
+
+if [[ -f "${STACK_ROOT}/scripts/sync-p1-status.sh" ]]; then
+    P1_SERVICE="/etc/systemd/system/devops-p1-radar.service"
+    P1_TIMER="/etc/systemd/system/devops-p1-radar.timer"
+
+    cat <<EOF | sudo tee "${P1_SERVICE}" >/dev/null
+[Unit]
+Description=Radar Systemow e-Zdrowia P1/NFZ/KSeF Sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/bin/bash ${STACK_ROOT}/scripts/sync-p1-status.sh
+EOF
+
+    cat <<EOF | sudo tee "${P1_TIMER}" >/dev/null
+[Unit]
+Description=Run Radar P1/NFZ Sync every 2 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+AccuracySec=15s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now devops-p1-radar.timer
+    echo "[OK] Harmonogram devops-p1-radar.timer został zainstalowany i aktywowany (co 2 min)."
+fi
+
 systemctl status devops-audit.timer --no-pager | head -n 12
