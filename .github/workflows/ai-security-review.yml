@@ -56,10 +56,7 @@ jobs:
 
           RULES_SUMMARY=$(head -n 110 AGENTS.md 2>/dev/null | iconv -f UTF-8 -t UTF-8 -c || echo "ISO 27001, LOCK_EX, Sec-Fetch-Site, NoRedirect, XSS protection.")
 
-          PROMPT_TEXT="Przeprowadź zwięzły audyt bezpieczeństwa i jakości poniższego diffu z Pull Requestu #${PR_NUMBER} zgodnie z wytycznymi projektu TwojaStronaWWW (ISO 27001, LOCK_EX, Sec-Fetch-Site, CURLOPT_FOLLOWLOCATION=false, brak XSS/style inline, zegar monotoniczny). Jeśli kod jest bezpieczny, napisz krótko: '✅ Brak zastrzeżeń bezpieczeństwa (ISO 27001 / OWASP).' Jeśli wykryjesz realny błąd P1/P2, wskaż plik, linię i konkretną poprawkę po polsku.
-
-DIFF:
-${PR_DIFF}"
+          PROMPT_TEXT=$(printf "Przeprowadź zwięzły audyt bezpieczeństwa i jakości poniższego diffu z Pull Requestu #%s zgodnie z wytycznymi projektu TwojaStronaWWW (ISO 27001, LOCK_EX, Sec-Fetch-Site, CURLOPT_FOLLOWLOCATION=false, brak XSS/style inline, zegar monotoniczny). Jeśli kod jest bezpieczny, napisz krótko: '✅ Brak zastrzeżeń bezpieczeństwa (ISO 27001 / OWASP).' Jeśli wykryjesz realny błąd P1/P2, wskaż plik, linię i konkretną poprawkę po polsku.\n\nDIFF:\n%s" "$PR_NUMBER" "$PR_DIFF")
 
           REVIEW_BODY=""
           ENGINE_USED=""
@@ -92,6 +89,8 @@ ${PR_DIFF}"
             REVIEW_BODY=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' 2>/dev/null || true)
             if [ -n "$REVIEW_BODY" ]; then
               ENGINE_USED="Anthropic Claude Haiku 4.5 (Prompt Cached Security Gate)"
+            else
+              echo "Claude API status/error: $(echo "$RESPONSE" | jq -c '.error // empty' 2>/dev/null || echo 'brak')"
             fi
           fi
 
