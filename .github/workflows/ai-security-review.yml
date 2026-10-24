@@ -69,7 +69,7 @@ jobs:
               --arg prompt "$PROMPT_TEXT" \
               '{
                 model: "claude-haiku-4-5",
-                max_tokens: 900,
+                max_tokens: 1400,
                 system: [
                   {
                     type: "text",
@@ -118,7 +118,7 @@ jobs:
           fi
 
           if [ -n "$REVIEW_BODY" ]; then
-            COMMENT_MD="### 🛡️ Automatyczny Audyt Bezpieczeństwa PR (\`${ENGINE_USED}\`)\n\n${REVIEW_BODY}\n\n---\n*Wyzwalacz: zmiana plików krytycznych (\`api/**\`, \`.htaccess\`, \`sw.js\`, \`.github/workflows/**\`) lub komenda \`@claude review\`.*"
+            COMMENT_MD=$(printf "### 🛡️ Automatyczny Audyt Bezpieczeństwa PR (\`%s\`)\n\n%s\n\n---\n*Wyzwalacz: zmiana plików krytycznych (\`api/**\`, \`.htaccess\`, \`sw.js\`, \`.github/workflows/**\`) lub komenda \`@claude review\`.*" "$ENGINE_USED" "$REVIEW_BODY")
             gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$COMMENT_MD"
           else
             echo "Brak odpowiedzi z bramek AI — pominięto komentarz bez blokowania PR."
