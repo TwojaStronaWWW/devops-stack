@@ -164,13 +164,14 @@ def extract_api_metric(key):
 
 def extract_sparkline(key, max_pts=240):
     h = hist_data.get(key) or {}
-    d_list = [x for x in (h.get("d") or []) if x is not None]
-    r_list = [x for x in (h.get("r") or []) if x is not None]
-    t_list = [x for x in (h.get("t") or []) if x is not None]
+    d_list = [x for x in (h.get("d") or []) if x is not None][-max_pts:]
+    r_list = [x for x in (h.get("r") or []) if x is not None][-max_pts:]
+    n = len(d_list)
+    t_list = [now_ts - (n - 1 - i) * 60 for i in range(n)] if n > 0 else []
     return {
-        "d": d_list[-max_pts:],
-        "r": r_list[-max_pts:],
-        "t": t_list[-max_pts:],
+        "d": d_list,
+        "r": r_list,
+        "t": t_list,
     }
 
 
@@ -304,7 +305,8 @@ def append_custom_hist(key, ms_val, rel_val=100.0, max_pts=240):
     cur = prev_custom_hist.get(key) or {"d": [], "r": [], "t": []}
     d_arr = (cur.get("d") or [])[-max_pts + 1 :] + [round(float(ms_val), 1)]
     r_arr = (cur.get("r") or [])[-max_pts + 1 :] + [round(float(rel_val), 1)]
-    t_arr = (cur.get("t") or [])[-max_pts + 1 :] + [now_ts]
+    n = len(d_arr)
+    t_arr = [now_ts - (n - 1 - i) * 60 for i in range(n)]
     return {"d": d_arr, "r": r_arr, "t": t_arr}
 
 

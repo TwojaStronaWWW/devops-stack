@@ -63,12 +63,12 @@ EOF
 
     cat <<EOF | sudo tee "${P1_TIMER}" >/dev/null
 [Unit]
-Description=Run Radar P1/NFZ Sync every 2 minutes
+Description=Run Radar P1/NFZ Sync every 60 seconds
 
 [Timer]
-OnBootSec=1min
-OnUnitActiveSec=2min
-AccuracySec=15s
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
 
 [Install]
 WantedBy=timers.target
@@ -76,7 +76,7 @@ EOF
 
     sudo systemctl daemon-reload
     sudo systemctl enable --now devops-p1-radar.timer
-    echo "[OK] Harmonogram devops-p1-radar.timer został zainstalowany i aktywowany (co 2 min)."
+    echo "[OK] Harmonogram devops-p1-radar.timer został zainstalowany i aktywowany (co 60 sek)."
 fi
 
 systemctl status devops-audit.timer --no-pager | head -n 12

@@ -299,6 +299,21 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.strictEqual(res.headers.get('access-control-allow-origin'), 'https://twojastronawww.pl');
     });
 
+    it('powinien serwować centralny widget Single Source of Truth v4.0 pod /widget.js (UMD) oraz /ai-widget.js (ESM)', async () => {
+      const resUmd = await fetch(`${baseUrl}/widget.js`);
+      assert.strictEqual(resUmd.status, 200);
+      assert.strictEqual(resUmd.headers.get('x-content-type-options'), 'nosniff');
+      const umdText = await resUmd.text();
+      assert.match(umdText, /--tsw-ai-primary/);
+      assert.match(umdText, /data-nosnippet/);
+      assert.match(umdText, /THEME_PRESETS/);
+
+      const resEsm = await fetch(`${baseUrl}/ai-widget.js`);
+      assert.strictEqual(resEsm.status, 200);
+      const esmText = await resEsm.text();
+      assert.match(esmText, /export const initAiWidget = globalThis\.initAiWidget;/);
+    });
+
     it('powinien odrzucać niebezpieczne lub nieprawidłowe metody HTTP (GET, PUT, DELETE -> HTTP 405)', async () => {
       for (const method of ['GET', 'PUT', 'DELETE']) {
         const res = await fetch(`${baseUrl}/chat-router.php`, {

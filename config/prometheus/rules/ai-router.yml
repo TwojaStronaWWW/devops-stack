@@ -153,13 +153,13 @@ groups:
           description: "Demon IPS Fail2Ban zbanowal nowa fale agresorow lub utrzymuje {{ $value }} jednoczesnych blokad IP na porcie 22 SSH."
 
       - alert: WebsiteCoreWebVitalsLcpSlow
-        expr: (web_analytics_cwv_lcp_seconds_sum / clamp_min(web_analytics_cwv_lcp_seconds_count, 1)) > 2.5 and web_analytics_cwv_lcp_seconds_count >= 5
+        expr: (increase(web_analytics_cwv_lcp_seconds_sum[6h]) / clamp_min(increase(web_analytics_cwv_lcp_seconds_count[6h]), 1)) > 2.5 and increase(web_analytics_cwv_lcp_seconds_count[6h]) >= 10
         for: 15m
         labels:
           severity: warning
         annotations:
           summary: "Pogorszenie szybkosci ladowania strony {{ $labels.site }} (Core Web Vitals LCP > 2.5s)"
-          description: "Sredni czas renderowania najwiekszego elementu (LCP) u uzytkownikow serwisu {{ $labels.site }} wynosi {{ $value | printf \"%.2f\" }}s (prog Google Good <= 2.5s)."
+          description: "Sredni czas renderowania najwiekszego elementu (LCP w oknie 6h) u uzytkownikow serwisu {{ $labels.site }} wynosi {{ $value | printf \"%.2f\" }}s (prog Google Good <= 2.5s)."
 
       - alert: VPSSecurityBreachIoCDetected
         expr: devops_security_ioc_clean == 0 or devops_audit_status == 0

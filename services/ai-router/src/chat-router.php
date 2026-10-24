@@ -17,8 +17,8 @@ header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $isFromCloudflare = !empty($_SERVER['HTTP_CF_CONNECTING_IP']) || !empty($_SERVER['HTTP_CF_RAY']);
 
-// Serwowanie uniwersalnego widgetu JS dla zewnętrznych stron WWW
-if ($requestUri === '/widget.js') {
+// Serwowanie uniwersalnego widgetu JS (Single Source of Truth v4.0: /widget.js UMD oraz /ai-widget.js ESM)
+if ($requestUri === '/widget.js' || $requestUri === '/ai-widget.js') {
     header('Content-Type: application/javascript; charset=UTF-8');
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Origin: *');
@@ -26,6 +26,18 @@ if ($requestUri === '/widget.js') {
     $widgetPath = __DIR__ . '/widget.js';
     if (file_exists($widgetPath)) {
         readfile($widgetPath);
+        if ($requestUri === '/ai-widget.js') {
+            echo "\nexport const QUICK_PROMPTS_MAP = globalThis.QUICK_PROMPTS_MAP;\n";
+            echo "export const THEME_PRESETS = globalThis.THEME_PRESETS;\n";
+            echo "export const normalizeCacheQuery = globalThis.normalizeCacheQuery;\n";
+            echo "export const normalizeSearchText = globalThis.normalizeSearchText;\n";
+            echo "export const computeKnowledgeVersion = globalThis.computeKnowledgeVersion;\n";
+            echo "export const searchKnowledgeEntries = globalThis.searchKnowledgeEntries;\n";
+            echo "export const buildDynamicContext = globalThis.buildDynamicContext;\n";
+            echo "export const formatMarkdown = globalThis.formatMarkdown;\n";
+            echo "export const getLocalFallbackAnswer = globalThis.getLocalFallbackAnswer;\n";
+            echo "export const initAiWidget = globalThis.initAiWidget;\n";
+        }
     } else {
         http_response_code(404);
         echo '/* widget.js not found */';

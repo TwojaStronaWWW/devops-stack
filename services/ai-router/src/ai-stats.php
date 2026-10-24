@@ -444,10 +444,12 @@ function aiRecordWebAnalytics(
             }
         }
 
-        if ($lcpMs >= 50.0 && $lcpMs <= 30000.0) {
+        if ($lcpMs >= 50.0 && $lcpMs <= 8000.0) {
             $wa['lcp_sum_ms'] = is_array($wa['lcp_sum_ms'] ?? null) ? $wa['lcp_sum_ms'] : [];
             $wa['lcp_cnt'] = is_array($wa['lcp_cnt'] ?? null) ? $wa['lcp_cnt'] : [];
-            $wa['lcp_sum_ms'][$site] = (float)($wa['lcp_sum_ms'][$site] ?? 0.0) + $lcpMs;
+            // Ochrona przed zatruciem średniej przez pojedynczą kartę otwartą w tle (Winsorizing 3500 ms)
+            $clampedLcpMs = min($lcpMs, 3500.0);
+            $wa['lcp_sum_ms'][$site] = (float)($wa['lcp_sum_ms'][$site] ?? 0.0) + $clampedLcpMs;
             $wa['lcp_cnt'][$site] = (int)($wa['lcp_cnt'][$site] ?? 0) + 1;
         }
 

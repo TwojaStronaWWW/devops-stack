@@ -535,14 +535,15 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'Ile kosztuje kurs hiszpańskiego?',
       'Zajęcia indywidualne czy grupowe?',
       'Hiszpański w biznesie / branżowy',
-      'Czym jest Salsopedia i jak z niej korzystać?',
-      'Co to jest Enchufla i Dile Que No?',
-      'Gdzie tańczymy i jak działa Radio?',
-      'Jak dodać lub poprawić hasło w Salsopedii?',
-      'Jak działa kreator okładek AI?',
-      'Ile trwa i kosztuje wysyłka obrazu?',
+      'Co dzieje się w Wolnych Ludziach w niedzielę (15:00–18:00)?',
+      'Gdzie tańczymy w Katowicach i gdzie za darmo zaparkować?',
+      'Czym zajmuje się społeczność i Fundacja Kato Salsa Hub?',
+      'Wyjaśnij figury: Dile Que No, Enchufla i Setenta',
+      'Ile kosztują stacje Live Food (Lody, Pancakes, Sery)?',
+      'Jak działają pakiety łączone 2 i 3 stanowisk z rabatem?',
       'Czym jest aplikacja DancePuls?',
       'Jak działa trening rytmu i clave?',
+      'Co zrobić w gabinecie lub aptece, gdy nie działa e-Recepta (P1)?',
     ]) {
       assert.ok(warmCache.includes(prompt), `Brak pytania '${prompt}' w scripts/warm-ai-cache.sh`);
       assert.ok(vpsWidget.includes(prompt), `Brak pytania '${prompt}' w services/ai-router/src/widget.js`);

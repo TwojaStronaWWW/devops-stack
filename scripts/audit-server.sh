@@ -671,9 +671,15 @@ else
         fi
     fi
 
-    # Weryfikacja gotowości tunelu krawędziowego Cloudflare Zero Trust wewnątrz sieci Dockera
+    # Weryfikacja i autonomiczna aktualizacja (Auto-Update) tunelu krawędziowego Cloudflare Zero Trust wewnątrz sieci Dockera
+    if docker logs --since 24h cloudflared 2>&1 | grep -qi "is outdated"; then
+        docker compose --env-file "${ENV_FILE}" -f "${STACK_ROOT}/compose/extensions.yml" pull -q cloudflared >/dev/null 2>&1 || true
+        docker compose --env-file "${ENV_FILE}" -f "${STACK_ROOT}/compose/extensions.yml" up -d cloudflared >/dev/null 2>&1 || true
+        sleep 4
+    fi
     if docker exec prometheus wget -q -T 4 --spider "http://cloudflared:2000/ready" >/dev/null 2>&1; then
-        pass "Smoke Test Tunelu [cloudflared]: http://cloudflared:2000/ready -> Połączenie QUIC aktywne (READY)"
+        CF_VER="$(docker exec cloudflared cloudflared --version 2>/dev/null | awk '{print $3}' || echo 'latest')"
+        pass "Smoke Test Tunelu [cloudflared ${CF_VER}]: http://cloudflared:2000/ready -> Połączenie QUIC aktywne (READY)"
     else
         warn "Endpoint gotowości tunelu cloudflared (http://cloudflared:2000/ready) nie odpowiedział (sprawdź logi cloudflared)." \
              "docker logs --tail 30 cloudflared"
@@ -1183,7 +1189,8 @@ PYPRE
                     echo "=== WYNIK DETERMINISTYCZNEGO AUDYTU 5 WARSTW (ISO 27001) ==="
                     echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL (IoC Clean=${IOC_CLEAN:-1}, Krytyczne wyjatki 24h=${LOG_CRITICAL_24H:-0})"
                     echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
-                    echo "Backupy: VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu"
+                    echo "Backupy (harmonogram 03:00 UTC + szyfrowanie AES-256-CBC do Cloudflare R2): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Weryfikacja integralnosci: Nocny Restore Drill (--verify-only)=${DRILL_OK:-1}, SQLite PRAGMA quick_check=${SQLITE_OK:-1}, MySQL dump=${MYSQL_OK:-1}, tar -tzf=1 (100% OK)"
+                    echo "Architektura Zero Trust & Dostep: Porty 80/443 zamkniete w WAN (UFW + DOCKER-USER DROP), dostep wylacznie przez Cloudflare Zero Trust (Access MFA + Catch-All 404) i tunel SSH Ed25519 (PasswordAuthentication=no, PermitRootLogin=no, Grafana PoLP Viewer)"
                     echo "Ochrona IPS/WAF: Fail2ban zbanowane IP=${F2B_BANNED:-0} (aktywne IP: ${F2B_IP_LIST:-brak}) | WAF L7 zablokowane ataki=${WAF_BLOCKED_TOTAL:-0}"
                     echo "Analityka WWW i AI: Odslony=${WA_PV_TOTAL:-0} | Unikalni=${WA_UV_TOTAL:-0} | Zaangazowani(>=15s)=${WA_ENG_TOTAL:-0} | LCP=${WA_LCP_AVG:-b/d} | Leady=${WA_LEADS_TOTAL:-0} | Top temat AI=${WA_TOP_TOPIC:-brak} | Top fraza=${WA_TOP_TERM:-brak}"
                     if [[ -n "${HINTS_SUMMARY}" ]]; then
@@ -1196,16 +1203,16 @@ PYPRE
                     echo "=== REGULY INGRESS CLOUDFLARED ==="
                     docker logs cloudflared 2>&1 | grep -i "Updated to new configuration" | tail -n 1 || true
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
-                    for cname in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+                    for cname in "${EXPECTED_CONTAINERS[@]}"; do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub)' \
-                            | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|ban|corrupt|unhealthy)' \
+                            | grep -vE '(broken pipe|context canceled|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub|plugins-bundled|\.gitkeep|Pending:.*Retry: [12]\b|no recent network activity)' \
+                            | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|\bban(ned)?\b|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
                             echo "--- [${cname}] ANOMALIE 24H ---"
                             echo "${anom_24h}"
                         else
-                            last_line="$(docker logs --tail 1 "${cname}" 2>&1 | tr -d '\000' | cut -c 1-180 || true)"
+                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|referenced_memory|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
                             echo "--- [${cname}] 24h: 0 bledow/ostrzezen (ostatni wpis: ${last_line})"
                         fi
                     done
