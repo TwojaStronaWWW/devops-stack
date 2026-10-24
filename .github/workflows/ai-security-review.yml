@@ -47,8 +47,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          PR_DIFF=$(gh pr diff "$PR_NUMBER" --repo "$REPO" | head -n 350 | iconv -f UTF-8 -t UTF-8 -c || true)
+          set -eu
+          gh pr diff "$PR_NUMBER" --repo "$REPO" > /tmp/pr_full.diff || true
+          PR_DIFF=$(head -n 350 /tmp/pr_full.diff | iconv -f UTF-8 -t UTF-8 -c || true)
           if [ -z "$PR_DIFF" ]; then
             echo "Brak zmian w diffie PR — pomijanie audytu."
             exit 0
@@ -96,7 +97,7 @@ jobs:
 
           if [ -z "$REVIEW_BODY" ]; then
             echo "Uruchamianie audytu przez centralny VPS AI Router (https://ai.twojastronawww.pl/chat-router.php)..."
-            SHORT_DIFF=$(echo "$PR_DIFF" | head -n 160)
+            SHORT_DIFF=$(head -n 160 /tmp/pr_full.diff | iconv -f UTF-8 -t UTF-8 -c || true)
             jq -n \
               --arg q "Przeprowadź krótki audyt bezpieczeństwa ISO 27001 i OWASP dla zmian w PR #${PR_NUMBER} podanych w kontekście dynamicznym. Jeśli kod jest bezpieczny, potwierdź krótko po polsku." \
               --arg ctx "$SHORT_DIFF" \
