@@ -118,7 +118,7 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
     });
 
     it('składnia PHP w plikach źródłowych AI Routera powinna być wolna od błędów (php -l)', { skip: !hasPhpCli() }, () => {
-      for (const phpFile of ['chat-router.php', 'ai-stats.php', 'amms-rag-search.php']) {
+      for (const phpFile of ['chat-router.php', 'router-endpoints.php', 'llm-cascade.php', 'lead-notifier.php', 'ai-stats.php', 'amms-rag-search.php']) {
         const res = spawnSync('php', ['-l', path.join(ROUTER_SRC_DIR, phpFile)], { encoding: 'utf-8' });
         assert.strictEqual(res.status, 0, `Błąd składni PHP w ${phpFile}: ${res.stderr || res.stdout}`);
       }

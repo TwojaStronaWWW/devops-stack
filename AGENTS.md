@@ -42,7 +42,8 @@ VPS/
 ├── compose/
 │   ├── docker-compose.yml         # Główny stack (devops_internal_network): Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router, GitHub Exporter, OCI Keepalive Buffer
 │   ├── runners.yml                # Kontenerowe GitHub Actions Runnery ARM64 w odseparowanej sieci (devops_runners_network)
-│   └── extensions.yml             # Szyfrowany tunel krawędziowy Cloudflare Zero Trust (cloudflared)
+│   ├── extensions.yml             # Szyfrowany tunel krawędziowy Cloudflare Zero Trust (cloudflared)
+│   └── amms-lab.yml               # Odseparowane środowisko laboratoryjne Asseco AMMS HIS + Oracle Database 23ai Free
 ├── config/
 │   ├── grafana/                   # Provisioning źródeł danych (uid: prometheus) i 3 dashboardów (Centrum Monitoringu + AI Router + Analityka WWW & SEO)
 │   ├── node-exporter/             # Prometheus Textfile Collector (*.prom z telemetrią backupów, Fail2ban IPS, IoC i audytu)
@@ -54,7 +55,8 @@ VPS/
 │   ├── 01-harden-os.sh            # Skrypt utwardzania Ubuntu (SSH, UFW, Fail2ban 1h->7d, sysctl + TCP BBR + inotify, NTP ISO 27001, SWAP 2GB, DOCKER-USER systemd hook, /dev/shm noexec, journald 200M)
 │   ├── 02-install-docker.sh       # Instalacja Docker CE i Docker Compose v2
 │   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (75 testów, IoC/SUID/IPS/WAF, Auto-Patching APT, DOCKER-USER, OOM/Inodes, Restore Drill, AMMS Zero-Trust) + poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6)
+│   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (78 testów, IoC/SUID/IPS/WAF, Auto-Patching APT, DOCKER-USER, OOM/Inodes, Restore Drill, AMMS Zero-Trust) + delegacja porannego raportu do morning-digest.py
+│   ├── morning-digest.py          # Moduł Pythona dla porannego raportu 07:30/08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6 + scrapery Kato Salsa Hub & DancePuls + wysyłka E-mail)
 │   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do Cloudflare R2
 │   ├── backup-volumes.sh          # Lokalny snapshot wolumenów Dockera do archiwum .tar.gz
 │   ├── backup-websites-lh.sh      # Backup serwisów WWW z LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256) do Cloudflare R2
@@ -69,6 +71,7 @@ VPS/
 │   ├── setup-kuma.js              # Idempotentna rejestracja 10 monitorów (w tym AI Router Healthcheck) w Uptime Kuma
 │   ├── setup-ntfy.js              # Automatyczna konfiguracja powiadomień Ntfy w Uptime Kuma
 │   ├── sync-gsc-keywords.sh       # Bezciasteczkowa synchronizacja słów kluczowych Google Search Console API + odświeżanie Sitemap + IndexNow
+│   ├── sync-p1-status.sh          # Synchronizacja telemetrii dostępności systemów państwowych (e-Zdrowie P1, eWUŚ, e-ZLA, KSeF) dla Radaru P1
 │   ├── verify-remote.ps1/.cmd     # Zdalny wyzwalacz pełnego audytu VPS z poziomu stacji roboczej Windows (npm run audit)
 │   ├── warm-ai-cache.sh           # Idempotentny pre-warming pamięci podręcznej RAG (Quick Prompts) po wdrożeniu
 │   └── runners/                   # Skrypty rejestracji i sterowania runnerami CI/CD
@@ -76,9 +79,13 @@ VPS/
 │   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, Multi-Provider RAG, Cache <5ms, WAF L7)
 │       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
 │       ├── src/
-│       │   ├── chat-router.php    # Obsługa POST /chat-router.php, WAF L7 + 15m IP Penalty Box, Cache RAG (<5ms), Leady Ntfy 1-Klik, /amms, /amms-page, /analytics, /health, /metrics
+│       │   ├── chat-router.php    # Główny orkiestrator POST /chat-router.php (CORS, Rate Limit, WAF L7 + 15m IP Penalty Box, RAG/SQLite FTS5, Cache <5ms)
+│       │   ├── router-endpoints.php# Endpointy GET (/widget.js, /amms, /docs-pdf/*, /amms-page, /radar, /health, /metrics), POST (/analytics) i blokady IP
+│       │   ├── llm-cascade.php    # Budowa instrukcji RAG i 15-modelowa kaskada LLM (Mistral Codestral SQL -> Gemini -> Groq -> Cerebras -> Workers AI -> OpenRouter -> Claude)
+│       │   ├── lead-notifier.php  # Ekstrakcja namiarów Zero-PII i asynchroniczne powiadomienia 1-Klik Ntfy.sh + webhook osTicket
 │       │   ├── amms-rag-search.php# Silnik Dual-Stream SQLite FTS5 BM25 (314 PDF + 69 plików bazy Oracle AMMS) + Smart Reasoning Tiering (LOW/HIGH)
 │       │   ├── amms-teams.html    # Interfejs Asystenta AMMS & Oracle DBA w stylu Microsoft Teams z wizualnymi zrzutami stron (Page Snapshots)
+│       │   ├── p1-radar.html      # Panel statusowy Radaru P1 (e-Zdrowie CeZ, NFZ, ZUS, KSeF)
 │       │   ├── ai-stats.php       # Moduł telemetrii Prometheus (AI + Cookieless Web Analytics v3), Cooldownu modeli i limitów RPD (LOCK_EX, zero PII)
 │       │   └── widget.js          # Uniwersalny widget czatu AI + Cookieless Web Analytics serwowany przez GET /widget.js
 │       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua, katosalsahub, twojastronawww, amms-knowledge.txt + amms-knowledge.sqlite)

@@ -55,7 +55,7 @@ jobs:
             cd "${DEPLOY_PATH}"
             git fetch origin main
             git reset --hard origin/main
-            chmod +x scripts/*.sh
+            chmod +x scripts/*.sh scripts/*.py 2>/dev/null || true
             chmod 640 "${DEPLOY_PATH}"/compose/*.yml 2>/dev/null || true
             chmod 644 "${DEPLOY_PATH}"/services/ai-router/data/* 2>/dev/null || true
             chmod 750 "${DEPLOY_PATH}"/services/ai-router/storage 2>/dev/null || true
@@ -63,9 +63,12 @@ jobs:
             bash "${DEPLOY_PATH}/scripts/setup-backup-timer.sh" >/dev/null 2>&1 || true
 
             cd compose
-            docker compose --env-file "${DEPLOY_PATH}/.env" -f extensions.yml pull -q cloudflared || true
-            docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
-            docker kill -s HUP prometheus >/dev/null 2>&1 || true
+            (
+              flock -w 180 9 || { echo "BLAD: Timeout blokady wdrozeniowej /tmp/devops-stack-deploy.lock"; exit 1; }
+              docker compose --env-file "${DEPLOY_PATH}/.env" -f extensions.yml pull -q cloudflared || true
+              docker compose --env-file "${DEPLOY_PATH}/.env" -f docker-compose.yml -f extensions.yml -f runners.yml up -d --build --remove-orphans
+              docker kill -s HUP prometheus >/dev/null 2>&1 || true
+            ) 9>/tmp/devops-stack-deploy.lock
 
             # Automatyczny Garbage Collector po wdrożeniu: usunięcie osieroconych warstw <none> i starego build cache'u (>7 dni)
             docker image prune -f >/dev/null 2>&1 || true

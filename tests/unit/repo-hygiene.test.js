@@ -175,6 +175,9 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const requiredRouterFiles = [
       path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'router-endpoints.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'llm-cascade.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'lead-notifier.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
@@ -197,9 +200,14 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     }
   });
 
+  function readRouterCombinedPhp() {
+    return ['chat-router.php', 'router-endpoints.php', 'llm-cascade.php', 'lead-notifier.php']
+      .map((f) => fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', f), 'utf-8'))
+      .join('\n');
+  }
+
   it('skrypt chat-router.php powinien realizować wymogi bezpieczeństwa, pamięci konwersacji i kaskadowego fallbacku modeli (ISO 27001)', () => {
-    const routerPhp = path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php');
-    const content = fs.readFileSync(routerPhp, 'utf-8');
+    const content = readRouterCombinedPhp();
 
     // Brak zahardkodowanego klucza API
     assert.strictEqual(content.includes('AIzaSy'), false, 'Wykryto zahardkodowany klucz Gemini API w chat-router.php');
@@ -277,7 +285,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(stats, /function aiRenderMetrics/);
     assert.match(stats, /function aiCooldownRemaining/);
 
-    const router = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const router = readRouterCombinedPhp();
     assert.match(router, /require_once __DIR__ \. '\/ai-stats\.php'/);
     assert.match(router, /register_shutdown_function/);
     // Do logów trafiają tylko metadane - nigdy $question/$knowledgeContent/$geminiApiKey/$cerebrasApiKey/$mistralApiKey/$cfAiToken
@@ -412,7 +420,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(offsiteBackup, /openssl enc -aes-256-cbc -pbkdf2/);
     assert.match(offsiteBackup, /runner_gal_anonim_web_data/);
 
-    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const routerPhp = readRouterCombinedPhp();
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
   });
 
@@ -424,7 +432,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(statsPhp, /function aiRecordCacheHit/);
     assert.match(statsPhp, /function aiRecordLead/);
 
-    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const routerPhp = readRouterCombinedPhp();
     assert.match(routerPhp, /aiRecordCacheHit/);
     assert.match(routerPhp, /aiRecordLead/);
     assert.match(routerPhp, /hot_lead_detected/);
@@ -476,14 +484,18 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(deployYml, /docker builder prune/);
 
     const auditSh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'audit-server.sh'), 'utf-8');
+    const morningDigestPyPath = path.join(ROOT_DIR, 'scripts', 'morning-digest.py');
+    assert.ok(fs.existsSync(morningDigestPyPath), 'Brak scripts/morning-digest.py');
+    const morningDigestPy = fs.readFileSync(morningDigestPyPath, 'utf-8');
+    const combinedAuditAndDigest = auditSh + '\n' + morningDigestPy;
     assert.match(auditSh, /docker image prune -f/);
     assert.match(auditSh, /devops_oci_keepalive_buffer_bytes/);
     assert.match(auditSh, /devops_ntp_synchronized/);
     assert.match(auditSh, /github_request_failures_total/);
     assert.match(auditSh, /devops_waf_blocked_total/);
     assert.match(auditSh, /devops_log_critical_24h_total/);
-    assert.match(auditSh, /"reasoning_effort":\s*"high"/);
-    assert.match(auditSh, /"thinkingLevel":\s*"HIGH"/);
+    assert.match(combinedAuditAndDigest, /"reasoning_effort":\s*"high"/);
+    assert.match(combinedAuditAndDigest, /"thinkingLevel":\s*"HIGH"/);
 
     const lhBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-websites-lh.sh'), 'utf-8');
     assert.match(lhBackup, /devops_backup_websites_verified/);
@@ -517,7 +529,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
   it('weryfikacja krzyżowa (Cross-Template Contract): VPS AI Router, warm-ai-cache.sh oraz _site-template powinny zachowywać 100% spójność kontraktu', () => {
     const warmCache = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'warm-ai-cache.sh'), 'utf-8');
-    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const routerPhp = readRouterCombinedPhp();
     const vpsWidget = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'), 'utf-8');
 
     // Kontrakt pól JSON obsługiwanych przez chat-router.php
@@ -565,7 +577,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
   it('Asystent Ekspercki AMMS & Oracle DBA (Dual-Stream SQLite FTS5 RAG + Adaptive HIGH Reasoning + MS Teams UI) powinien być kompletnie skonfigurowany', () => {
     const ragPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'), 'utf-8');
-    const routerPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    const routerPhp = readRouterCombinedPhp();
     const teamsHtml = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'), 'utf-8');
 
     assert.match(ragPhp, /class AmmsRagSearch/);
