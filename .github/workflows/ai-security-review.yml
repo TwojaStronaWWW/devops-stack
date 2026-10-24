@@ -47,7 +47,8 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          set -eu
+          set -euo pipefail
+          trap 'rm -f /tmp/claude_payload.json /tmp/vps_payload.json /tmp/pr_full.diff' EXIT INT TERM
           gh pr diff "$PR_NUMBER" --repo "$REPO" > /tmp/pr_full.diff || true
           PR_DIFF=$(head -n 350 /tmp/pr_full.diff | iconv -f UTF-8 -t UTF-8 -c || true)
           if [ -z "$PR_DIFF" ]; then
