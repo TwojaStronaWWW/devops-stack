@@ -957,6 +957,15 @@ if force_watcher or (now_ts - last_watcher_run) >= effective_watcher_ttl or not 
                 if len(s) >= 8 and not any(ig in s.lower() for ig in ("cookie", "ciastecz", "menu", "nawigacja", "szukaj", "logowanie", "zaloguj się", "infolinia", "portal - ezdrowie", "aktualności")):
                     cleaned_matches.append(s[:125])
             latest_finding = cleaned_matches[0] if cleaned_matches else (prev_item.get("latest_finding") or "Strona aktywna — brak nowych plików w nagłówku")
+            resolved_item_url = src.get("open_url") or src["url"]
+            if sid == "mf_ksef":
+                m_href = re.search(r'href="([^"]*komunikaty-techniczne/[^"]+)"\s+title="[^"]{15,135}"', clean_body, flags=re.IGNORECASE)
+                if m_href:
+                    resolved_item_url = urllib.parse.urljoin(src["url"], m_href.group(1).strip())
+            elif sid == "nfz_xml":
+                m_nfz = re.search(r'<a[^>]+href="([^"]*aktualnosci-centrali/[^"]+)"[^>]*>[^<]{15,130}</a>', clean_body, flags=re.IGNORECASE)
+                if m_nfz:
+                    resolved_item_url = urllib.parse.urljoin(src["url"], m_nfz.group(1).strip())
             if sid == "nfz_zarzadzenia" and "baw.nfz.gov.pl" not in latest_finding:
                 latest_finding = f"{latest_finding} (pełny tekst w BAW: baw.nfz.gov.pl)"
             sig_source = "|".join(cleaned_matches[:3]) if cleaned_matches else latest_finding
@@ -971,7 +980,7 @@ if force_watcher or (now_ts - last_watcher_run) >= effective_watcher_ttl or not 
                 "name": src["name"],
                 "lead_time": src["lead_time"],
                 "impact": src["impact"],
-                "url": src.get("open_url") or src["url"],
+                "url": resolved_item_url,
                 "up": 1,
                 "ms": ms,
                 "latest_finding": latest_finding,
@@ -986,7 +995,7 @@ if force_watcher or (now_ts - last_watcher_run) >= effective_watcher_ttl or not 
                 "name": src["name"],
                 "lead_time": src["lead_time"],
                 "impact": src["impact"],
-                "url": src.get("open_url") or src["url"],
+                "url": prev_item.get("url") or src.get("open_url") or src["url"],
                 "up": 1 if prev_item.get("latest_finding") else 0,
                 "ms": ms,
                 "latest_finding": prev_item.get("latest_finding") or f"Oczekiwanie na kolejny skan (HTTP {code})",
@@ -1011,7 +1020,7 @@ else:
         cached["name"] = src["name"]
         cached["lead_time"] = src["lead_time"]
         cached["impact"] = src["impact"]
-        cached["url"] = src.get("open_url") or src["url"]
+        cached["url"] = cached.get("url") or src.get("open_url") or src["url"]
         watcher_items.append(cached)
 
 # Automatyczne karmienie bazy wiedzy AI (radar-p1-knowledge.txt) wszystkimi komunikatami ze scrapera oraz statusem awarii
