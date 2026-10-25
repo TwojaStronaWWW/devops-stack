@@ -955,17 +955,60 @@ if force_watcher or (now_ts - last_watcher_run) >= effective_watcher_ttl or not 
             for m in matches:
                 s = re.sub(r"<[^>]+>", "", str(m)).strip()
                 if len(s) >= 8 and not any(ig in s.lower() for ig in ("cookie", "ciastecz", "menu", "nawigacja", "szukaj", "logowanie", "zaloguj się", "infolinia", "portal - ezdrowie", "aktualności")):
-                    cleaned_matches.append(s[:125])
+                    cleaned_matches.append(s[:260])
             latest_finding = cleaned_matches[0] if cleaned_matches else (prev_item.get("latest_finding") or "Strona aktywna — brak nowych plików w nagłówku")
             resolved_item_url = src.get("open_url") or src["url"]
-            if sid == "mf_ksef":
-                m_href = re.search(r'href="([^"]*komunikaty-techniczne/[^"]+)"\s+title="[^"]{15,135}"', clean_body, flags=re.IGNORECASE)
+            if sid == "cez_komunikaty":
+                m_cez = re.search(
+                    r'<p class="articleAddData">([^<]+)</p>\s*<h3 class="articleTitle">([^<]+)</h3>\s*<p class="articleText">([^<]+)</p>.*?href\s*=\s*"(/portal/artykul/[^"]+)"',
+                    clean_body,
+                    flags=re.IGNORECASE,
+                )
+                if m_cez:
+                    cez_title = m_cez.group(2).strip()
+                    cez_text = m_cez.group(3).strip()
+                    resolved_item_url = urllib.parse.urljoin(src["url"], m_cez.group(4).strip())
+                    latest_finding = f"{cez_title} — {cez_text}"[:280] if cez_text else cez_title[:260]
+            elif sid == "ezdrowie_ikp":
+                m_ikp = re.search(
+                    r'<h4 class="articleListBigBoxTitle">([^<]+)</h4>\s*<p class="articleListBigBoxAddData">([^<]+)</p>\s*</div>\s*<p class="articleListBigBoxText">([^<]+)<.*?href\s*=\s*"(/portal/artykul/[^"]+)"',
+                    clean_body,
+                    flags=re.IGNORECASE,
+                )
+                if m_ikp:
+                    ikp_title = m_ikp.group(1).strip()
+                    ikp_text = m_ikp.group(3).strip()
+                    resolved_item_url = urllib.parse.urljoin(src["url"], m_ikp.group(4).strip())
+                    latest_finding = f"{ikp_title} — {ikp_text}"[:280] if ikp_text else ikp_title[:260]
+            elif sid == "mf_ksef":
+                m_href = re.search(r'href="([^"]*komunikaty-techniczne/[^"]+)"\s+title="([^"]{15,160})"', clean_body, flags=re.IGNORECASE)
                 if m_href:
                     resolved_item_url = urllib.parse.urljoin(src["url"], m_href.group(1).strip())
+                    ksef_title = m_href.group(2).strip()
+                    acode, _, abody = http_get(resolved_item_url, timeout=6.0)
+                    if acode in (200, 301, 302) and abody:
+                        aclean = re.sub(r"\s+", " ", html.unescape(abody))
+                        m_markup = re.search(r'<div class="markup[^"]*">(.*?)</div>', aclean, flags=re.IGNORECASE)
+                        if m_markup:
+                            paras = [
+                                re.sub(r"<[^>]+>", "", p).strip()
+                                for p in re.findall(r"<p[^>]*>(.*?)</p>", m_markup.group(1), flags=re.IGNORECASE)
+                            ]
+                            paras = [p for p in paras if len(p) >= 15]
+                            if paras:
+                                lead_p = paras[0]
+                                assure_p = next((p for p in paras[1:] if "bez zakłóceń" in p.lower() or "prawidłowo" in p.lower()), "")
+                                if assure_p:
+                                    latest_finding = f"{lead_p} ({assure_p})"[:300]
+                                else:
+                                    latest_finding = f"{ksef_title}: {lead_p}"[:300]
             elif sid == "nfz_xml":
-                m_nfz = re.search(r'<a[^>]+href="([^"]*aktualnosci-centrali/[^"]+)"[^>]*>[^<]{15,130}</a>', clean_body, flags=re.IGNORECASE)
+                m_nfz = re.search(r'<a[^>]+href="([^"]*aktualnosci-centrali/[^"]+)"[^>]*>([^<]{15,160})</a>(?:\s*</h3>\s*(?:</div>\s*)?(?:<div class="date">\s*(\d{2}\.\d{2}\.\d{4})\s*</div>)?)?', clean_body, flags=re.IGNORECASE)
                 if m_nfz:
                     resolved_item_url = urllib.parse.urljoin(src["url"], m_nfz.group(1).strip())
+                    nfz_title = m_nfz.group(2).strip()
+                    nfz_date = (m_nfz.group(3) or "").strip()
+                    latest_finding = f"{nfz_title} (publikacja: {nfz_date})" if nfz_date else nfz_title
             if sid == "nfz_zarzadzenia" and "baw.nfz.gov.pl" not in latest_finding:
                 latest_finding = f"{latest_finding} (pełny tekst w BAW: baw.nfz.gov.pl)"
             sig_source = "|".join(cleaned_matches[:3]) if cleaned_matches else latest_finding
