@@ -252,8 +252,10 @@ def cmd_ai_audit(env_vars: dict) -> int:
             budget["total_tokens"] = int(budget.get("total_tokens", 0)) + total_tok_today
             budget["runs"] = int(budget.get("runs", 0)) + 1
             os.makedirs(os.path.dirname(budget_path), exist_ok=True)
-            with open(budget_path, "w", encoding="utf-8") as bf:
+            tmp_budget_path = f"{budget_path}.{os.getpid()}.tmp"
+            with open(tmp_budget_path, "w", encoding="utf-8") as bf:
                 json.dump(budget, bf, indent=2)
+            os.replace(tmp_budget_path, budget_path)
             claude_section = f"\n🚨 Ekspertyza Eskalacyjna Claude Sonnet 4.6:\n{c_ans}\n"
         except Exception:
             pass

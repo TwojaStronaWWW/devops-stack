@@ -86,6 +86,7 @@ $allowedOrigins = $allowedOriginsEnv
     : $defaultAllowedOrigins;
 
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$secFetchSite = strtolower(trim((string)($_SERVER['HTTP_SEC_FETCH_SITE'] ?? '')));
 
 if ($origin !== '') {
     $isAllowed = in_array($origin, $allowedOrigins, true) ||
@@ -105,6 +106,14 @@ if ($origin !== '') {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
+} elseif ($secFetchSite === 'cross-site') {
+    // [REF-05] OWASP Fetch Metadata Defense: żądanie przeglądarkowe cross-site bez nagłówka Origin
+    http_response_code(403);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'CORS Forbidden: Żądanie cross-site bez autoryzowanego nagłówka Origin.'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

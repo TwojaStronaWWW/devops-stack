@@ -4,11 +4,10 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - 'api/**'
-      - '.htaccess'
-      - '.well-known/security.txt'
-      - 'sw.js'
-      - 'assets/js/ai-widget.js'
+      - 'services/ai-router/**'
+      - 'compose/**'
+      - 'scripts/**'
+      - 'config/**'
       - '.github/workflows/**'
   issue_comment:
     types: [created]

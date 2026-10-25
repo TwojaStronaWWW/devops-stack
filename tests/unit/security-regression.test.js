@@ -284,6 +284,19 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       });
       trackIpRateFile('198.51.100.12');
       assert.strictEqual(spoofRes.status, 403);
+
+      // [REF-05] OWASP Fetch Metadata Defense: żądanie cross-site bez nagłówka Origin
+      const secFetchRes = await fetch(`${baseUrl}/chat-router.php`, {
+        method: 'POST',
+        headers: {
+          'Sec-Fetch-Site': 'cross-site',
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': '198.51.100.13',
+        },
+        body: JSON.stringify({ site_id: 'twojastronawww', question: 'Test Sec-Fetch-Site cross-site' }),
+      });
+      trackIpRateFile('198.51.100.13');
+      assert.strictEqual(secFetchRes.status, 403);
     });
 
     it('powinien akceptować preflight OPTIONS z autoryzowanej domeny na białej liście CORS (HTTP 204)', async () => {

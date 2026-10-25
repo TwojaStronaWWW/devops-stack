@@ -422,6 +422,21 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     const routerPhp = readRouterCombinedPhp();
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);
+    assert.match(routerPhp, /CURLOPT_FOLLOWLOCATION\s*=>\s*false/);
+    assert.match(routerPhp, /CURLOPT_MAXREDIRS\s*=>\s*0/);
+    assert.match(routerPhp, /CURLPROTO_HTTPS/);
+    assert.match(routerPhp, /HTTP_SEC_FETCH_SITE/);
+
+    const statsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'), 'utf-8');
+    assert.match(statsPhp, /\.bak/);
+
+    const secReviewYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'ai-security-review.yml'), 'utf-8');
+    assert.match(secReviewYml, /services\/ai-router\/\*\*/);
+    assert.match(secReviewYml, /scripts\/\*\*/);
+
+    const syncP1Sh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'sync-p1-status.sh'), 'utf-8');
+    assert.match(syncP1Sh, /def write_file_atomic/);
+    assert.match(syncP1Sh, /ssl_verified_ctx = ssl\.create_default_context\(\)/);
   });
 
   it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów i Kontaktów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf + SQLite + MySQL, timer audytu i backupów 24/7) powinny być wdrożone', () => {

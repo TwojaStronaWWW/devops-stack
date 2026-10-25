@@ -24,9 +24,16 @@ function executeJsonPost(string $url, array $payload, array $headers = [], int $
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => $timeoutSec,
         CURLOPT_CONNECTTIMEOUT => 2,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_MAXREDIRS      => 0,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2
     ];
+
+    if (defined('CURLPROTO_HTTPS')) {
+        $curlOptions[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+        $curlOptions[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
+    }
 
     if (PHP_OS_FAMILY === 'Windows' && !ini_get('curl.cainfo')) {
         $windowsCaCandidates = [

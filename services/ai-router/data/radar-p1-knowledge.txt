@@ -52,3 +52,31 @@ ZASADA NADRZĘDNA ODPOWIEDZI:
 - Zakład Ubezpieczeń Społecznych (e-ZLA): https://www.zus.pl
 - Krajowy System e-Faktur Ministerstwa Finansów: https://ksef.podatki.gov.pl
 - Całodobowa infolinia Centrum e-Zdrowia (Helpdesk P1 czynny 24/7): tel. 19457 (z zagranicy: +48 515 239 239), e-mail: e-recepta@csioz.gov.pl, e-skierowanie@csioz.gov.pl, edm-pomoc@cez.gov.pl.
+
+9. FAQ RADARU P1: ZNACZENIE KOLORÓW STATUSÓW, CZASU ODPOWIEDZI (MS / S) I NIEZAWODNOŚCI (%)
+- Czas odpowiedzi (ms / s): Szybkość reakcji serwerów centralnych w Warszawie (norma dla P1 to 150–2200 ms; powyżej 3 s odczuwalne jest opóźnienie w gabinecie lub aptece). Wskaźnik „Twoje łącze” na górze strony mierzy szybkość lokalnego internetu użytkownika.
+- Niezawodność (%): Procent udanych połączeń z usługą bez błędów w ostatnim oknie pomiarowym (100% = pełna dostępność).
+- Kolory statusów: DZIAŁA (zielony: niezawodność >= 90% i czas <= 3 s), SPOWOLNIENIE (pomarańczowy: 20–89,9% lub czas > 3 s), AWARIA (czerwony: brak odpowiedzi lub niezawodność < 20%).
+
+10. FAQ RADARU P1: OBSŁUGA WYKRESU (NIEZALEŻNY ZOOM OSI X I Y) ORAZ MAPY 16 ODDZIAŁÓW NFZ
+- Najedź kursorem na linię lub pozycję w legendzie, aby ją wyróżnić. Kręć kółkiem myszy (scroll) na lewej osi Y (aby rozciągnąć skalę od 0 w górę w ms/s), pod dolną osią X (aby zmienić zakres minut) lub na środku wykresu (dwuklik resetuje widok).
+- Usługi centralne (e-Recepta, e-Skierowanie, EDM, e-ZLA, KSeF) łączą się z centralą w Warszawie, natomiast na Mapie Polski każde z 16 województw (01R–16R) pokazuje indywidualny status i ping swojego lokalnego oddziału wojewódzkiego NFZ.
+
+11. FAQ I SŁOWNIK USŁUG — SEKCJA 1: PRZYCHODNIA I SZPital (P1 / NFZ / ZUS)
+- e-Recepta i DRR: Wystawianie e-Recept w gabinecie/szpitalu oraz ich odczyt i wydanie leku w aptece (Dokument Realizacji Recepty).
+- e-Skierowanie i CeR: Elektroniczne skierowania do poradni i szpitali oraz Centralna e-Rejestracja pacjentów na wizyty i badania.
+- eWUŚ (NFZ) i e-ZLA (ZUS L4): Weryfikacja ubezpieczenia pacjenta po numerze PESEL oraz elektroniczne zwolnienia lekarskie L4.
+- Zdarzenia Medyczne (RZM / EDM) i IPOM: Zapisywanie wizyt, wymiana Elektronicznej Dokumentacji Medycznej oraz Indywidualne Plany Opieki Medycznej POZ w P1.
+- Podpisy P1 (WSP) oraz Kolejki i Rejestry NFZ: Podpisywanie dokumentów medycznych certyfikatem P1/ZUS (WSP), kolejki oczekujących (AP-KOLCE), karty onkologiczne (DiLO), wyroby medyczne (eZWM) i rejestry kliniczne (RAUT / ENDO).
+
+12. FAQ I SŁOWNIK USŁUG — SEKCJA 2 I 3: APTEKA, ROZLICZENIA I KOMUNIKATY URZĘDOWE
+- Portal SZOI / ISI NFZ (01R–16R): Wojewódzkie portale rozliczania świadczeń, rachunków (SWIAD, LIOCZ) i umów z NFZ.
+- KSeF (Ministerstwo Finansów): Krajowy System e-Faktur — wysyłka i odbiór faktur ustrukturyzowanych w księgowości, aptece i przychodni.
+- NMVS / PLMVS (KOWAL): Weryfikacja autentyczności leków podczas skanowania kodów 2D DataMatrix w aptece przed wydaniem opakowania.
+- BAZYL i RPWDL: Centralny słownik leków i cen (BAZYL) oraz Rejestr Podmiotów Wykonujących Działalność Leczniczą (RPWDL).
+- Komunikaty Urzędowe i Scraper Zwiadowcy: Automatyczny monitoring komunikatów o pracach serwisowych i awariach z oficjalnych stron CeZ P1, NFZ, ZUS, MF KSeF i MZ. Podczas awarii scraper przełącza się w tryb przyspieszonego pingowania źródeł (co 3 minuty).
+
+<!-- LIVE_SCRAPER_FEED_START -->
+13. AKTUALNE KOMUNIKATY WYKRYTE PRZEZ SCRAPER ZWIADOWCY (AUTO-FEED DO AI):
+- Trwa automatyczna synchronizacja komunikatów ze stron CeZ P1, NFZ, ZUS, MF KSeF i MZ.
+<!-- LIVE_SCRAPER_FEED_END -->

@@ -23,6 +23,7 @@ mkdir -p "${STORAGE_DIR}" "${PROM_DIR}" 2>/dev/null || true
 RADAR_JSON="${STORAGE_DIR}/p1_radar.json"
 WATCHER_CACHE="${STORAGE_DIR}/p1_watcher_cache.json"
 ALERT_STATE="${STORAGE_DIR}/p1_alert_state.json"
+AI_KB_FILE="${STACK_ROOT}/services/ai-router/data/radar-p1-knowledge.txt"
 
 FORCE_WATCHER="false"
 if [[ "${1:-}" == "--force-watcher" ]]; then
@@ -34,6 +35,7 @@ PROM_FILE="${PROM_FILE}" \
 RADAR_JSON="${RADAR_JSON}" \
 WATCHER_CACHE="${WATCHER_CACHE}" \
 ALERT_STATE="${ALERT_STATE}" \
+AI_KB_FILE="${AI_KB_FILE}" \
 FORCE_WATCHER="${FORCE_WATCHER}" \
 python3 - << 'PYEOF'
 import datetime
@@ -53,6 +55,7 @@ prom_path = os.environ.get("PROM_FILE", "/opt/devops-stack/config/node-exporter/
 radar_json_path = os.environ.get("RADAR_JSON", "/tmp/p1_radar.json")
 watcher_cache_path = os.environ.get("WATCHER_CACHE", "/tmp/p1_watcher_cache.json")
 alert_state_path = os.environ.get("ALERT_STATE", "/tmp/p1_alert_state.json")
+ai_kb_path = os.environ.get("AI_KB_FILE", "/opt/devops-stack/services/ai-router/data/radar-p1-knowledge.txt")
 force_watcher = os.environ.get("FORCE_WATCHER", "false") == "true"
 
 env_vars = {}
@@ -74,18 +77,38 @@ try:
 except Exception:
     now_iso = datetime.datetime.now(datetime.timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
-ssl_ctx = ssl.create_default_context()
-ssl_ctx.check_hostname = False
-ssl_ctx.verify_mode = ssl.CERT_NONE
+ssl_verified_ctx = ssl.create_default_context()
+ssl_legacy_ctx = ssl.create_default_context()
+ssl_legacy_ctx.check_hostname = False
+ssl_legacy_ctx.verify_mode = ssl.CERT_NONE
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+def write_file_atomic(target_path, text_content, mode=None):
+    tmp_path = f"{target_path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as tf:
+            tf.write(text_content)
+        os.replace(tmp_path, target_path)
+        if mode is not None:
+            try:
+                os.chmod(target_path, mode)
+            except Exception:
+                pass
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 def http_get(url, timeout=6.0):
     t0 = time.monotonic()
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*", "Cache-Control": "no-cache"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl_verified_ctx) as resp:
             body = resp.read(250_000)
             ms = round((time.monotonic() - t0) * 1000.0, 1)
             return resp.status, ms, body.decode("utf-8", errors="replace")
@@ -96,6 +119,25 @@ def http_get(url, timeout=6.0):
         except Exception:
             body = ""
         return he.code, ms, body
+    except (ssl.SSLError, urllib.error.URLError) as ssl_err:
+        # Warunkowy fallback tylko dla starszych serwerów WSDL NFZ z niepełnym łańcuchem pośrednim CA
+        if isinstance(ssl_err, ssl.SSLError) or isinstance(getattr(ssl_err, "reason", None), ssl.SSLError):
+            try:
+                with urllib.request.urlopen(req, timeout=timeout, context=ssl_legacy_ctx) as resp:
+                    body = resp.read(250_000)
+                    ms = round((time.monotonic() - t0) * 1000.0, 1)
+                    return resp.status, ms, body.decode("utf-8", errors="replace")
+            except urllib.error.HTTPError as he2:
+                ms = round((time.monotonic() - t0) * 1000.0, 1)
+                try:
+                    body = he2.read(100_000).decode("utf-8", errors="replace")
+                except Exception:
+                    body = ""
+                return he2.code, ms, body
+            except Exception:
+                pass
+        ms = round((time.monotonic() - t0) * 1000.0, 1)
+        return 0, ms, ""
     except Exception:
         ms = round((time.monotonic() - t0) * 1000.0, 1)
         return 0, ms, ""
@@ -111,7 +153,7 @@ def send_ntfy(title, message, priority="default", tags="hospital,satellite"):
             headers={"Title": title, "Priority": priority, "Tags": tags},
             method="POST",
         )
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=5, context=ssl_verified_ctx)
     except Exception:
         pass
 
@@ -556,9 +598,19 @@ grey_part = [
     },
 ]
 
+# Wykrycie niedostępności lub silnego spowolnienia usług centralnych PRZED uruchomieniem scrapera,
+# aby w razie awarii automatycznie przełączyć scraper na częstsze pingowanie oficjalnych stron (co 3 minuty zamiast co 30 min).
+degraded_services = []
+for item in white_part + grey_part:
+    sid = item["id"]
+    if item["up"] == 0 or (item["reliability"] > 0 and item["reliability"] < 75.0) or item.get("ms", 0) > 3500:
+        degraded_services.append(f"{item['name']} ({item['ms']} ms, niezawodność: {item['reliability']}%)")
+
 # ------------------------------------------------------------------------------
 # 3. SEKCJA 3: ZWIADOWCA ZMIAN PRAWNYCH I TECHNICZNYCH (9 CZUJNIKÓW PUBLIC OSINT)
-#    Odświeżany co 6h (lub z flagą --force-watcher), aby szanować serwery .gov.pl
+#    Tryb adaptacyjny:
+#    - W normie: odświeżany co 30 min (1800 s)
+#    - Podczas awarii / degradacji (degraded_services != []): odświeżany co 3 min (180 s)!
 # ------------------------------------------------------------------------------
 watcher_state = {}
 if os.path.exists(watcher_cache_path):
@@ -571,6 +623,9 @@ if os.path.exists(watcher_cache_path):
 last_watcher_run = int(watcher_state.get("last_run_ts") or 0)
 prev_items_by_id = {x["id"]: x for x in (watcher_state.get("items") or []) if isinstance(x, dict) and "id" in x}
 
+effective_watcher_ttl = 180 if degraded_services else 1800
+scraper_mode = "emergency_fast_3m" if degraded_services else "normal_30m"
+
 WATCHER_SOURCES = [
     {
         "id": "cez_komunikaty",
@@ -579,7 +634,7 @@ WATCHER_SOURCES = [
         "impact": "7 wykresów P1: e-Recepta (Lekarz/Apteka/DRR), e-Skierowanie, Zdarzenia Medyczne (RZM), Podpisy (WSP), e-Rejestracja (CeR), IPOM",
         "url": "https://ezdrowie.gov.pl/",
         "open_url": "https://ezdrowie.gov.pl/",
-        "pattern": r'>\s*([^<>]{8,115}(?:Aktualizacja|certyfikat|e-rejestracj|e-recept|e-skierow|refundac|niedostępn|przerw)[^<>]{0,80})\s*<',
+        "pattern": r'>\s*([^<>]{8,115}(?:Aktualizacja|prace serwisowe|awari|utrudnien|certyfikat|e-rejestracj|e-recept|e-skierow|refundac|niedostępn|przerw)[^<>]{0,80})\s*<',
     },
     {
         "id": "nfz_xml",
@@ -658,7 +713,7 @@ WATCHER_SOURCES = [
 watcher_items = []
 new_publications_alerts = []
 
-if force_watcher or (now_ts - last_watcher_run) >= 21600 or not prev_items_by_id:
+if force_watcher or (now_ts - last_watcher_run) >= effective_watcher_ttl or not prev_items_by_id:
     for src in WATCHER_SOURCES:
         sid = src["id"]
         code, ms, body = http_get(src["url"], timeout=7.0)
@@ -711,8 +766,11 @@ if force_watcher or (now_ts - last_watcher_run) >= 21600 or not prev_items_by_id
                 "last_change": prev_item.get("last_change") or now_iso,
             })
     try:
-        with open(watcher_cache_path, "w", encoding="utf-8") as wf:
-            json.dump({"last_run_ts": now_ts, "items": watcher_items}, wf, ensure_ascii=False, indent=2)
+        write_file_atomic(
+            watcher_cache_path,
+            json.dumps({"last_run_ts": now_ts, "items": watcher_items}, ensure_ascii=False, indent=2),
+            0o644,
+        )
     except Exception:
         pass
 else:
@@ -725,6 +783,52 @@ else:
         cached["impact"] = src["impact"]
         cached["url"] = src.get("open_url") or src["url"]
         watcher_items.append(cached)
+
+# Automatyczne karmienie bazy wiedzy AI (radar-p1-knowledge.txt) wszystkimi komunikatami ze scrapera oraz statusem awarii
+if ai_kb_path and os.path.exists(ai_kb_path):
+    try:
+        with open(ai_kb_path, "r", encoding="utf-8") as kbf:
+            kb_text = kbf.read()
+        start_tag = "<!-- LIVE_SCRAPER_FEED_START -->"
+        end_tag = "<!-- LIVE_SCRAPER_FEED_END -->"
+        if start_tag in kb_text and end_tag in kb_text:
+            feed_lines = [
+                start_tag,
+                f"Aktualizacja ze scrapera Zwiadowcy: {now_iso} (tryb: {scraper_mode}, interwał: {effective_watcher_ttl}s)",
+            ]
+            official_maint = [
+                w for w in watcher_items
+                if any(k in str(w.get("latest_finding", "")).lower() for k in ("prace serwisowe", "przerwa", "awari", "utrudnien", "niedostępn", "planowan"))
+                and "brak nowych plików" not in str(w.get("latest_finding", "")).lower()
+            ]
+            if degraded_services and not official_maint:
+                feed_lines.append(
+                    "🚨 AWARIA BEZ OFICJALNEGO KOMUNIKATU: Wykryto niedostępność/degradację usług: "
+                    + "; ".join(degraded_services)
+                    + " — na oficjalnych stronach CeZ / NFZ / ZUS / MF NIE OPUBLIKOWANO jeszcze komunikatu o pracach ani awarii (scraper pinguje strony w trybie przyspieszonym co 3 min)."
+                )
+            elif degraded_services and official_maint:
+                feed_lines.append(
+                    "⚠️ AKTYWNA AWARIA Z OFICJALNYM KOMUNIKATEM: Usługi z problemami: "
+                    + "; ".join(degraded_services)
+                )
+            else:
+                feed_lines.append("Status usług centralnych: WSZYSTKIE USŁUGI W NORMIE (brak awarii).")
+            for w in watcher_items:
+                finding = str(w.get("latest_finding") or "Brak danych").strip()
+                chg = " [NOWA ZMIANA!]" if w.get("changed") else ""
+                feed_lines.append(f"- {w.get('name')}:{chg} {finding} (wpływ: {w.get('impact')}, źródło: {w.get('url')})")
+            feed_lines.append(end_tag)
+            new_kb_text = re.sub(
+                re.escape(start_tag) + r".*?" + re.escape(end_tag),
+                "\n".join(feed_lines),
+                kb_text,
+                flags=re.DOTALL,
+            )
+            if new_kb_text != kb_text:
+                write_file_atomic(ai_kb_path, new_kb_text, 0o644)
+    except Exception:
+        pass
 
 if new_publications_alerts:
     send_ntfy(
@@ -745,12 +849,6 @@ if os.path.exists(alert_state_path):
     except Exception:
         alert_state = {}
 
-degraded_services = []
-for item in white_part + grey_part:
-    sid = item["id"]
-    if item["up"] == 0 or (item["reliability"] > 0 and item["reliability"] < 75.0):
-        degraded_services.append(f"{item['name']} ({item['ms']} ms, niezawodność: {item['reliability']}%)")
-
 if degraded_services:
     last_outage_alert = int(alert_state.get("last_outage_ts") or 0)
     if (now_ts - last_outage_alert) >= 14400:
@@ -762,8 +860,7 @@ if degraded_services:
             tags="rotating_light,hospital",
         )
         try:
-            with open(alert_state_path, "w", encoding="utf-8") as af:
-                json.dump(alert_state, af)
+            write_file_atomic(alert_state_path, json.dumps(alert_state), 0o644)
         except Exception:
             pass
 
@@ -785,6 +882,7 @@ radar_payload = {
         "watcher_total": len(watcher_items),
         "watcher_up": watcher_up_cnt,
         "degraded": degraded_services,
+        "scraper_mode": scraper_mode,
     },
     "chart_series": chart_series,
     "white_part": white_part,
@@ -794,14 +892,7 @@ radar_payload = {
     "custom_history": custom_history_out,
 }
 
-tmp_json = radar_json_path + ".tmp"
-with open(tmp_json, "w", encoding="utf-8") as jf:
-    json.dump(radar_payload, jf, ensure_ascii=False)
-os.replace(tmp_json, radar_json_path)
-try:
-    os.chmod(radar_json_path, 0o644)
-except Exception:
-    pass
+write_file_atomic(radar_json_path, json.dumps(radar_payload, ensure_ascii=False), 0o644)
 
 prom_lines = [
     "# HELP ezdrowie_radar_last_sync_timestamp_seconds Czas ostatniej synchronizacji Radaru e-Zdrowia P1/NFZ/KSeF",
@@ -852,14 +943,7 @@ for w in watcher_items:
     wnm = w["name"].replace('"', '\\"')
     prom_lines.append(f'ezdrowie_watcher_up{{source="{wid}",name="{wnm}"}} {1 if w.get("up") == 1 else 0}')
 
-tmp_prom = prom_path + ".tmp"
-with open(tmp_prom, "w", encoding="utf-8") as pf:
-    pf.write("\n".join(prom_lines) + "\n")
-os.replace(tmp_prom, prom_path)
-try:
-    os.chmod(prom_path, 0o644)
-except Exception:
-    pass
+write_file_atomic(prom_path, "\n".join(prom_lines) + "\n", 0o644)
 PYEOF
 
 # Synchronizacja pliku JSON bezpośrednio do wolumenu kontenera ai-router (ai_router_storage -> /app/storage/p1_radar.json)

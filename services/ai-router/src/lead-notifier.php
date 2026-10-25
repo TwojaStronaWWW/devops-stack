@@ -159,14 +159,23 @@ function aiDispatchLeadNotifications(
             $leadHttpCode = 0;
             for ($attempt = 1; $attempt <= 2; $attempt++) {
                 $chLead = curl_init("https://ntfy.sh/{$ntfyTopic}");
-                curl_setopt_array($chLead, [
+                $leadCurlOpts = [
                     CURLOPT_POST           => true,
                     CURLOPT_POSTFIELDS     => $ntfyBody,
                     CURLOPT_HTTPHEADER     => $ntfyHeaders,
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT        => 3,
-                    CURLOPT_CONNECTTIMEOUT => 2
-                ]);
+                    CURLOPT_CONNECTTIMEOUT => 2,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_MAXREDIRS      => 0,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                ];
+                if (defined('CURLPROTO_HTTPS')) {
+                    $leadCurlOpts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+                    $leadCurlOpts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
+                }
+                curl_setopt_array($chLead, $leadCurlOpts);
                 @curl_exec($chLead);
                 $leadHttpCode = (int)curl_getinfo($chLead, CURLINFO_HTTP_CODE);
                 curl_close($chLead);
@@ -220,7 +229,7 @@ function aiDispatchLeadNotifications(
             }
 
             $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");
-            curl_setopt_array($chNtfy, [
+            $hotCurlOpts = [
                 CURLOPT_POST           => true,
                 CURLOPT_POSTFIELDS     => implode("\n", $hotLines),
                 CURLOPT_HTTPHEADER     => [
@@ -231,8 +240,17 @@ function aiDispatchLeadNotifications(
                 ],
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => 3,
-                CURLOPT_CONNECTTIMEOUT => 2
-            ]);
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_MAXREDIRS      => 0,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+            ];
+            if (defined('CURLPROTO_HTTPS')) {
+                $hotCurlOpts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+                $hotCurlOpts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
+            }
+            curl_setopt_array($chNtfy, $hotCurlOpts);
             @curl_exec($chNtfy);
             curl_close($chNtfy);
         }

@@ -199,12 +199,20 @@ function aiModelDefault(string $provider): array
     ];
 }
 
-/** Odczyt stanu (blokada współdzielona). */
+/** Odczyt stanu (blokada współdzielona z automatycznym fallbackiem do .bak). */
 function aiStatsRead(): array
 {
     $file = aiStatsFile();
     $fp = @fopen($file, 'r');
     if (!$fp) {
+        $bakFile = $file . '.bak';
+        if (is_file($bakFile)) {
+            $bakRaw = @file_get_contents($bakFile);
+            $bakData = $bakRaw ? json_decode($bakRaw, true) : null;
+            if (is_array($bakData)) {
+                return array_replace(aiStatsDefault(), $bakData);
+            }
+        }
         return aiStatsDefault();
     }
     flock($fp, LOCK_SH);
@@ -212,26 +220,49 @@ function aiStatsRead(): array
     flock($fp, LOCK_UN);
     fclose($fp);
     $data = $raw ? json_decode($raw, true) : null;
-    return is_array($data) ? array_replace(aiStatsDefault(), $data) : aiStatsDefault();
+    if (!is_array($data)) {
+        $bakFile = $file . '.bak';
+        if (is_file($bakFile)) {
+            $bakRaw = @file_get_contents($bakFile);
+            $bakData = $bakRaw ? json_decode($bakRaw, true) : null;
+            if (is_array($bakData)) {
+                return array_replace(aiStatsDefault(), $bakData);
+            }
+        }
+        return aiStatsDefault();
+    }
+    return array_replace(aiStatsDefault(), $data);
 }
 
-/** Atomowa modyfikacja stanu (blokada wyłączna). Błędy zapisu nie mogą zepsuć odpowiedzi czatu. */
+/** Atomowa modyfikacja stanu (blokada wyłączna LOCK_EX + kopia zapasowa .bak). Błędy zapisu nie mogą zepsuć odpowiedzi czatu. */
 function aiStatsMutate(callable $fn): void
 {
     try {
-        $fp = @fopen(aiStatsFile(), 'c+');
+        $file = aiStatsFile();
+        $bakFile = $file . '.bak';
+        $fp = @fopen($file, 'c+');
         if (!$fp) {
             return;
         }
         if (flock($fp, LOCK_EX)) {
             $raw = stream_get_contents($fp);
-            $data = $raw ? json_decode($raw, true) : null;
-            $data = is_array($data) ? array_replace(aiStatsDefault(), $data) : aiStatsDefault();
+            $decoded = ($raw !== false && trim($raw) !== '') ? json_decode($raw, true) : null;
+            if (!is_array($decoded) && is_file($bakFile)) {
+                $bakRaw = @file_get_contents($bakFile);
+                $decoded = $bakRaw ? json_decode($bakRaw, true) : null;
+            }
+            $data = is_array($decoded) ? array_replace(aiStatsDefault(), $decoded) : aiStatsDefault();
             $fn($data);
-            ftruncate($fp, 0);
-            rewind($fp);
-            fwrite($fp, json_encode($data));
-            fflush($fp);
+            $encoded = json_encode($data);
+            if (is_string($encoded)) {
+                if ($raw !== false && trim($raw) !== '' && is_array($decoded)) {
+                    @file_put_contents($bakFile, $raw, LOCK_EX);
+                }
+                ftruncate($fp, 0);
+                rewind($fp);
+                fwrite($fp, $encoded);
+                fflush($fp);
+            }
             flock($fp, LOCK_UN);
         }
         fclose($fp);
