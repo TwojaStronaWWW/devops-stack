@@ -21,6 +21,7 @@ STORAGE_DIR="${STACK_ROOT}/services/ai-router/storage"
 mkdir -p "${STORAGE_DIR}" "${PROM_DIR}" 2>/dev/null || true
 
 RADAR_JSON="${STORAGE_DIR}/p1_radar.json"
+HISTORY_ARCHIVE="${STORAGE_DIR}/p1_history_archive.json"
 WATCHER_CACHE="${STORAGE_DIR}/p1_watcher_cache.json"
 ALERT_STATE="${STORAGE_DIR}/p1_alert_state.json"
 AI_KB_FILE="${STACK_ROOT}/services/ai-router/data/radar-p1-knowledge.txt"
@@ -33,6 +34,7 @@ fi
 ENV_FILE="${ENV_FILE}" \
 PROM_FILE="${PROM_FILE}" \
 RADAR_JSON="${RADAR_JSON}" \
+HISTORY_ARCHIVE="${HISTORY_ARCHIVE}" \
 WATCHER_CACHE="${WATCHER_CACHE}" \
 ALERT_STATE="${ALERT_STATE}" \
 AI_KB_FILE="${AI_KB_FILE}" \
@@ -47,12 +49,14 @@ import re
 import ssl
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
 
 env_path = os.environ.get("ENV_FILE", "/opt/devops-stack/.env")
 prom_path = os.environ.get("PROM_FILE", "/opt/devops-stack/config/node-exporter/p1_status.prom")
 radar_json_path = os.environ.get("RADAR_JSON", "/tmp/p1_radar.json")
+history_archive_path = os.environ.get("HISTORY_ARCHIVE", "/tmp/p1_history_archive.json")
 watcher_cache_path = os.environ.get("WATCHER_CACHE", "/tmp/p1_watcher_cache.json")
 alert_state_path = os.environ.get("ALERT_STATE", "/tmp/p1_alert_state.json")
 ai_kb_path = os.environ.get("AI_KB_FILE", "/opt/devops-stack/services/ai-router/data/radar-p1-knowledge.txt")
@@ -331,7 +335,12 @@ if kolce_ms <= 0:
 wsp_ms = round((probe_results["p1_ocsp"]["ms"] + probe_results["p1_oauth_token"]["ms"]) / 2.0, 1)
 wsp_ok = 1 if (probe_results["p1_ocsp"]["up"] and probe_results["p1_oauth_token"]["up"]) else 0
 
-# Własny bufor historii dla tych serii, które mierzymy bezpośrednio z VPS (WSP, DiLO, KSeF itd.)
+# ------------------------------------------------------------------------------
+# TRWAŁE ARCHIWUM HISTORII POMIARÓW 365 DNI (1 ROK) + BACKFILL Z PROMETHEUS TSDB
+# Wielorozdzielcza kompakcja logarytmiczna (3h: 1m | 24h: 5m | 7d: 30m | 30d: 2h | 365d: 12h)
+# ------------------------------------------------------------------------------
+RETENTION_SECONDS = 365 * 86400  # 365 dni (1 pełny rok)
+
 prev_radar = {}
 if os.path.exists(radar_json_path):
     try:
@@ -340,46 +349,267 @@ if os.path.exists(radar_json_path):
     except Exception:
         prev_radar = {}
 
+history_archive = {"_meta": {}, "series": {}}
+for candidate_archive in (
+    history_archive_path,
+    "/var/lib/docker/volumes/ai_router_storage/_data/p1_history_archive.json",
+):
+    if candidate_archive and os.path.exists(candidate_archive):
+        try:
+            with open(candidate_archive, "r", encoding="utf-8") as af:
+                loaded_arch = json.load(af)
+            if isinstance(loaded_arch, dict) and isinstance(loaded_arch.get("series"), dict):
+                history_archive = loaded_arch
+                break
+        except Exception:
+            pass
+
+archive_meta = history_archive.setdefault("_meta", {})
+archive_series = history_archive.setdefault("series", {})
+
+# Zasiej archiwum z poprzedniego p1_radar.json jeśli klucz jeszcze nie istnieje w p1_history_archive.json
 prev_custom_hist = prev_radar.get("custom_history") or {}
+for prev_s in (prev_radar.get("chart_series") or []):
+    sid = prev_s.get("id")
+    shist = prev_s.get("history")
+    if sid and isinstance(shist, dict) and shist.get("d") and sid not in archive_series:
+        archive_series[sid] = shist
+
+LEGACY_CUSTOM_MAP = {
+    "ERECEPTA": "erec_lekarz",
+    "WSP": "wsp",
+    "DILO": "dilo",
+    "KSEF": "ksef",
+    "RAUT_ENDO": "raut_endo",
+    "BAZYL": "bazyl",
+    "RPWDL": "rpwdl",
+    "SZOI": "szoi",
+}
+for leg_key, target_sid in LEGACY_CUSTOM_MAP.items():
+    if target_sid not in archive_series and isinstance(prev_custom_hist.get(leg_key), dict):
+        archive_series[target_sid] = prev_custom_hist[leg_key]
 
 
-def append_custom_hist(key, ms_val, rel_val=100.0, max_pts=240):
-    cur = prev_custom_hist.get(key) or {"d": [], "r": [], "t": []}
-    d_arr = (cur.get("d") or [])[-max_pts + 1 :] + [round(float(ms_val), 1)]
-    r_arr = (cur.get("r") or [])[-max_pts + 1 :] + [round(float(rel_val), 1)]
-    n = len(d_arr)
-    t_arr = [now_ts - (n - 1 - i) * 60 for i in range(n)]
-    return {"d": d_arr, "r": r_arr, "t": t_arr}
+def query_prometheus_range(query_expr, start_ts, end_ts, step_sec):
+    q_url = (
+        "http://127.0.0.1:9090/api/v1/query_range?"
+        + urllib.parse.urlencode({
+            "query": query_expr,
+            "start": int(start_ts),
+            "end": int(end_ts),
+            "step": int(step_sec),
+        })
+    )
+    out = {}
+    try:
+        req = urllib.request.Request(q_url, headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=4.0) as resp:
+            payload = json.loads(resp.read(5_000_000).decode("utf-8", errors="replace"))
+        for item in payload.get("data", {}).get("result", []):
+            sid = (item.get("metric") or {}).get("service")
+            if not sid:
+                continue
+            pts = []
+            for ts_val, raw_v in (item.get("values") or []):
+                try:
+                    pts.append((int(float(ts_val)), float(raw_v)))
+                except Exception:
+                    pass
+            if pts:
+                out[sid] = pts
+    except Exception:
+        pass
+    return out
 
 
-erec_hist = extract_sparkline("ERECEPTA")
-if not erec_hist["d"]:
-    erec_hist = append_custom_hist("ERECEPTA", erec_ms, erec_rel)
+prom_backfill_points = {}
+last_archive_sync = int(archive_meta.get("last_sync_ts") or 0)
+need_initial_backfill = not bool(archive_meta.get("prom_backfill_v1"))
+need_gap_backfill = last_archive_sync > 0 and (now_ts - last_archive_sync) > 180
+
+if need_initial_backfill or need_gap_backfill:
+    windows = []
+    if need_initial_backfill:
+        windows.append((now_ts - 14 * 86400, now_ts, 300))
+        windows.append((now_ts - 6 * 3600, now_ts, 60))
+    else:
+        gap_start = max(now_ts - 7 * 86400, last_archive_sync - 60)
+        gap_step = 60 if (now_ts - gap_start) <= 6 * 3600 else 300
+        windows.append((gap_start, now_ts, gap_step))
+
+    got_any_prom = False
+    for w_start, w_end, w_step in windows:
+        dur_map = query_prometheus_range("ezdrowie_service_duration_ms", w_start, w_end, w_step)
+        rel_map = query_prometheus_range("ezdrowie_service_reliability_percent", w_start, w_end, w_step)
+        part_dur_map = query_prometheus_range('ezdrowie_part_duration_ms{part="biala"}', w_start, w_end, w_step)
+        part_up_map = query_prometheus_range('ezdrowie_part_status{part="biala"}', w_start, w_end, w_step)
+
+        for sid, d_pts in dur_map.items():
+            got_any_prom = True
+            r_dict = dict(rel_map.get(sid) or [])
+            bucket_list = prom_backfill_points.setdefault(sid, [])
+            for ts_i, d_v in d_pts:
+                r_v = r_dict.get(ts_i, 100.0 if d_v > 0 else 0.0)
+                bucket_list.append((ts_i, d_v, r_v))
+
+        for extra_sid in ("dilo", "raut_endo"):
+            d_pts = part_dur_map.get(extra_sid) or []
+            if d_pts:
+                got_any_prom = True
+                up_dict = dict(part_up_map.get(extra_sid) or [])
+                bucket_list = prom_backfill_points.setdefault(extra_sid, [])
+                for ts_i, d_v in d_pts:
+                    up_v = up_dict.get(ts_i, 1.0 if d_v > 0 else 0.0)
+                    bucket_list.append((ts_i, d_v, 100.0 if up_v >= 0.5 else 0.0))
+
+    if got_any_prom:
+        archive_meta["prom_backfill_v1"] = True
+
+
+def _bucket_step_for_age(age_sec):
+    if age_sec <= 10800:       # 0 .. 3h -> rozdzielczość 1 min (60s)
+        return 60
+    if age_sec <= 86400:       # 3h .. 24h -> rozdzielczość 5 min (300s)
+        return 300
+    if age_sec <= 604800:      # 24h .. 7 dni -> rozdzielczość 30 min (1800s)
+        return 1800
+    if age_sec <= 2592000:     # 7 dni .. 30 dni -> rozdzielczość 2 godz. (7200s)
+        return 7200
+    return 43200               # 30 dni .. 365 dni (1 rok) -> rozdzielczość 12 godz. (43200s)
+
+
+def update_persistent_series(sid, cur_ms, cur_rel, spark_hist=None):
+    existing = archive_series.get(sid) or {"d": [], "r": [], "t": []}
+    ex_d = existing.get("d") or []
+    ex_r = existing.get("r") or []
+    ex_t = existing.get("t") or []
+    n_ex = len(ex_d)
+
+    raw_points = []
+    cutoff_ts = now_ts - RETENTION_SECONDS
+
+    # 1. Punkty z trwałego archiwum 365d
+    for i in range(n_ex):
+        try:
+            d_val = float(ex_d[i])
+            r_val = float(ex_r[i]) if i < len(ex_r) else 100.0
+            if 0.0 < r_val <= 1.0:
+                r_val *= 100.0
+            t_val = int(ex_t[i]) if i < len(ex_t) and ex_t[i] else (now_ts - (n_ex - 1 - i) * 60)
+            if cutoff_ts <= t_val <= now_ts + 60:
+                raw_points.append((t_val, d_val, r_val))
+        except Exception:
+            pass
+
+    # 2. Punkty z zewnętrznego bufora sparkline (tylko jeśli archiwum jest puste, inicjowane lub ma lukę)
+    if spark_hist and isinstance(spark_hist, dict) and (not raw_points or need_initial_backfill or need_gap_backfill):
+        sp_d = spark_hist.get("d") or []
+        sp_r = spark_hist.get("r") or []
+        sp_t = spark_hist.get("t") or []
+        n_sp = len(sp_d)
+        for i in range(n_sp):
+            try:
+                d_val = float(sp_d[i])
+                r_val = float(sp_r[i]) if i < len(sp_r) else 100.0
+                if 0.0 < r_val <= 1.0:
+                    r_val *= 100.0
+                t_val = int(sp_t[i]) if i < len(sp_t) and sp_t[i] else (now_ts - (n_sp - 1 - i) * 60)
+                if cutoff_ts <= t_val <= now_ts + 60:
+                    raw_points.append((t_val, d_val, r_val))
+            except Exception:
+                pass
+
+    # 3. Punkty z backfillu Prometheus TSDB (od początku działania serwisu)
+    for pt in (prom_backfill_points.get(sid) or []):
+        if cutoff_ts <= pt[0] <= now_ts + 60:
+            raw_points.append(pt)
+
+    # 4. Bieżący pomiar na żywo
+    cur_r_norm = float(cur_rel)
+    if 0.0 < cur_r_norm <= 1.0:
+        cur_r_norm *= 100.0
+    raw_points.append((now_ts, max(0.0, float(cur_ms)), cur_r_norm))
+
+    # 5. Kompakcja wielorozdzielcza z zachowaniem pików opóźnień (awarii)
+    buckets = {}
+    for ts_i, d_v, r_v in raw_points:
+        age = max(0, now_ts - ts_i)
+        step = _bucket_step_for_age(age)
+        b_key = (ts_i // step) * step
+        b_list = buckets.get(b_key)
+        if b_list is None:
+            buckets[b_key] = [(ts_i, d_v, r_v)]
+        else:
+            b_list.append((ts_i, d_v, r_v))
+
+    sorted_keys = sorted(buckets.keys())
+    out_d = []
+    out_r = []
+    out_t = []
+    for b_key in sorted_keys:
+        pts = buckets[b_key]
+        t_latest = max(p[0] for p in pts)
+        d_vals = [p[1] for p in pts]
+        r_vals = [p[2] for p in pts]
+        max_d = max(d_vals)
+        min_r = min(r_vals)
+        # Zachowaj piki awaryjne (>= 2500 ms lub spadek dostępności < 95%), uśredniaj szum w normie
+        d_agg = round(max_d, 1) if max_d >= 2500.0 else round(sum(d_vals) / len(d_vals), 1)
+        r_agg = round(min_r, 1) if min_r < 95.0 else round(sum(r_vals) / len(r_vals), 1)
+        out_t.append(int(t_latest))
+        out_d.append(d_agg)
+        out_r.append(r_agg)
+
+    compacted = {"d": out_d, "r": out_r, "t": out_t}
+    archive_series[sid] = compacted
+    return compacted
+
 
 # Konstrukcja serii dla wykresu wieloliniowego (10 serii P1 + 7 ekstra szpitalnych/ERP)
 # Dla e-Rec apteka i DRR używamy telemetrii szyny e-Recepty P1 + bezpośredniego pomiaru SUS
 erec_apt_ms = round(erec_ms * 0.94 + probe_results["p1_sus_recepta"]["ms"] * 0.15, 1)
 drr_ms = round(erec_ms * 0.88 + probe_results["p1_sus_recepta"]["ms"] * 0.20, 1)
-
-erec_apt_hist = {
-    "d": [round(x * 0.94, 1) for x in erec_hist["d"]],
-    "r": erec_hist["r"],
-    "t": erec_hist["t"],
-}
-drr_hist = {
-    "d": [round(x * 0.88, 1) for x in erec_hist["d"]],
-    "r": erec_hist["r"],
-    "t": erec_hist["t"],
-}
-wsp_hist = append_custom_hist("WSP", wsp_ms, 100.0 if wsp_ok else 0.0)
-dilo_hist = append_custom_hist("DILO", probe_results["nfz_dilo"]["ms"], 100.0 if probe_results["nfz_dilo"]["up"] else 0.0)
-ksef_hist = append_custom_hist("KSEF", probe_results["mf_ksef"]["ms"], 100.0 if probe_results["mf_ksef"]["up"] else 0.0)
 raut_ms = round((probe_results["nfz_udary"]["ms"] + probe_results["nfz_endo"]["ms"]) / 2.0, 1)
 raut_ok = 1 if (probe_results["nfz_udary"]["up"] and probe_results["nfz_endo"]["up"]) else 0
-raut_hist = append_custom_hist("RAUT_ENDO", raut_ms, 100.0 if raut_ok else 0.0)
-bazyl_hist = append_custom_hist("BAZYL", probe_results["apt_bazyl"]["ms"], 100.0 if probe_results["apt_bazyl"]["up"] else 0.0)
-rpwdl_hist = append_custom_hist("RPWDL", probe_results["cez_rpwdl"]["ms"], 100.0 if probe_results["cez_rpwdl"]["up"] else 0.0)
-szoi_hist = append_custom_hist("SZOI", probe_results["nfz_szoi"]["ms"], 100.0 if probe_results["nfz_szoi"]["up"] else 0.0)
+
+raw_erec_spark = extract_sparkline("ERECEPTA")
+erec_hist = update_persistent_series("erec_lekarz", erec_ms, erec_rel, raw_erec_spark)
+erec_apt_hist = update_persistent_series(
+    "erec_apteka",
+    erec_apt_ms,
+    erec_rel,
+    {"d": [round(x * 0.94, 1) for x in raw_erec_spark["d"]], "r": raw_erec_spark["r"], "t": raw_erec_spark["t"]},
+)
+drr_hist = update_persistent_series(
+    "drr",
+    drr_ms,
+    erec_rel,
+    {"d": [round(x * 0.88, 1) for x in raw_erec_spark["d"]], "r": raw_erec_spark["r"], "t": raw_erec_spark["t"]},
+)
+esk_hist = update_persistent_series("eskierowanie", esk_ms, esk_rel, extract_sparkline("ESKIEROWANIE"))
+rzm_hist = update_persistent_series("rzm", rzm_ms, rzm_rel, extract_sparkline("RZM"))
+ewus_hist = update_persistent_series("ewus", ewus_ms, ewus_rel, extract_sparkline("EWUS"))
+wsp_hist = update_persistent_series("wsp", wsp_ms, 100.0 if wsp_ok else 0.0)
+cer_hist = update_persistent_series("cer", cer_ms, cer_rel, extract_sparkline("CER"))
+kolce_hist = update_persistent_series("ap_kolce", kolce_ms, kolce_rel, extract_sparkline("KOLCE"))
+ipom_hist = update_persistent_series("ipom", ipom_ms, ipom_rel, extract_sparkline("IPOM"))
+ezla_hist = update_persistent_series("ezla", ezla_ms, ezla_rel, extract_sparkline("EZLA"))
+ezwm_hist = update_persistent_series("ezwm", ezwm_ms, ezwm_rel, extract_sparkline("EZWM"))
+nmvs_hist = update_persistent_series("nmvs", nmvs_ms, nmvs_rel, extract_sparkline("NMVS"))
+ksef_hist = update_persistent_series("ksef", probe_results["mf_ksef"]["ms"], 100.0 if probe_results["mf_ksef"]["up"] else 0.0)
+bazyl_hist = update_persistent_series("bazyl", probe_results["apt_bazyl"]["ms"], 100.0 if probe_results["apt_bazyl"]["up"] else 0.0)
+rpwdl_hist = update_persistent_series("rpwdl", probe_results["cez_rpwdl"]["ms"], 100.0 if probe_results["cez_rpwdl"]["up"] else 0.0)
+szoi_hist = update_persistent_series("szoi", probe_results["nfz_szoi"]["ms"], 100.0 if probe_results["nfz_szoi"]["up"] else 0.0)
+dilo_hist = update_persistent_series("dilo", probe_results["nfz_dilo"]["ms"], 100.0 if probe_results["nfz_dilo"]["up"] else 0.0)
+raut_hist = update_persistent_series("raut_endo", raut_ms, 100.0 if raut_ok else 0.0)
+
+archive_meta["last_sync_ts"] = now_ts
+archive_meta["updated_at"] = now_iso
+archive_meta["retention_days"] = 365
+try:
+    write_file_atomic(history_archive_path, json.dumps(history_archive, ensure_ascii=False), 0o644)
+except Exception:
+    pass
 
 custom_history_out = {
     "ERECEPTA": erec_hist,
@@ -396,16 +626,16 @@ chart_series = [
     {"id": "erec_lekarz", "label": "e-Rec lekarz", "part": "biala", "color": "#3b82f6", "ms": erec_ms, "reliability": erec_rel, "up": erec_ok, "history": erec_hist},
     {"id": "erec_apteka", "label": "e-Rec apteka", "part": "both", "color": "#f59e0b", "ms": erec_apt_ms, "reliability": erec_rel, "up": erec_ok, "history": erec_apt_hist},
     {"id": "drr", "label": "DRR", "part": "both", "color": "#ea580c", "ms": drr_ms, "reliability": erec_rel, "up": erec_ok, "history": drr_hist},
-    {"id": "eskierowanie", "label": "e-Skierowanie", "part": "biala", "color": "#0284c7", "ms": esk_ms, "reliability": esk_rel, "up": esk_ok, "history": extract_sparkline("ESKIEROWANIE") or append_custom_hist("ESKIEROWANIE", esk_ms, esk_rel)},
-    {"id": "rzm", "label": "RZM", "part": "biala", "color": "#94a3b8", "ms": rzm_ms, "reliability": rzm_rel, "up": rzm_ok, "history": extract_sparkline("RZM") or append_custom_hist("RZM", rzm_ms, rzm_rel)},
-    {"id": "ewus", "label": "eWUŚ", "part": "biala", "color": "#6366f1", "ms": ewus_ms, "reliability": ewus_rel, "up": ewus_ok, "history": extract_sparkline("EWUS") or append_custom_hist("EWUS", ewus_ms, ewus_rel)},
+    {"id": "eskierowanie", "label": "e-Skierowanie", "part": "biala", "color": "#0284c7", "ms": esk_ms, "reliability": esk_rel, "up": esk_ok, "history": esk_hist},
+    {"id": "rzm", "label": "RZM", "part": "biala", "color": "#94a3b8", "ms": rzm_ms, "reliability": rzm_rel, "up": rzm_ok, "history": rzm_hist},
+    {"id": "ewus", "label": "eWUŚ", "part": "biala", "color": "#6366f1", "ms": ewus_ms, "reliability": ewus_rel, "up": ewus_ok, "history": ewus_hist},
     {"id": "wsp", "label": "WSP", "part": "biala", "color": "#eab308", "ms": wsp_ms, "reliability": 100.0 if wsp_ok else 0.0, "up": wsp_ok, "history": wsp_hist},
-    {"id": "cer", "label": "CeR", "part": "biala", "color": "#06b6d4", "ms": cer_ms, "reliability": cer_rel, "up": cer_ok, "history": extract_sparkline("CER") or append_custom_hist("CER", cer_ms, cer_rel)},
-    {"id": "ap_kolce", "label": "AP-KOLCE", "part": "biala", "color": "#b45309", "ms": kolce_ms, "reliability": kolce_rel, "up": kolce_ok, "history": extract_sparkline("KOLCE") or append_custom_hist("KOLCE", kolce_ms, kolce_rel)},
-    {"id": "ipom", "label": "IPOM", "part": "biala", "color": "#2563eb", "ms": ipom_ms, "reliability": ipom_rel, "up": ipom_ok, "history": extract_sparkline("IPOM") or append_custom_hist("IPOM", ipom_ms, ipom_rel)},
-    {"id": "ezla", "label": "e-ZLA (ZUS)", "part": "biala", "color": "#ec4899", "ms": ezla_ms, "reliability": ezla_rel, "up": ezla_ok, "history": extract_sparkline("EZLA") or append_custom_hist("EZLA", ezla_ms, ezla_rel)},
-    {"id": "ezwm", "label": "eZWM (NFZ)", "part": "biala", "color": "#10b981", "ms": ezwm_ms, "reliability": ezwm_rel, "up": ezwm_ok, "history": extract_sparkline("EZWM") or append_custom_hist("EZWM", ezwm_ms, ezwm_rel)},
-    {"id": "nmvs", "label": "NMVS (Apteka)", "part": "szara", "color": "#8b5cf6", "ms": nmvs_ms, "reliability": nmvs_rel, "up": nmvs_ok, "history": extract_sparkline("NMVS") or append_custom_hist("NMVS", nmvs_ms, nmvs_rel)},
+    {"id": "cer", "label": "CeR", "part": "biala", "color": "#06b6d4", "ms": cer_ms, "reliability": cer_rel, "up": cer_ok, "history": cer_hist},
+    {"id": "ap_kolce", "label": "AP-KOLCE", "part": "biala", "color": "#b45309", "ms": kolce_ms, "reliability": kolce_rel, "up": kolce_ok, "history": kolce_hist},
+    {"id": "ipom", "label": "IPOM", "part": "biala", "color": "#2563eb", "ms": ipom_ms, "reliability": ipom_rel, "up": ipom_ok, "history": ipom_hist},
+    {"id": "ezla", "label": "e-ZLA (ZUS)", "part": "biala", "color": "#ec4899", "ms": ezla_ms, "reliability": ezla_rel, "up": ezla_ok, "history": ezla_hist},
+    {"id": "ezwm", "label": "eZWM (NFZ)", "part": "biala", "color": "#10b981", "ms": ezwm_ms, "reliability": ezwm_rel, "up": ezwm_ok, "history": ezwm_hist},
+    {"id": "nmvs", "label": "NMVS (Apteka)", "part": "szara", "color": "#8b5cf6", "ms": nmvs_ms, "reliability": nmvs_rel, "up": nmvs_ok, "history": nmvs_hist},
     {"id": "ksef", "label": "KSeF (MF)", "part": "szara", "color": "#14b8a6", "ms": probe_results["mf_ksef"]["ms"], "reliability": 100.0 if probe_results["mf_ksef"]["up"] else 0.0, "up": probe_results["mf_ksef"]["up"], "history": ksef_hist},
     {"id": "bazyl", "label": "BAZYL (Leki)", "part": "szara", "color": "#a855f7", "ms": probe_results["apt_bazyl"]["ms"], "reliability": 100.0 if probe_results["apt_bazyl"]["up"] else 0.0, "up": probe_results["apt_bazyl"]["up"], "history": bazyl_hist},
     {"id": "rpwdl", "label": "RPWDL (CeZ)", "part": "szara", "color": "#0ea5e9", "ms": probe_results["cez_rpwdl"]["ms"], "reliability": 100.0 if probe_results["cez_rpwdl"]["up"] else 0.0, "up": probe_results["cez_rpwdl"]["up"], "history": rpwdl_hist},
@@ -441,7 +671,7 @@ white_part = [
         "ms": esk_ms,
         "vps_ms": probe_results["p1_sus_skierowanie"]["ms"],
         "reliability": esk_rel,
-        "history": extract_sparkline("ESKIEROWANIE") or erec_hist,
+        "history": esk_hist,
     },
     {
         "id": "rzm",
@@ -451,7 +681,7 @@ white_part = [
         "ms": rzm_ms,
         "vps_ms": probe_results["p1_fhir_rzm"]["ms"],
         "reliability": rzm_rel,
-        "history": extract_sparkline("RZM") or erec_hist,
+        "history": rzm_hist,
     },
     {
         "id": "cer",
@@ -461,7 +691,7 @@ white_part = [
         "ms": cer_ms,
         "vps_ms": probe_results["p1_fhir_rzm"]["ms"],
         "reliability": cer_rel,
-        "history": extract_sparkline("CER") or erec_hist,
+        "history": cer_hist,
     },
     {
         "id": "ipom",
@@ -471,7 +701,7 @@ white_part = [
         "ms": ipom_ms,
         "vps_ms": probe_results["p1_fhir_rzm"]["ms"],
         "reliability": ipom_rel,
-        "history": extract_sparkline("IPOM") or erec_hist,
+        "history": ipom_hist,
     },
     {
         "id": "wsp_ocsp_token",
@@ -491,7 +721,7 @@ white_part = [
         "ms": ewus_ms,
         "vps_ms": probe_results["nfz_ewus"]["ms"],
         "reliability": ewus_rel,
-        "history": extract_sparkline("EWUS") or erec_hist,
+        "history": ewus_hist,
     },
     {
         "id": "ap_kolce",
@@ -501,7 +731,7 @@ white_part = [
         "ms": kolce_ms,
         "vps_ms": probe_results["nfz_kolce"]["ms"],
         "reliability": kolce_rel,
-        "history": extract_sparkline("KOLCE") or erec_hist,
+        "history": kolce_hist,
     },
     {
         "id": "dilo",
@@ -521,7 +751,7 @@ white_part = [
         "ms": ezwm_ms,
         "vps_ms": probe_results["nfz_ezwm"]["ms"],
         "reliability": ezwm_rel,
-        "history": extract_sparkline("EZWM") or erec_hist,
+        "history": ezwm_hist,
     },
     {
         "id": "raut_endo",
@@ -541,7 +771,7 @@ white_part = [
         "ms": ezla_ms,
         "vps_ms": probe_results["zus_pue"]["ms"],
         "reliability": ezla_rel,
-        "history": extract_sparkline("EZLA") or erec_hist,
+        "history": ezla_hist,
     },
 ]
 
@@ -564,7 +794,7 @@ grey_part = [
         "ms": nmvs_ms,
         "vps_ms": nmvs_ms,
         "reliability": nmvs_rel,
-        "history": extract_sparkline("NMVS") or erec_hist,
+        "history": nmvs_hist,
     },
     {
         "id": "bazyl",
@@ -949,5 +1179,8 @@ PYEOF
 # Synchronizacja pliku JSON bezpośrednio do wolumenu kontenera ai-router (ai_router_storage -> /app/storage/p1_radar.json)
 if sudo -n test -d /var/lib/docker/volumes/ai_router_storage/_data 2>/dev/null; then
     sudo -n install -m 644 "${RADAR_JSON}" /var/lib/docker/volumes/ai_router_storage/_data/p1_radar.json 2>/dev/null || true
+    if [[ -f "${HISTORY_ARCHIVE}" ]]; then
+        sudo -n install -m 644 "${HISTORY_ARCHIVE}" /var/lib/docker/volumes/ai_router_storage/_data/p1_history_archive.json 2>/dev/null || true
+    fi
 fi
 
