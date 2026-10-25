@@ -19,25 +19,34 @@ function aiExtractContactLeads(string $question, array $sanitizedHistory, bool $
     $hasPhone = !$isAmmsSite && (bool)preg_match_all($phoneRegex, $question, $phoneMatchesQ);
     $hasContactLead = $hasEmail || $hasPhone;
 
-    $extractedEmails = $hasEmail ? array_values(array_unique(array_map('strtolower', $emailMatchesQ[0]))) : [];
-    $rawPhones       = $hasPhone ? $phoneMatchesQ[0] : [];
+    $extractedEmails    = $hasEmail ? array_values(array_unique(array_map('strtolower', $emailMatchesQ[0]))) : [];
+    $rawPhones          = $hasPhone ? $phoneMatchesQ[0] : [];
+    $priorUserQuestions = [];
 
-    // Jeśli klient podał namiar w bieżącej wiadomości, sprawdź czy we wcześniejszych wiadomościach tej rozmowy podał też drugi kanał
-    if ($hasContactLead && !empty($sanitizedHistory)) {
+    // Pojedyncza iteracja po historii: zbiera wcześniejsze pytania klienta oraz uzupełnia brakujący kanał kontaktu
+    if (!empty($sanitizedHistory)) {
         foreach ($sanitizedHistory as $hTurn) {
             if (($hTurn['role'] ?? '') !== 'user') continue;
-            if (preg_match_all($emailRegex, $hTurn['text'], $hEm)) {
-                foreach ($hEm[0] as $em) {
-                    $extractedEmails[] = strtolower($em);
+            $turnText = trim((string)($hTurn['text'] ?? ''));
+            if ($turnText === '') continue;
+            $priorUserQuestions[] = '• ' . $turnText;
+
+            if ($hasContactLead) {
+                if (preg_match_all($emailRegex, $turnText, $hEm)) {
+                    foreach ($hEm[0] as $em) {
+                        $extractedEmails[] = strtolower($em);
+                    }
                 }
-            }
-            if (preg_match_all($phoneRegex, $hTurn['text'], $hPh)) {
-                foreach ($hPh[0] as $ph) {
-                    $rawPhones[] = $ph;
+                if (preg_match_all($phoneRegex, $turnText, $hPh)) {
+                    foreach ($hPh[0] as $ph) {
+                        $rawPhones[] = $ph;
+                    }
                 }
             }
         }
-        $extractedEmails = array_values(array_unique($extractedEmails));
+        if ($hasContactLead) {
+            $extractedEmails = array_values(array_unique($extractedEmails));
+        }
     }
 
     $extractedPhones = [];
@@ -66,11 +75,12 @@ function aiExtractContactLeads(string $question, array $sanitizedHistory, bool $
     $contactChannel = $hasEmail && $hasPhone ? 'email+phone' : ($hasEmail ? 'email' : ($hasPhone ? 'phone' : 'none'));
 
     return [
-        'hasContactLead'  => $hasContactLead,
-        'extractedEmails' => $extractedEmails,
-        'extractedPhones' => $extractedPhones,
-        'dialPhones'      => $dialPhones,
-        'contactChannel'  => $contactChannel,
+        'hasContactLead'     => $hasContactLead,
+        'extractedEmails'    => $extractedEmails,
+        'extractedPhones'    => $extractedPhones,
+        'dialPhones'         => $dialPhones,
+        'contactChannel'     => $contactChannel,
+        'priorUserQuestions' => $priorUserQuestions,
     ];
 }
 
@@ -97,12 +107,7 @@ function aiDispatchLeadNotifications(
     $osTicketApiKey = trim((string)(getenv('OSTICKET_API_KEY') ?: ''));
     $webhookHeaders = $osTicketApiKey !== '' ? ["X-API-Key: {$osTicketApiKey}"] : [];
 
-    $priorUserQuestions = [];
-    foreach ($sanitizedHistory as $hTurn) {
-        if (($hTurn['role'] ?? '') === 'user' && trim((string)($hTurn['text'] ?? '')) !== '') {
-            $priorUserQuestions[] = '• ' . trim((string)$hTurn['text']);
-        }
-    }
+    $priorUserQuestions = is_array($leadInfo['priorUserQuestions'] ?? null) ? $leadInfo['priorUserQuestions'] : [];
 
     // Przekazanie namiarów kontaktowych (e-mail / telefon) od klienta prosto na telefon właściciela, e-mail i do osTicket (Zero-PII w logach i Prometheusie)
     if ($hasContactLead) {

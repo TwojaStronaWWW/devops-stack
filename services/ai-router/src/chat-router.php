@@ -141,19 +141,7 @@ if (!getenv('GEMINI_API_KEY')) {
         '/app/.env'
     ];
     foreach ($envCandidates as $envPath) {
-        if (file_exists($envPath) && is_readable($envPath)) {
-            $lines = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            foreach ($lines as $line) {
-                $line = trim($line);
-                if ($line === '' || str_starts_with($line, '#') || !str_contains($line, '=')) continue;
-                [$k, $v] = explode('=', $line, 2);
-                $k = trim($k);
-                $v = trim($v, " \t\n\r\0\x0B\"'");
-                if (!getenv($k)) {
-                    putenv("{$k}={$v}");
-                    $_ENV[$k] = $v;
-                }
-            }
+        if (load_env($envPath) > 0) {
             break;
         }
     }

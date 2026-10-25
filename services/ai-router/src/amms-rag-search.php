@@ -127,7 +127,8 @@ class AmmsRagSearch
                 continue;
             }
             $lower = mb_strtolower($trimmed, 'UTF-8');
-            if (mb_strlen($lower, 'UTF-8') < 2 || in_array($lower, self::STOP_WORDS, true)) {
+            $charLen = mb_strlen($lower, 'UTF-8');
+            if ($charLen < 2 || in_array($lower, self::STOP_WORDS, true)) {
                 continue;
             }
 
@@ -136,10 +137,9 @@ class AmmsRagSearch
             $highlightWords[] = $lower;
 
             // Rdzeń słowa (stemming fleksyjny, np. "pobyty" -> "pobyt"*, "pacjenta" -> "pacjent"*)
-            $charLen = mb_strlen($lower, 'UTF-8');
             if ($charLen >= 6) {
                 $stem = mb_substr($lower, 0, $charLen - 2, 'UTF-8');
-                if (mb_strlen($stem, 'UTF-8') >= 4 && !in_array($stem, self::STOP_WORDS, true)) {
+                if (($charLen - 2) >= 4 && !in_array($stem, self::STOP_WORDS, true)) {
                     $tokens[] = '"' . str_replace('"', '""', $stem) . '"*';
                     $highlightWords[] = $stem;
                 }
@@ -150,9 +150,10 @@ class AmmsRagSearch
                 'ą' => 'a', 'ć' => 'c', 'ę' => 'e', 'ł' => 'l', 'ń' => 'n',
                 'ó' => 'o', 'ś' => 's', 'ź' => 'z', 'ż' => 'z'
             ]);
-            if ($ascii !== $lower && strlen($ascii) >= 4) {
+            $asciiLen = strlen($ascii);
+            if ($ascii !== $lower && $asciiLen >= 4) {
                 $tokens[] = '"' . str_replace('"', '""', $ascii) . '"*';
-                if (strlen($ascii) >= 6) {
+                if ($asciiLen >= 6) {
                     $tokens[] = '"' . str_replace('"', '""', substr($ascii, 0, -2)) . '"*';
                 }
             }
@@ -510,7 +511,8 @@ class AmmsRagSearch
         $lines = preg_split('/\r?\n/u', trim($content)) ?: [];
         foreach (array_slice($lines, 0, 8) as $line) {
             $trimmed = trim($line, " \t#=-*");
-            if (mb_strlen($trimmed, 'UTF-8') >= 5 && mb_strlen($trimmed, 'UTF-8') <= 110) {
+            $trimmedLen = mb_strlen($trimmed, 'UTF-8');
+            if ($trimmedLen >= 5 && $trimmedLen <= 110) {
                 return $trimmed;
             }
         }
@@ -525,7 +527,8 @@ class AmmsRagSearch
     private static function extractBestQuote(string $content, array $keywords, int $maxLen = 340): string
     {
         $normalized = trim((string)preg_replace('/\s+/u', ' ', $content));
-        if (mb_strlen($normalized, 'UTF-8') <= $maxLen) {
+        $normLen = mb_strlen($normalized, 'UTF-8');
+        if ($normLen <= $maxLen) {
             return $normalized;
         }
 
@@ -546,7 +549,7 @@ class AmmsRagSearch
         if ($bestPos > 0) {
             $slice = '…' . ltrim($slice);
         }
-        if (($bestPos + $maxLen) < mb_strlen($normalized, 'UTF-8')) {
+        if (($bestPos + $maxLen) < $normLen) {
             $slice = rtrim($slice) . '…';
         }
         return $slice;

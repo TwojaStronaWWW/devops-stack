@@ -123,6 +123,66 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
         assert.strictEqual(res.status, 0, `Błąd składni PHP w ${phpFile}: ${res.stderr || res.stdout}`);
       }
     });
+
+    it('funkcje pomocnicze PHP (getClientIp, load_env, aiExtractContactLeads, executeJsonPost) powinny przechodzić testy jednostkowe CLI', { skip: !hasPhpCli() }, () => {
+      const phpRunnerCode = `
+        require_once ${JSON.stringify(path.join(ROUTER_SRC_DIR, 'router-endpoints.php'))};
+        require_once ${JSON.stringify(path.join(ROUTER_SRC_DIR, 'lead-notifier.php'))};
+        require_once ${JSON.stringify(path.join(ROUTER_SRC_DIR, 'llm-cascade.php'))};
+
+        // 1. Testy getClientIp()
+        $_SERVER = ['HTTP_CF_CONNECTING_IP' => ' 203.0.113.55 ', 'HTTP_X_FORWARDED_FOR' => '198.51.100.1', 'REMOTE_ADDR' => '10.0.0.1'];
+        if (getClientIp() !== '203.0.113.55') { fwrite(STDERR, "Fail CF IP\\n"); exit(1); }
+
+        $_SERVER = ['HTTP_CF_CONNECTING_IP' => 'not-an-ip', 'HTTP_X_FORWARDED_FOR' => '198.51.100.77, 10.0.0.2', 'REMOTE_ADDR' => '10.0.0.1'];
+        if (getClientIp() !== '198.51.100.77') { fwrite(STDERR, "Fail XFF IP\\n"); exit(1); }
+
+        $_SERVER = ['REMOTE_ADDR' => 'invalid_ip'];
+        if (getClientIp() !== '127.0.0.1') { fwrite(STDERR, "Fail Fallback IP\\n"); exit(1); }
+
+        // 2. Testy load_env()
+        $tmpEnv = sys_get_temp_dir() . '/test_tsw_env_' . getmypid() . '.env';
+        file_put_contents($tmpEnv, "# Komentarz\\n\\nTEST_TSW_KEY_A = \\"wartosc_a\\"\\nTEST_TSW_KEY_B='wartosc_b'\\nEXISTING_TSW_KEY=nowa\\n");
+        putenv('EXISTING_TSW_KEY=stara');
+        $loadedCount = load_env($tmpEnv);
+        @unlink($tmpEnv);
+        if ($loadedCount !== 2 || getenv('TEST_TSW_KEY_A') !== 'wartosc_a' || getenv('TEST_TSW_KEY_B') !== 'wartosc_b' || getenv('EXISTING_TSW_KEY') !== 'stara') {
+            fwrite(STDERR, "Fail load_env\\n"); exit(1);
+        }
+
+        // 3. Testy aiExtractContactLeads()
+        $history = [
+            ['role' => 'user', 'text' => 'Ile kosztuje strona? Moj mail to Jan.Kowalski@Example.com'],
+            ['role' => 'model', 'text' => 'Strona kosztuje od 1500 zl.'],
+        ];
+        $leads = aiExtractContactLeads('Prosze o telefon na 501 234 567', $history, false);
+        if (!$leads['hasContactLead'] || $leads['contactChannel'] !== 'email+phone') {
+            fwrite(STDERR, "Fail lead channel\\n"); exit(1);
+        }
+        if ($leads['extractedEmails'][0] !== 'jan.kowalski@example.com' || $leads['extractedPhones'][0] !== '+48 501 234 567' || $leads['dialPhones'][0] !== '+48501234567') {
+            fwrite(STDERR, "Fail lead normalization\\n"); exit(1);
+        }
+        if (count($leads['priorUserQuestions']) !== 1) {
+            fwrite(STDERR, "Fail priorUserQuestions\\n"); exit(1);
+        }
+
+        // Wyłączenie ekstrakcji PII dla wewnętrznego Asystenta AMMS
+        $ammsLeads = aiExtractContactLeads('Tel 501234567 mail test@example.com', $history, true);
+        if ($ammsLeads['hasContactLead'] !== false || !empty($ammsLeads['extractedPhones'])) {
+            fwrite(STDERR, "Fail AMMS Zero-PII guard\\n"); exit(1);
+        }
+
+        // 4. Test executeJsonPost() na nieaktywnym porcie lokalnym (powinien bezpiecznie zwrócić tablicę z httpCode = 0)
+        $postRes = executeJsonPost('http://127.0.0.1:9/unreachable', ['ping' => 1], ['X-Test: 1'], 1);
+        if (!is_array($postRes) || $postRes['httpCode'] !== 0 || $postRes['json'] !== null) {
+            fwrite(STDERR, "Fail executeJsonPost error handling\\n"); exit(1);
+        }
+        echo "OK";
+      `;
+      const res = spawnSync('php', ['-r', phpRunnerCode], { encoding: 'utf-8' });
+      assert.strictEqual(res.status, 0, `Test jednostkowy funkcji PHP nie powiódł się: ${res.stderr || res.stdout}`);
+      assert.strictEqual(res.stdout.trim(), 'OK');
+    });
   });
 
   describe('Dynamiczne testy odporności API AI Routera (CORS, Path Traversal, Rate Limit, Zero-PII)', { skip: !hasPhpCli() }, () => {

@@ -131,23 +131,50 @@ function aiStatsFile(): string
     return $dir . '/stats.json';
 }
 
-/** Doba kwotowa Gemini (reset RPD o północy czasu Pacyficznego). */
+/** Doba kwotowa Gemini (reset RPD o północy czasu Pacyficznego, z cache'em w obrębie sekundy). */
 function aiQuotaDay(): string
 {
-    return (new DateTime('now', new DateTimeZone('America/Los_Angeles')))->format('Y-m-d');
+    static $tz = null;
+    static $lastSec = 0;
+    static $cached = '';
+    $nowSec = time();
+    if ($nowSec === $lastSec && $cached !== '') {
+        return $cached;
+    }
+    if ($tz === null) {
+        $tz = new DateTimeZone('America/Los_Angeles');
+    }
+    $lastSec = $nowSec;
+    $cached = (new DateTime('@' . $nowSec))->setTimezone($tz)->format('Y-m-d');
+    return $cached;
 }
 
-/** Doba analityczna dla polskich serwisów WWW (reset o północy czasu Europe/Warsaw). */
+/** Doba analityczna dla polskich serwisów WWW (reset o północy czasu Europe/Warsaw, z cache'em w obrębie sekundy). */
 function aiAnalyticsDay(): string
 {
-    return (new DateTime('now', new DateTimeZone('Europe/Warsaw')))->format('Y-m-d');
+    static $tz = null;
+    static $lastSec = 0;
+    static $cached = '';
+    $nowSec = time();
+    if ($nowSec === $lastSec && $cached !== '') {
+        return $cached;
+    }
+    if ($tz === null) {
+        $tz = new DateTimeZone('Europe/Warsaw');
+    }
+    $lastSec = $nowSec;
+    $cached = (new DateTime('@' . $nowSec))->setTimezone($tz)->format('Y-m-d');
+    return $cached;
 }
 
 function aiSecondsToQuotaReset(): int
 {
-    $tz = new DateTimeZone('America/Los_Angeles');
+    static $tz = null;
+    if ($tz === null) {
+        $tz = new DateTimeZone('America/Los_Angeles');
+    }
     $now = new DateTime('now', $tz);
-    $reset = (new DateTime('tomorrow', $tz));
+    $reset = new DateTime('tomorrow', $tz);
     return max(1, $reset->getTimestamp() - $now->getTimestamp());
 }
 
