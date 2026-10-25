@@ -151,3 +151,16 @@ VPS/
    ```
 3. **Format commitów:** Zawsze stosuj Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`).
 4. **Weryfikacja zmian:** Zawsze uruchamiaj testy higieny repozytorium (`npm test` lub `npm run check`) oraz weryfikację składni Docker Compose przed zakończeniem prac.
+
+---
+
+## Evergreen Web Standards Radar (docs/WEB_STANDARDS_RADAR.md — [REF-01] do [REF-08])
+Przy każdej walidacji, łączeniu projektu (merge/sync z _site-template) oraz aktualizacji projektu Agent AI weryfikuje zgodność z oficjalnymi źródłami przypisów:
+- **[REF-01] Server & .htaccess (h5bp/server-configs-apache):** kompresja mod_brotli + mod_deflate, nagłówki COOP (same-origin-allow-popups), CORP (same-site), CSP, HSTS oraz typy MIME (vif, webp, md, webmanifest).
+- **[REF-02] Kolejność <head> i Nawigacja   ms (viscomi/capo.js & web.dev/baseline):** charset -> iewport -> 	itle -> preconnect -> stylesheet przed meta SEO/JSON-LD oraz deklaratywne <script type="speculationrules"> (prerender z wykluczeniem /api/*).
+- **[REF-03] Vanilla CSS Baseline (rgyleink/open-props & web.dev/baseline):** color-scheme: dark light w :root, scrollbar-gutter: stable na html, @view-transition { navigation: auto; } (dla prefers-reduced-motion: no-preference), 	ext-wrap: balance (nagłówki) i 	ext-wrap: pretty (akapity).
+- **[REF-04] Dostępność WCAG 2.2 (w3c/aria-practices & lphagov/govuk-frontend):** .skip-link, role ARIA (lert, status), pełna obsługa klawiatury i czytników ekranu.
+- **[REF-05] Bezpieczeństwo Aplikacji (OWASP/ASVS & OWASP/CheatSheetSeries):** walidacja nagłówka Sec-Fetch-Site (blokujące cross-site), tokeny CSRF hash_equals, lock(LOCK_EX), @session_write_close(), CURLOPT_FOLLOWLOCATION => false, CURLPROTO_HTTPS.
+- **[REF-06] Polityka Podatności RFC 9116 (securitytxt.org):** plik /.well-known/security.txt z aktywną datą Expires:.
+- **[REF-07] Optymalizacja dla Wyszukiwarek AI – GEO (llmstxt.org):** plik /llms.txt podpięty w <head> (el="alternate" type="text/markdown") i dozwolony w obots.txt (Allow: /llms.txt).
+- **[REF-08] SEO On-Page & Schema.org (schema.org & indexnow.org):** pełny graf @graph JSON-LD, przekierowanie 301 non-www oraz data-nosnippet na widgecie AI.
