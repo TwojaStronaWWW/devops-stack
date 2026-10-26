@@ -874,17 +874,25 @@ else
          "df -i / && find /app/storage -type f | wc -l"
 fi
 
-# 2. Pamięć RAM, SWAP i Bufor Ochronny OCI Keepalive (>20% alokacji RAM przeciwko Idle Instance Reclamation)
+# 2. Pamięć RAM, SWAP i Adaptacyjny Bufor Ochronny OCI Keepalive (>20% alokacji RAM przeciwko Idle Instance Reclamation bez dławienia usług AMMS/Oracle)
 OCI_BUFFER_FILE="/dev/shm/.oci-keepalive-buffer"
 OCI_BUFFER_TARGET_MB=4864
 OCI_BUFFER_BYTES=0
 MEM_TOTAL_MB="$(free -m | awk '/^Mem:/ {print $2}')"
+MEM_AVAIL_NOW_MB="$(free -m | awk '/^Mem:/ {print $7}')"
 if [[ "${MEM_TOTAL_MB:-0}" -gt 16000 && -d /dev/shm && -w /dev/shm ]]; then
     CURRENT_BUF_MB=0
     if [[ -f "${OCI_BUFFER_FILE}" ]]; then
         CURRENT_BUF_MB=$(( $(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0) / 1048576 ))
     fi
-    if [[ "${CURRENT_BUF_MB}" -lt "${OCI_BUFFER_TARGET_MB}" ]]; then
+    # Realnie używana pamięć przez system i kontenery (z wyłączeniem bufora OCI w /dev/shm)
+    REAL_USED_MB=$(( MEM_TOTAL_MB - MEM_AVAIL_NOW_MB - CURRENT_BUF_MB ))
+    if [[ "${REAL_USED_MB}" -gt 8192 ]]; then
+        # Gdy działa środowisko AMMS/Oracle (>8 GiB realnego użycia), zredukuj bufor OCI do 1024 MiB, zwalniając ~3.8 GiB RAM dla usług
+        OCI_BUFFER_TARGET_MB=1024
+    fi
+    if [[ "${CURRENT_BUF_MB}" -ne "${OCI_BUFFER_TARGET_MB}" ]]; then
+        rm -f "${OCI_BUFFER_FILE}" 2>/dev/null || true
         dd if=/dev/zero of="${OCI_BUFFER_FILE}" bs=1M count="${OCI_BUFFER_TARGET_MB}" status=none 2>/dev/null || true
         chmod 600 "${OCI_BUFFER_FILE}" 2>/dev/null || true
     fi
@@ -1186,14 +1194,14 @@ if [[ -f "${ENV_FILE}" ]]; then
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in "${EXPECTED_CONTAINERS[@]}"; do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub|plugins-bundled|\.gitkeep|Pending:.*Retry: [12]\b|no recent network activity)' \
+                            | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|id=anonymous:0|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub|plugins-bundled|\.gitkeep|Pending:.*Retry: [12]\b|no recent network activity)' \
                             | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|\bban(ned)?\b|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
                             echo "--- [${cname}] ANOMALIE 24H ---"
                             echo "${anom_24h}"
                         else
-                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|referenced_memory|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
+                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|referenced_memory|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
                             echo "--- [${cname}] 24h: 0 bledow/ostrzezen (ostatni wpis: ${last_line})"
                         fi
                     done
@@ -1201,7 +1209,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                     ssh_ok_24h="$(sudo journalctl -u ssh --since '24 hours ago' --no-pager 2>/dev/null | grep -c 'Accepted publickey' || true)"
                     echo "Udane logowania SSH kluczem Ed25519 (24h): ${ssh_ok_24h:-0} | Logowania haslem/rootem: ${SSH_ANOMALY_LOGINS:-0}"
                     sudo journalctl -p err..emerg --since "24 hours ago" --no-pager 2>/dev/null \
-                        | grep -vE '(kex_exchange_identification|Connection reset by peer|banner exchange)' | tail -n 8 || true
+                        | grep -vE '(kex_exchange_identification|kex_protocol_error|Unable to negotiate with|maximum authentication attempts exceeded|corrupted MAC on input|Connection reset by peer|banner exchange)' | tail -n 8 || true
                 } > "${XRAY_FILE}" 2>/dev/null
 
                 NEED_CLAUDE="false"

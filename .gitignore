@@ -45,7 +45,7 @@ services/ai-router/storage/rate_limits/*.json
 !services/ai-router/storage/rate_limits/.gitkeep
 services/ai-router/storage/metrics/
 services/ai-router/storage/cache/
-services/ai-router/storage/p1_*.json
+services/ai-router/storage/p1_*
 
 # OS & Editor artifacts
 .DS_Store

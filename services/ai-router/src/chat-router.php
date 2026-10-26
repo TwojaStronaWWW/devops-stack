@@ -462,6 +462,25 @@ if ($knowledgeContent === null || trim($knowledgeContent) === '') {
     exit;
 }
 
+// Dynamiczne wstrzykiwanie komunikatów Zwiadowcy dla radar-p1 z wolumenu storage (bez modyfikacji śledzonego w Git data/radar-p1-knowledge.txt)
+$liveFeedMtime = 0;
+if ($aiSite === 'radar-p1') {
+    $liveFeedCandidates = [
+        '/app/storage/p1_live_feed.txt',
+        dirname(__DIR__) . '/storage/p1_live_feed.txt',
+    ];
+    foreach ($liveFeedCandidates as $lfPath) {
+        if (is_file($lfPath) && is_readable($lfPath)) {
+            $lfContent = trim((string)@file_get_contents($lfPath));
+            if ($lfContent !== '') {
+                $knowledgeContent .= "\n\n" . $lfContent;
+                $liveFeedMtime = (int)@filemtime($lfPath);
+            }
+            break;
+        }
+    }
+}
+
 // Detekcja namiarów kontaktowych (Zero-PII na dysku) i ekstrakcja tematów pytań
 $leadInfo = aiExtractContactLeads($question, $sanitizedHistory, $isAmmsSite);
 $hasContactLead = !empty($leadInfo['hasContactLead']);
@@ -473,7 +492,7 @@ if ($normalizedQ === '') {
     $normalizedQ = preg_replace('/\s+/u', ' ', mb_strtolower(trim($question))) ?: '';
 }
 $historySig = empty($sanitizedHistory) ? 'turn0' : hash('sha256', (string)json_encode($sanitizedHistory, JSON_UNESCAPED_UNICODE));
-$kbMtime    = $loadedFilePath ? (int)@filemtime($loadedFilePath) : 0;
+$kbMtime    = max($loadedFilePath ? (int)@filemtime($loadedFilePath) : 0, $liveFeedMtime);
 $dynSig     = ($kbVersion !== 'v0' || $dynamicContext !== '' || $isAmmsSite) ? hash('sha256', "{$kbVersion}|{$ammsReasoningTier}|{$ammsChannel}|" . ($ammsDetectedDbQuery ? 'db' : 'doc') . "|{$dynamicContext}") : 'static';
 $cacheKey   = hash('sha256', "{$aiSite}|{$kbMtime}|{$dynSig}|{$historySig}|{$normalizedQ}");
 $cacheFile  = $cacheDir . '/' . $cacheKey . '.json';

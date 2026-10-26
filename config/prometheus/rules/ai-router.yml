@@ -108,7 +108,7 @@ groups:
           description: "Na partycji glownej / pozostalo zaledwie {{ $value | printf \"%.1f\" }}% wolnego miejsca."
 
       - alert: VPSHostMemoryLow
-        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 15
+        expr: ((node_memory_MemAvailable_bytes + clamp_min(devops_oci_keepalive_buffer_bytes - 1073741824, 0)) / node_memory_MemTotal_bytes) * 100 < 15
         for: 5m
         labels:
           severity: warning

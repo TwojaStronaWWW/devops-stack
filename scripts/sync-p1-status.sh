@@ -24,7 +24,7 @@ RADAR_JSON="${STORAGE_DIR}/p1_radar.json"
 HISTORY_ARCHIVE="${STORAGE_DIR}/p1_history_archive.json"
 WATCHER_CACHE="${STORAGE_DIR}/p1_watcher_cache.json"
 ALERT_STATE="${STORAGE_DIR}/p1_alert_state.json"
-AI_KB_FILE="${STACK_ROOT}/services/ai-router/data/radar-p1-knowledge.txt"
+AI_KB_FILE="${STORAGE_DIR}/p1_live_feed.txt"
 
 FORCE_WATCHER="false"
 if [[ "${1:-}" == "--force-watcher" ]]; then
@@ -833,7 +833,14 @@ grey_part = [
 degraded_services = []
 for item in white_part + grey_part:
     sid = item["id"]
-    if item["up"] == 0 or (item["reliability"] > 0 and item["reliability"] < 75.0) or item.get("ms", 0) > 3500:
+    rel_val = float(item.get("reliability") or 0)
+    ms_val = float(item.get("ms") or 0)
+    if (
+        item["up"] == 0
+        or (rel_val > 0 and rel_val < 65.0)
+        or (rel_val > 0 and rel_val < 85.0 and ms_val > 3000)
+        or ms_val > 6000
+    ):
         degraded_services.append(f"{item['name']} ({item['ms']} ms, niezawodność: {item['reliability']}%)")
 
 # ------------------------------------------------------------------------------
@@ -1066,49 +1073,41 @@ else:
         cached["url"] = cached.get("url") or src.get("open_url") or src["url"]
         watcher_items.append(cached)
 
-# Automatyczne karmienie bazy wiedzy AI (radar-p1-knowledge.txt) wszystkimi komunikatami ze scrapera oraz statusem awarii
-if ai_kb_path and os.path.exists(ai_kb_path):
+# Automatyczne karmienie dynamicznego pliku kontekstu AI (storage/p1_live_feed.txt) komunikatami ze scrapera oraz statusem awarii (bez modyfikacji śledzonego w Git data/radar-p1-knowledge.txt)
+if ai_kb_path:
     try:
-        with open(ai_kb_path, "r", encoding="utf-8") as kbf:
-            kb_text = kbf.read()
-        start_tag = "<!-- LIVE_SCRAPER_FEED_START -->"
-        end_tag = "<!-- LIVE_SCRAPER_FEED_END -->"
-        if start_tag in kb_text and end_tag in kb_text:
-            feed_lines = [
-                start_tag,
-                f"Aktualizacja ze scrapera Zwiadowcy: {now_iso} (tryb: {scraper_mode}, interwał: {effective_watcher_ttl}s)",
-            ]
-            official_maint = [
-                w for w in watcher_items
-                if any(k in str(w.get("latest_finding", "")).lower() for k in ("prace serwisowe", "przerwa", "awari", "utrudnien", "niedostępn", "planowan"))
-                and "brak nowych plików" not in str(w.get("latest_finding", "")).lower()
-            ]
-            if degraded_services and not official_maint:
-                feed_lines.append(
-                    "🚨 AWARIA BEZ OFICJALNEGO KOMUNIKATU: Wykryto niedostępność/degradację usług: "
-                    + "; ".join(degraded_services)
-                    + " — na oficjalnych stronach CeZ / NFZ / ZUS / MF NIE OPUBLIKOWANO jeszcze komunikatu o pracach ani awarii (scraper pinguje strony w trybie przyspieszonym co 3 min)."
-                )
-            elif degraded_services and official_maint:
-                feed_lines.append(
-                    "⚠️ AKTYWNA AWARIA Z OFICJALNYM KOMUNIKATEM: Usługi z problemami: "
-                    + "; ".join(degraded_services)
-                )
-            else:
-                feed_lines.append("Status usług centralnych: WSZYSTKIE USŁUGI W NORMIE (brak awarii).")
-            for w in watcher_items:
-                finding = str(w.get("latest_finding") or "Brak danych").strip()
-                chg = " [NOWA ZMIANA!]" if w.get("changed") else ""
-                feed_lines.append(f"- {w.get('name')}:{chg} {finding} (wpływ: {w.get('impact')}, źródło: {w.get('url')})")
-            feed_lines.append(end_tag)
-            new_kb_text = re.sub(
-                re.escape(start_tag) + r".*?" + re.escape(end_tag),
-                "\n".join(feed_lines),
-                kb_text,
-                flags=re.DOTALL,
+        feed_lines = [
+            "13. AKTUALNE KOMUNIKATY WYKRYTE PRZEZ SCRAPER ZWIADOWCY (AUTO-FEED DO AI):",
+        ]
+        official_maint = [
+            w for w in watcher_items
+            if any(k in str(w.get("latest_finding", "")).lower() for k in ("prace serwisowe", "przerwa", "awari", "utrudnien", "niedostępn", "planowan"))
+            and "brak nowych plików" not in str(w.get("latest_finding", "")).lower()
+        ]
+        if degraded_services and not official_maint:
+            feed_lines.append(
+                "🚨 AWARIA BEZ OFICJALNEGO KOMUNIKATU: Wykryto niedostępność/degradację usług: "
+                + "; ".join(degraded_services)
+                + " — na oficjalnych stronach CeZ / NFZ / ZUS / MF NIE OPUBLIKOWANO jeszcze komunikatu o pracach ani awarii."
             )
-            if new_kb_text != kb_text:
-                write_file_atomic(ai_kb_path, new_kb_text, 0o644)
+        elif degraded_services and official_maint:
+            feed_lines.append(
+                "⚠️ AKTYWNA AWARIA Z OFICJALNYM KOMUNIKATEM: Usługi z problemami: "
+                + "; ".join(degraded_services)
+            )
+        else:
+            feed_lines.append("Status usług centralnych: WSZYSTKIE USŁUGI W NORMIE (brak awarii).")
+        for w in watcher_items:
+            finding = str(w.get("latest_finding") or "Brak danych").strip()
+            chg = " [NOWA ZMIANA!]" if w.get("changed") else ""
+            feed_lines.append(f"- {w.get('name')}:{chg} {finding} (wpływ: {w.get('impact')}, źródło: {w.get('url')})")
+        new_feed_text = "\n".join(feed_lines) + "\n"
+        old_feed_text = ""
+        if os.path.exists(ai_kb_path):
+            with open(ai_kb_path, "r", encoding="utf-8") as kbf:
+                old_feed_text = kbf.read()
+        if new_feed_text != old_feed_text:
+            write_file_atomic(ai_kb_path, new_feed_text, 0o644)
     except Exception:
         pass
 
@@ -1149,8 +1148,8 @@ if degraded_services:
 # ------------------------------------------------------------------------------
 # 5. ZAPIS PLIKU JSON DLA DASHBOARDU (/radar) ORAZ METRYK PROMETHEUSA (*.prom)
 # ------------------------------------------------------------------------------
-white_up_cnt = sum(1 for x in white_part if x["up"] == 1)
-grey_up_cnt = sum(1 for x in grey_part if x["up"] == 1)
+white_up_cnt = sum(1 for x in white_part if x["up"] == 1 or (x["up"] == -1 and float(x.get("vps_ms") or 0) > 0))
+grey_up_cnt = sum(1 for x in grey_part if x["up"] == 1 or (x["up"] == -1 and float(x.get("vps_ms") or 0) > 0))
 watcher_up_cnt = sum(1 for x in watcher_items if x.get("up") == 1)
 
 radar_payload = {
@@ -1164,7 +1163,6 @@ radar_payload = {
         "watcher_total": len(watcher_items),
         "watcher_up": watcher_up_cnt,
         "degraded": degraded_services,
-        "scraper_mode": scraper_mode,
     },
     "chart_series": chart_series,
     "white_part": white_part,
@@ -1233,6 +1231,9 @@ if sudo -n test -d /var/lib/docker/volumes/ai_router_storage/_data 2>/dev/null; 
     sudo -n install -m 644 "${RADAR_JSON}" /var/lib/docker/volumes/ai_router_storage/_data/p1_radar.json 2>/dev/null || true
     if [[ -f "${HISTORY_ARCHIVE}" ]]; then
         sudo -n install -m 644 "${HISTORY_ARCHIVE}" /var/lib/docker/volumes/ai_router_storage/_data/p1_history_archive.json 2>/dev/null || true
+    fi
+    if [[ -f "${AI_KB_FILE}" ]]; then
+        sudo -n install -m 644 "${AI_KB_FILE}" /var/lib/docker/volumes/ai_router_storage/_data/p1_live_feed.txt 2>/dev/null || true
     fi
 fi
 
