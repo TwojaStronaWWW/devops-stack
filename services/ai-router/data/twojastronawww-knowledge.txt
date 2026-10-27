@@ -10,28 +10,30 @@ TwojaStronaWWW.pl to autorska praktyka inżynieryjna specjalizująca się w proj
 - Ekstremalna szybkość: waga strony poniżej 100 KB, czas ładowania poniżej 0.6s (wyniki 95–100/100 w Google PageSpeed Insights), natychmiastowe działanie na smartfonach.
 - Brak bazy danych SQL: architektura Flat-File całkowicie eliminuje ryzyko ataków SQL Injection oraz awarii bazy danych.
 - Zero zbędnych wtyczek: brak ryzyka, że automatyczna aktualizacja wtyczki zepsuje stronę (błąd 500).
-- Ochrona konwersji i anty-spam: formularze z filtracją Honeypot, jednorazowymi tokenami CSRF, limitami zapytań (rate-limiting) oraz zapisem wersji roboczej w przeglądarce (Lead Recovery / RODO Local Draft), dzięki czemu klient nie traci wpisanego tekstu po przypadkowym zamknięciu karty.
+- Ochrona konwersji, bezciasteczkowa analityka RODO i anty-spam: własna analityka ruchu zgodna z RODO, która nie obciąża strony zewnętrznymi skryptami śledzącymi (0 KB trackerów, pełna widoczność ruchu bez agresywnych banerów cookies odrzucanych przez połowę użytkowników), oraz formularze z filtracją Honeypot, jednorazowymi tokenami CSRF, limitami zapytań (rate-limiting) i zapisem wersji roboczej w przeglądarce (Lead Recovery / RODO Local Draft), dzięki czemu klient nie traci wpisanego tekstu po przypadkowym zamknięciu karty.
 - Niskie koszty utrzymania: strona działa błyskawicznie na lekkim hostingu za kilkadziesiąt złotych rocznie.
 
 ## Pakiety startowe i cennik (kwoty netto):
 1. Wizytówka / Landing Page – **2 499 PLN netto**:
    - Indywidualny projekt graficzny (bez gotowych szablonów)
-   - Czysty, lekki kod HTML5/CSS3/JS
+   - Czysty, lekki kod HTML5/CSS3/JS (Zero WordPressa i SQL)
+   - Bezciasteczkowa analityka RODO (0 KB obciążenia przeglądarki)
    - Pełna responsywność (RWD Mobile First)
-   - Podstawowa techniczna optymalizacja SEO i dane strukturalne Schema.org
-   - Formularz kontaktowy gotowy pod automatyzację
-   - Konfiguracja domeny i certyfikatu SSL
+   - Techniczna optymalizacja SEO, dane strukturalne Schema.org i standard wyszukiwarek AI (GEO / `/llms.txt`)
+   - Formularz kontaktowy z ochroną Lead Recovery (zapis szkicu)
+   - Konfiguracja domeny, certyfikatu SSL i nagłówków bezpieczeństwa OWASP
 2. Strona Firmowa (Bestseller) – **5 499 PLN netto**:
    - Do 10 podstron oraz sekcja blogowa / aktualności
    - Autorski CMS (Flat-File) – szybka i prosta edycja treści bez bazy SQL
-   - Zaawansowane SEO techniczne i konfiguracja Google Search Console
-   - Integracja Social Media i Google Maps
-   - Maksymalna optymalizacja szybkości (Google PageSpeed 90–100)
-   - Wsparcie wdrożeniowe przez 30 dni
+   - Zaawansowane SEO techniczne, konfiguracja Google Search Console i standard AI (GEO / `/llms.txt`)
+   - Bezciasteczkowa analityka RODO + moduł Lead Recovery
+   - Integracja Social Media, Google Maps i Wizytówki Google (GBP)
+   - Maksymalna optymalizacja szybkości (Google PageSpeed 95–100)
+   - Wsparcie wdrożeniowe przez 30 dni + gotowość pod Asystenta AI
 3. E-commerce / Dedykowana Aplikacja Webowa – **od 10 000+ PLN netto** (wycena indywidualna):
    - Projekty szyte na miarę, w których automatyzacja jest kluczową częścią rozwiązania
    - Dedykowana aplikacja webowa i automatyzacja procesów biznesowych
-   - Integracje API (płatności BLIK/Stripe/Przelewy24, systemy CRM, asystenci AI)
+   - Integracje API (płatności BLIK/Stripe/Przelewy24, systemy CRM, zaawansowani asystenci AI RAG)
    - Zaawansowany panel administracyjny i skalowalna architektura
 4. Wdrożenie Asystenta AI i Systemów RAG (3 poziomy zaawansowania):
    - **Pakiet Starter (Czatbot FAQ/RAG na stronę WWW) – od 900 do 2 500 PLN netto:** lekki doradca klienta 24/7 oparty o pojedynczy plik wiedzy oferty firmy, z przechwytywaniem leadów (telefon/e-mail -> powiadomienie Push 1-Klik na telefon) i wykorzystaniem darmowych pul API.
@@ -39,7 +41,7 @@ TwojaStronaWWW.pl to autorska praktyka inżynieryjna specjalizująca się w proj
    - **Pakiet Enterprise RAG & Dedykowany System Ekspercki AI – od 12 000 do 35 000+ PLN netto (wycena indywidualna, brak sztywnej górnej granicy):** zaawansowane silniki wyszukiwania hybrydowego (np. SQLite FTS5 BM25 / bazy wektorowe) przetwarzające setki podręczników PDF (tysiące stron ze zrzutami wizualnymi stron) oraz schematy baz danych (np. Oracle SQL / PostgreSQL), dedykowany interfejs ekspercki (np. w stylu Microsoft Teams z podglądem cytowanych stron PDF), kaskada High Availability 11 modeli AI (Gemini, Groq LPU, Cerebras WSE, Claude) oraz izolacja Zero-Trust ISO 27001.
 5. Opieka powdrożeniowa i automatyzacje cykliczne:
    - Przez pierwsze 30 dni po uruchomieniu wsparcie jest bezpłatne.
-   - Opcjonalna obsługa abonamentowa (od **150 PLN netto / mies.**): aktualizacje, monitoring dostępności 24/7, szyfrowane kopie zapasowe (backup offsite) i rozwój automatyzacji.
+   - Opcjonalna obsługa abonamentowa (**od 250 PLN netto / mies.** dla stron w czystym kodzie i Asystentów AI, lub **od 350 PLN netto / mies.** dla rozbudowanych serwisów i systemów CMS): aktualizacje, monitoring dostępności i certyfikatów 24/7, szyfrowane kopie zapasowe (backup offsite), raporty ruchu RODO i rozwój automatyzacji.
 
 ## Jak wygląda proces współpracy (5 etapów, średnio 7–14 dni roboczych)?
 - Etap 1 (Dzień 1–2): Rozmowa i analiza potrzeb – identyfikacja procesów pochłaniających czas, spójny brief techniczny, plan automatyzacji i stała wycena bez gwiazdek.
