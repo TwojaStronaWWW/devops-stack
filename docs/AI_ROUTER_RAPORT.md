@@ -111,7 +111,7 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 | CPU | ~0,01 % (limit 0,5 vCPU) |
 | Obraz Docker | 95,4 MB (`php:8.3-alpine` + `pdo_sqlite` + cURL) |
 | Wolumen `ai_router_storage` | ~116 KB (rate-limit + cache RAG + `stats.json` z automatycznym GC) |
-| Dane RAG (`data/`) | 162 MB (`:ro` — 6 baz tekstowych `.txt` + baza SQLite FTS5 `amms-knowledge.sqlite` z 25 227 chunkami i 12 291 stronami zrzutów WebP) |
+| Dane RAG (`data/`) | 162 MB (`:ro` — bazy tekstowe `.txt` + indeks pełnotekstowy SQLite FTS5 BM25) |
 | Dysk hosta | 11 GB z 96 GB (12 %) – w limicie Always Free 200 GB |
 | Koszt | 0,00 PLN (Free Tier + Always Free) |
 
@@ -121,7 +121,6 @@ Router klasyfikuje każdy błąd i **zawiesza model (cooldown)** – kolejne zap
 |---|---|---|
 | **Grafana** → *AI Router – Gemini Proxy Monitor* | Wykresy: kto odpowiada (modele + Cache RAG `<5ms`), błędy wg przyczyny, zawieszenia, paski dziennego limitu RPD, czasy odpowiedzi, ruch i leady per strona | `scripts\open-dashboard.cmd` |
 | **Grafana** → *Analityka Ruchu WWW & SEO (Cookieless)* | Filtr `$site`, unikalni dziś i łącznie, wskaźnik zaangażowania (`>=15s`), Core Web Vitals LCP, konwersje CTA i lejek AI, źródła wejść (w tym `Wyszukiwarki AI`: ChatGPT/Perplexity/Claude/Gemini, Google, Bing, DuckDuckGo, TikTok, YouTube, FB, IG), tematy pytań do AI, słowa kluczowe i pozycje z Google Search Console (GSC API) | `scripts\open-dashboard.cmd` |
-| **Asystent AMMS & Oracle DBA** | Interfejs w stylu Microsoft Teams (`http://127.0.0.1:8085/amms` tylko po tunelu SSH) z wyszukiwarką hybrydową SQLite FTS5 BM25 (314 PDF + 69 plików struktur bazy Oracle) i podglądem stron dokumentacji | `scripts\open-amms-assistant.cmd` |
 | **Raport CLI** | Pełny raport tekstowy (zasoby, providerzy, kaskada, statystyki cache RAG, pozyskane leady `ai_router_leads_total`, analityka WWW, tematy AI, frazy GSC, próby modeli, logi) | `.\scripts\ai-router-report.ps1` albo na VPS `scripts/ai-router-report.sh` |
 | **Dozzle** | Logi na żywo (strukturalne JSON: `attempt`, `request`, `skip_cooldown`, `security_attack_blocked`, `contact_lead_captured`, `hot_lead_detected`) | `open-dashboard.cmd` → Dozzle → `ai-router` |
 | **Prometheus + Strażnik 24/7 (`devops-audit.timer`)** | 19 reguł alertów (`config/prometheus/rules/ai-router.yml`) sprawdzanych co 15 min przez `audit-server.sh` (68 testów) + poranny przegląd 08:00 **Dual-AI HIGH Reasoning ($0.00) + eskalacja Claude Sonnet 4.6** do **Ntfy.sh** | `npm run audit` |
