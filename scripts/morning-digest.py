@@ -332,10 +332,11 @@ quit
                     nz_checks_ok += 1
 
             # 4. Nieinwazyjna kontrola Read-Only wyrenderowanego HTML-a przez HTTPS (wykrywanie wstrzyknięć z bazy MySQL WP)
-            for nz_url in ("https://medycyna-regeneracyjna.pl/", "https://medicusnoster.pl/"):
+            for nz_url, verify_ssl in (("https://medycyna-regeneracyjna.pl/", True), ("https://medicusnoster.pl/", False)):
                 try:
                     req = urllib.request.Request(nz_url, headers={"User-Agent": UA_AUDIT}, method="GET")
-                    with urllib.request.urlopen(req, timeout=8) as resp:
+                    ssl_ctx = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()
+                    with urllib.request.urlopen(req, timeout=8, context=ssl_ctx) as resp:
                         html_body = resp.read(250_000).decode("utf-8", errors="ignore")
                         if resp.status == 200 and not any(
                             sig in html_body
