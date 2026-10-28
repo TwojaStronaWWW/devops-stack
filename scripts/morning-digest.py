@@ -417,7 +417,10 @@ def cmd_ai_audit(env_vars: dict) -> int:
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        msg = (data.get("choices") or [{}])[0].get("message", {})
+        choice = (data.get("choices") or [{}])[0]
+        if choice.get("finish_reason") == "length":
+            return "", 0, 0
+        msg = choice.get("message", {})
         txt = (msg.get("content") or "").strip()
         if "<think>" in txt and "</think>" in txt:
             txt = txt.split("</think>", 1)[1].strip()
@@ -436,7 +439,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
                     "model": m_id,
                     "messages": [{"role": "system", "content": sys_prompt_auditor1}, {"role": "user", "content": xray_text}],
                     "temperature": 0.2,
-                    "max_tokens": 2048,
+                    "max_tokens": 4096,
                     **({"reasoning_effort": "high"} if "gpt-oss" in m_id else {}),
                 }
                 txt, th, tot = _call_openai_compat("https://api.groq.com/openai/v1/chat/completions", groq_key, body)
@@ -446,19 +449,18 @@ def cmd_ai_audit(env_vars: dict) -> int:
             except Exception:
                 continue
 
-    # 2. AUDYTOR #2 (Chmura Cerebras WSE — $0.00): Qwen-3.8-27B / GPT-OSS-120B
+    # 2. AUDYTOR #2 (Chmura Cerebras WSE — $0.00): GPT-OSS-120B (reasoning: HIGH) / Qwen-3.8-27B
     aud2_ans, aud2_label, aud2_think, aud2_tot = "", "", 0, 0
     if cerebras_key:
-        for m_id, m_lbl in (("qwen-3.8-27b", "Cerebras Qwen-3.8-27B (WSE)"), ("gpt-oss-120b", "Cerebras GPT-OSS-120B (reasoning: HIGH)")):
+        for m_id, m_lbl in (("gpt-oss-120b", "Cerebras GPT-OSS-120B (WSE, reasoning: HIGH)"), ("qwen-3.8-27b", "Cerebras Qwen-3.8-27B (WSE)")):
             try:
                 body = {
                     "model": m_id,
                     "messages": [{"role": "system", "content": sys_prompt_auditor2}, {"role": "user", "content": xray_text}],
                     "temperature": 0.2,
-                    "max_tokens": 2048,
+                    "max_tokens": 4096,
+                    **({"reasoning_effort": "high"} if "gpt-oss" in m_id else {}),
                 }
-                if "gpt-oss" in m_id:
-                    body["reasoning_effort"] = "high"
                 txt, th, tot = _call_openai_compat("https://api.cerebras.ai/v1/chat/completions", cerebras_key, body)
                 if txt:
                     aud2_ans, aud2_label, aud2_think, aud2_tot = txt, m_lbl, th, tot
