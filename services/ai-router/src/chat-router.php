@@ -78,7 +78,9 @@ $defaultAllowedOrigins = [
     'https://www.goodmood.dance',
     'https://tanecznakompania.pl',
     'https://www.tanecznakompania.pl',
-    'https://radar-p1.pages.dev'
+    'https://radar-p1.pages.dev',
+    'https://medicusnoster.pl',
+    'https://www.medicusnoster.pl'
 ];
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
@@ -269,7 +271,7 @@ if (mt_rand(1, 50) === 1) {
 }
 
 // 4. PARSOWANIE I WALIDACJA WEJŚCIA (PAYLOAD + WAF L7)
-$rawInput = file_get_contents('php://input');
+$rawInput = file_get_contents('php://input', false, null, 0, 65536);
 if (!$rawInput) {
     http_response_code(400);
     echo json_encode([

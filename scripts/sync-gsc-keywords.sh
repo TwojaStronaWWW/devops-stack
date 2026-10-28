@@ -22,7 +22,7 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 GSC_SERVICE_ACCOUNT_JSON="${GSC_SERVICE_ACCOUNT_JSON:-}"
-GSC_SITES="${GSC_SITES:-katosalsahub:katosalsahub.pl,dancepuls:dancepuls.katosalsahub.pl,fuegolingua:fuegolingua.pl,twojastronawww:twojastronawww.pl,raricart:raricart.pl,radar-p1:radar-p1.pages.dev}"
+GSC_SITES="${GSC_SITES:-katosalsahub:katosalsahub.pl,fuegolingua:fuegolingua.pl,twojastronawww:twojastronawww.pl,raricart:raricart.pl,radar-p1:radar-p1.pages.dev,medicusnoster:medicusnoster.pl}"
 AI_ROUTER_URL="${AI_ROUTER_URL:-http://127.0.0.1:8085/analytics}"
 
 if [[ -z "$GSC_SERVICE_ACCOUNT_JSON" ]]; then

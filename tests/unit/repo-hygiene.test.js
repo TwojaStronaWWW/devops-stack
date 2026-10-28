@@ -188,6 +188,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'amms-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'radar-p1-knowledge.txt'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'medicusnoster-knowledge.txt'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'storage', 'rate_limits', '.gitkeep'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'),
@@ -270,7 +271,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
   it('skrypt setup-kuma.js powinien być idempotentny (usuwać duplikaty) i posiadać poprawny URL DancePuls', () => {
     const kumaScript = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'setup-kuma.js'), 'utf-8');
-    assert.match(kumaScript, /https:\/\/dancepuls\.katosalsahub\.pl\//);
+    assert.match(kumaScript, /https:\/\/katosalsahub\.pl\/dancepuls\//);
     assert.strictEqual(kumaScript.includes('https://dancepuls.pl"'), false, 'Wykryto stary, niedziałający URL https://dancepuls.pl');
     assert.match(kumaScript, /deleteMonitor/);
     assert.match(kumaScript, /monitorList/);

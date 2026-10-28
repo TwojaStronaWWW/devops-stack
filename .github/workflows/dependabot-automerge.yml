@@ -3,7 +3,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_run:
-    workflows: ["CI & Quality Gate"]
+    workflows: ["CI & Quality Gate", "Lint & Validate Docker Compose"]
     types: [completed]
 
 permissions:

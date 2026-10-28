@@ -35,7 +35,7 @@ services:
       - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - DOCKER_PRUNE=true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - runner_zeslownikiem_data:/runner-data
     deploy:
       resources:
@@ -171,7 +171,7 @@ services:
       - DISABLE_AUTOMATIC_DEREGISTRATION=true
       - DOCKER_PRUNE=true
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - runner_gal_anonim_web_data:/runner-data
     deploy:
       resources:

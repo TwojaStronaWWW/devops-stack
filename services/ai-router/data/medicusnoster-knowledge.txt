@@ -1,0 +1,46 @@
+# BAZA WIEDZY RAG: MEDICUS NOSTER SP. Z O.O. (medicusnoster-knowledge.txt)
+
+## 1. O nas i główny profil działalności:
+- Nazwa marki / firmy: **MEDICUS NOSTER SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ (Medicus Noster)**
+- Dane rejestrowe: **ul. Borowa 2, 41-808 Zabrze | NIP: 5252920429 | KRS: 0000988587 | REGON: 522900314 | Prezes Zarządu: Franciszek Stefan Lewiński**
+- Języki obsługi: **Polski (PL) oraz Ukraiński (UA)** — strona oraz konsultanci obsługują lekarzy po polsku i po ukraińsku.
+- Czym się zajmujemy: **Pomagamy lekarzom z zagranicy (szczególnie spoza Unii Europejskiej — z Ukrainy, Białorusi i innych krajów) przejść przez proces nostryfikacji dyplomu, uznania specjalizacji oraz adaptacji zawodowej w Polsce. Prowadzimy kompleksowy 200-godzinny kurs adaptacyjno-wyrównawczy online (we współpracy z Akademią Śląską) oraz wspieramy lekarzy w pozyskiwaniu dofinansowań na rozpoczęcie działalności medycznej w Polsce.**
+- Lokalizacja / tryb działania: **Cała Polska (kursy w 100% online, siedziba spółki na Śląsku: ul. Borowa 2, 41-808 Zabrze).**
+- Co nas wyróżnia: **Kompleksowe wsparcie formalno-prawne, językowe i kliniczne od audytu dokumentów aż po rozpoczęcie pracy lub otwarcie własnego gabinetu lekarskiego w Polsce.**
+
+## 2. Dla kogo jest nasza oferta?
+1. **Lekarze posiadający dyplom uzyskany poza granicami Unii Europejskiej**, którzy chcą nostryfikować dyplom i uzyskać prawo wykonywania zawodu (PWZ) w Polsce.
+2. **Lekarze z zagranicy chcący opanować medyczny język polski**, obowiązujące w Polsce standardy diagnostyczno-terapeutyczne oraz prowadzenie dokumentacji medycznej (e-Recepty, e-Skierowania, historia choroby).
+3. **Lekarze planujący otwarcie własnej działalności medycznej lub gabinetu w Polsce**, poszukujący dofinansowania na wyposażenie, wynajem i rozwój usług.
+
+## 3. Jak wygląda współpraca / zapisy (Krok po kroku)?
+1. **Krok 1 (Bezpłatna konsultacja i audyt dokumentów):** Analizujemy kraj ukończenia studiów, program kształcenia, suplement do dyplomu, posiadane specjalizacje i doświadczenie zawodowe. Określamy ścieżkę uznania kwalifikacji lub nostryfikacji.
+2. **Krok 2 (Kompletowanie dokumentacji i szkolenie 200h online):** Pomagamy w przygotowaniu tłumaczeń przysięgłych i złożeniu wniosku do właściwej uczelni medycznej oraz przygotowujemy do egzaminów i pracy klinicznej podczas 200-godzinnego kursu online.
+3. **Krok 3 (Adaptacja zawodowa i dofinansowania):** Wspieramy na kolejnych etapach postępowania administracyjnego oraz pomagamy pozyskać dofinansowanie na adaptację zawodową lub własny gabinet.
+
+## 4. Cennik i Warianty Oferty:
+- **Kurs adaptacyjno-wyrównawczy dla lekarzy spoza EU online (200 godzin dydaktycznych po 45 min.):**
+  - **Cena:** **29 000 zł** (możliwość wsparcia w pozyskaniu dofinansowania).
+  - **Czas trwania i forma:** **2 miesiące, 100% online (zdalnie)** — 70 godzin wykładów (teoria) i 130 godzin ćwiczeń (praktyka).
+  - **Program kursu (200h):**
+    1. **Medyczny język polski (75 godz.):** komunikacja z pacjentem i rodziną, współpraca z zespołem terapeutycznym, warsztaty praktyczne i symulacje językowo-kliniczne.
+    2. **Nauki medyczne i standardy diagnostyczno-terapeutyczne (120 godz.):** choroby wewnętrzne, pediatria, chirurgia, ginekologia i położnictwo, medycyna rodzinna, medycyna ratunkowa, farmakoterapia, analiza przypadków klinicznych.
+    3. **Prowadzenie dokumentacji medycznej (5 godz.):** zasady sporządzania dokumentacji medycznej, opisywanie stanu pacjenta, badania, rozpoznania i zaleceń, wystawianie e-recept i e-skierowań.
+  - **Link do rejestracji na kurs:** https://akademiaslaska.pl/courses/kurs_adaptacyjno_wyrownawczy_dla_lekarzy_spoza_eu
+- **Nostryfikacja dyplomu i uznanie specjalizacji:** Wycena indywidualna po audycie dokumentów kandydata (wymagane dokumenty: dyplom ukończenia studiów medycznych, suplement do dyplomu / wykaz przedmiotów i godzin, dokument stanowiący podstawę przyjęcia na studia, dokumenty potwierdzające specjalizację, zaświadczenie o prawie wykonywania zawodu, dokumenty o doświadczeniu zawodowym, dokument tożsamości, tłumaczenia przysięgłe).
+- **Dofinansowania do działalności i adaptacji zawodowej:** Dobór programów wsparcia zależny od indywidualnej sytuacji lekarza i aktualnych naborów.
+
+## 5. Інформація українською мовою (Для лікарів з України):
+- **Нострифікація диплома лікаря в Польщі:** повний супровід (аудит документів, присяжні переклади, подання заявки до медичного університету, підготовка до нострифікаційних іспитів).
+- **Онлайн-курс адаптації та компенсації для лікарів з-за меж ЄС (200 годин):** 2 місяці, 100% дистанційно (70 год лекцій + 130 год практики: 75 год медичної польської мови, 120 год медичних наук і клінічних стандартів Польщі, 5 год ведення медичної документації, e-Recepta, e-Skierowanie). Вартість: **29 000 PLN** (допомагаємо отримати фінансування / дофінансування на курс або відкриття власної медичної практики).
+
+## 6. Twarde Reguły Anty-Halucynacyjne (Guardrails – Czego NIE obiecywać):
+- Głównym zakresem działalności jest **doradztwo, wsparcie organizacyjno-merytoryczne i szkolenia dla lekarzy z zagranicy**.
+- Czego firma **NIE obiecuje**: **Nie gwarantujemy automatycznego wydania decyzji administracyjnej przez uczelnię lub izbę lekarską bez spełnienia wymogów ustawowych i zdania wymaganych egzaminów, ani nie podajemy jednego sztywnego terminu zakończenia procedury urzędowej (czas zależy od kraju dyplomu, kompletności dokumentów i terminów uczelni).**
+- W przypadku pytań o indywidualną wycenę nostryfikacji lub konkretne kwoty dotacji: poinformuj, że zależy to od kraju ukończenia studiów i aktualnych programów, i zachęć do zostawienia numeru telefonu lub e-maila na czacie bądź w formularzu `#kontakt`.
+
+## 7. Dane Kontaktowe:
+- **E-mail:** office@medicusnoster.pl
+- **Telefon / WhatsApp (PL / UA):** +48 790 348 776
+- **Strona WWW:** https://medicusnoster.pl/
+- **Formularz zgłoszeniowy:** dostępny bezpośrednio w sekcji `#kontakt` na stronie głównej (wystarczy podać imię, telefon/e-mail i datę uzyskania dyplomu).

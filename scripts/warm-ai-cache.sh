@@ -52,6 +52,10 @@ PROMPTS=(
     "radar-p1|Jak odróżnić awarię centralną P1/NFZ od problemu z lokalnym łączem?"
     "radar-p1|Co zrobić w rejestracji, gdy nie działa eWUŚ?"
     "radar-p1|Jak działa tryb awaryjny i offline24 w KSeF oraz ZUS e-ZLA?"
+    "medicusnoster|Ile kosztuje i co obejmuje 200-godzinny kurs online dla lekarzy spoza UE?"
+    "medicusnoster|Jakie dokumenty są wymagane do nostryfikacji dyplomu lekarskiego w Polsce?"
+    "medicusnoster|Czy pomagacie w uzyskaniu dofinansowania na kurs lub własny gabinet?"
+    "medicusnoster|Як проходить нострифікація диплома лікаря в Польщі?"
 )
 
 echo "==> [warm-ai-cache] Rozgrzewanie pamięci podręcznej RAG (${#PROMPTS[@]} pytań startowych)..."

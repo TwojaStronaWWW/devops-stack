@@ -316,7 +316,7 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
         return;
     }
 
-    $rawBeacon = file_get_contents('php://input');
+    $rawBeacon = file_get_contents('php://input', false, null, 0, 65536);
     $beacon = $rawBeacon ? json_decode($rawBeacon, true) : null;
     if (!is_array($beacon)) {
         http_response_code(400);

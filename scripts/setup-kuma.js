@@ -15,7 +15,7 @@ if (!ADMIN_USER || !ADMIN_PASS) {
 const SITES = [
     { name: "Raricart.pl", url: "https://raricart.pl" },
     { name: "TwojaStronaWWW.pl", url: "https://twojastronawww.pl" },
-    { name: "DancePuls.pl", url: "https://dancepuls.katosalsahub.pl/" },
+    { name: "DancePuls.pl", url: "https://katosalsahub.pl/dancepuls/" },
     { name: "KatoSalsaHub.pl", url: "https://katosalsahub.pl" },
     { name: "osTicket Helpdesk", url: "https://hd.twojastronawww.pl" },
     { name: "GalAnonim.pl", url: "https://galanonim.pl" },
