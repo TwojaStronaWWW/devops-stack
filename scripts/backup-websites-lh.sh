@@ -181,6 +181,7 @@ set net:timeout 15
 set net:max-retries 3
 open -p "${LH_FTP_PORT}" -u "${LH_FTP_USERNAME}","${LH_FTP_PASSWORD}" "${LH_FTP_SERVER}"
 mirror --verbose --delete --no-perms --parallel=3 "${LH_REMOTE_DIR}" /target
+mirror --no-perms --include-glob="*.sql.gz" /backups/mysql /target/_mysql_backups || true
 quit
 EOF
 
@@ -191,6 +192,22 @@ docker run --rm \
     sh -c "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd && chown -R ${HOST_UID}:${HOST_GID} /target && chmod -R u+rwX /target"
 
 rm -f "${LFTP_CMD_FILE}"
+
+# Weryfikacja i zachowanie najnowszego lokalnego zrzutu MySQL z /backups/mysql na LH.pl (jeśli dostępny przez FTPS)
+if [[ -d "${STAGING_DIR}/_mysql_backups" ]]; then
+    LATEST_FTPS_SQL="$(ls -1t "${STAGING_DIR}/_mysql_backups/"*.sql.gz 2>/dev/null | head -n 1 || true)"
+    if [[ -n "${LATEST_FTPS_SQL}" ]]; then
+        echo "--> [1a/3] Weryfikacja najnowszego zrzutu MySQL pobranego z FTPS LH.pl ($(basename "${LATEST_FTPS_SQL}"))..."
+        if gzip -t "${LATEST_FTPS_SQL}" 2>/dev/null && zcat "${LATEST_FTPS_SQL}" | tail -n 5 | grep -q "Dump completed"; then
+            # Zachowaj tylko najnowszy zweryfikowany zrzut w paczce dziennej (oszczędność miejsca w R2 Free Tier 10 GB)
+            find "${STAGING_DIR}/_mysql_backups" -type f -name "*.sql.gz" ! -name "$(basename "${LATEST_FTPS_SQL}")" -delete 2>/dev/null || true
+            echo "--> [OK] Zrzut MySQL $(basename "${LATEST_FTPS_SQL}") zweryfikowany (gzip -t + Dump completed) i dołączony do archiwum."
+        else
+            DB_BACKUP_VERIFIED=0
+            echo "--> [WARN] Zrzut MySQL $(basename "${LATEST_FTPS_SQL}") z FTPS LH.pl nie przeszedł weryfikacji spójności!"
+        fi
+    fi
+fi
 
 # Opcjonalny zrzut baz danych MySQL/MariaDB (np. osTicket Helpdesk, WordPress) z weryfikacją spójności gzip + Dump completed
 if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAMES}" && -n "${LH_DB_USER}" && -n "${LH_DB_PASSWORD}" ]]; then

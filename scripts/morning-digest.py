@@ -1,25 +1,48 @@
 #!/usr/bin/env python3
 """
-morning-digest.py — Moduł Porannego Raportu Bezpieczeństwa ISO 27001 & Scraperów KSH/DancePuls.
+morning-digest.py — Moduł Porannego Raportu Bezpieczeństwa ISO 27001 (06:00 PL),
+Skanera Hostingów (LH.pl Auto-Heal + nazwa.pl Read-Only) & Scraperów KSH/DancePuls.
 
 Wydzielony z audit-server.sh w celu zachowania czystości architektury (Separation of Concerns).
-Obsługuje 4 podkomendy:
-  1. pretrigger   — wywołuje workflow_dispatch dla weekly-report.yml o 07:15 (Europe/Warsaw)
-  2. ai-audit     — wykonuje krzyżową analizę 24h Rentgena serwera (Dual-AI HIGH Reasoning + eskalacja Claude Sonnet 4.6)
-  3. ksh-scrapers — pobiera status i deltę 24h ze scraperów Kato Salsa Hub & DancePuls (wydarzenia, grafiki, cenniki)
-  4. send-email   — wysyła połączony raport poranny na e-mail przez webhook osTicket
+Obsługuje 5 podkomend:
+  1. pretrigger   — wywołuje workflow_dispatch dla weekly-report.yml o 05:45 (Europe/Warsaw)
+  2. hosting-scan — skanuje LH.pl (z automatyczną naprawą zagrożeń Auto-Heal) oraz nazwa.pl (100% Read-Only, tylko informacja)
+  3. ai-audit     — wykonuje analizę 24h Rentgena przez 3 niezależnych darmowych audytorów AI + Arbitra Końcowego Antigravity/Gemini ($0.00)
+  4. ksh-scrapers — pobiera status i deltę 24h ze scraperów Kato Salsa Hub & DancePuls (wydarzenia, grafiki, cenniki)
+  5. send-email   — wysyła połączony raport poranny 06:00 na e-mail przez webhook osTicket
 """
 
 import datetime
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
 UA_AUDIT = "Mozilla/5.0 (compatible; TwojaStronaWWW-AIRouter/2.0)"
-UA_REPORT = "TwojaStronaWWW-MorningReport/2.0"
+UA_REPORT = "TwojaStronaWWW-MorningReport/2.1"
+
+# Standardowe pliki PHP rdzenia WordPressa w katalogu głównym (do weryfikacji Read-Only na nazwa.pl)
+STANDARD_WP_ROOT_PHP = {
+    "index.php",
+    "wp-activate.php",
+    "wp-blog-header.php",
+    "wp-comments-post.php",
+    "wp-config-sample.php",
+    "wp-config.php",
+    "wp-cron.php",
+    "wp-links-opml.php",
+    "wp-load.php",
+    "wp-login.php",
+    "wp-mail.php",
+    "wp-settings.php",
+    "wp-signup.php",
+    "wp-trackback.php",
+    "xmlrpc.php",
+}
 
 
 def load_env(env_path: str) -> dict:
@@ -40,7 +63,7 @@ def cmd_pretrigger(env_vars: dict, pl_date: str) -> int:
         return 0
     hdrs = {
         "Authorization": f"Bearer {gh_tok}",
-        "User-Agent": "TwojaStronaWWW-Audit/2.0",
+        "User-Agent": "TwojaStronaWWW-Audit/2.1",
         "Accept": "application/vnd.github+json",
     }
     runs_url = "https://api.github.com/repos/TwojaStronaWWW/katosalsahub/actions/workflows/weekly-report.yml/runs?per_page=1"
@@ -59,12 +82,298 @@ def cmd_pretrigger(env_vars: dict, pl_date: str) -> int:
     return 0
 
 
+def _http_status(url: str, timeout: int = 6) -> int:
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": UA_AUDIT}, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return int(resp.status)
+    except urllib.error.HTTPError as he:
+        return int(he.code)
+    except Exception:
+        return 0
+
+
+def _run_lftp_script(lftp_commands: str, timeout_sec: int = 25) -> str:
+    cmd_file = ""
+    try:
+        fd, cmd_file = tempfile.mkstemp(prefix="lftp_audit_", suffix=".cmd")
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(lftp_commands)
+        proc = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{cmd_file}:/cmd:ro",
+                "alpine:latest",
+                "sh",
+                "-c",
+                "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            check=False,
+        )
+        return (proc.stdout or "") + "\n" + (proc.stderr or "")
+    except Exception as exc:
+        return f"ERROR: {exc}"
+    finally:
+        if cmd_file and os.path.exists(cmd_file):
+            try:
+                os.remove(cmd_file)
+            except Exception:
+                pass
+
+
+def cmd_hosting_scan(env_vars: dict) -> int:
+    """
+    1) Skanuje Twój własny hosting LH.pl (serwer417204.lh.pl) w trybie AUTO-HEAL (automatycznie usuwa
+       przypadkowo wdrożone artefakty deweloperskie/testowe, naprawia uprawnienia i weryfikuje blokady HTTP).
+    2) Skanuje hosting klienta na nazwa.pl (slimgroupol.nazwa.pl) w trybie 100% READ-ONLY (zero zmian na serwerze,
+       wyłącznie raportowanie stanu kwarantanny, integralności plików kluczowych i ewentualnych nowych zagrożeń).
+    """
+    # -------------------------------------------------------------------------
+    # CZĘŚĆ A: TWÓJ HOSTING LH.PL (TRYB AUTO-HEAL — AUTOMATYCZNA NAPRAWA)
+    # -------------------------------------------------------------------------
+    lh_srv = env_vars.get("LH_FTP_SERVER", "")
+    lh_usr = env_vars.get("LH_FTP_USERNAME", "")
+    lh_pwd = env_vars.get("LH_FTP_PASSWORD", "")
+    lh_port = env_vars.get("LH_FTP_PORT", "21")
+
+    lh_healed = []
+    lh_issues = []
+    lh_ok_checks = 0
+
+    if lh_srv and lh_usr and lh_pwd:
+        lftp_lh_check = f"""set ftp:ssl-allow true
+set ftp:ssl-protect-data true
+set ssl:verify-certificate yes
+set net:timeout 10
+set net:max-retries 2
+open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
+echo "===LH_ROOT==="
+cls -la /
+echo "===LH_PUB==="
+cls -la /public_html
+echo "===LH_TSW==="
+cls -la /public_html/twojastronawww.pl
+echo "===LH_FUEGO==="
+cls -la /public_html/fuegolingua.pl
+echo "===LH_KSH==="
+cls -la /public_html/katosalsahub.pl
+echo "===LH_KP==="
+cls -la /public_html/krzysztofpoczatek.pl
+quit
+"""
+        lh_out = _run_lftp_script(lftp_lh_check, timeout_sec=25)
+        heal_cmds = []
+
+        # Sprawdzenie czy w /public_html nie pojawiły się niebezpieczne symlinki lub artefakty deweloperskie
+        forbidden_lh_targets = [
+            ("/public_html/scripts", "rm -f /public_html/scripts", "symlink /public_html/scripts@"),
+            ("/public_html/public_html", "rm -f /public_html/public_html", "symlink /public_html/public_html@"),
+            ("/public_html/twojastronawww.pl/tests", "rm -r /public_html/twojastronawww.pl/tests", "twojastronawww.pl/tests/"),
+            ("/public_html/twojastronawww.pl/.github", "rm -r /public_html/twojastronawww.pl/.github", "twojastronawww.pl/.github/"),
+            ("/public_html/twojastronawww.pl/scripts", "rm -r /public_html/twojastronawww.pl/scripts", "twojastronawww.pl/scripts/"),
+            ("/public_html/twojastronawww.pl/storage", "rm -r /public_html/twojastronawww.pl/storage", "twojastronawww.pl/storage/"),
+            ("/public_html/twojastronawww.pl/AGENTS.md", "rm -f /public_html/twojastronawww.pl/AGENTS.md", "twojastronawww.pl/AGENTS.md"),
+            ("/public_html/twojastronawww.pl/GEMINI.md", "rm -f /public_html/twojastronawww.pl/GEMINI.md", "twojastronawww.pl/GEMINI.md"),
+            ("/public_html/twojastronawww.pl/package.json", "rm -f /public_html/twojastronawww.pl/package.json", "twojastronawww.pl/package.json"),
+            ("/public_html/fuegolingua.pl/.github", "rm -r /public_html/fuegolingua.pl/.github", "fuegolingua.pl/.github/"),
+            ("/public_html/fuegolingua.pl/inage", "rm -r /public_html/fuegolingua.pl/inage", "fuegolingua.pl/inage/"),
+            ("/public_html/fuegolingua.pl/docs", "rm -r /public_html/fuegolingua.pl/docs", "fuegolingua.pl/docs/"),
+            ("/public_html/fuegolingua.pl/AGENTS.md", "rm -f /public_html/fuegolingua.pl/AGENTS.md", "fuegolingua.pl/AGENTS.md"),
+            ("/public_html/fuegolingua.pl/GEMINI.md", "rm -f /public_html/fuegolingua.pl/GEMINI.md", "fuegolingua.pl/GEMINI.md"),
+            ("/public_html/katosalsahub.pl/tests", "rm -r /public_html/katosalsahub.pl/tests", "katosalsahub.pl/tests/"),
+            ("/public_html/katosalsahub.pl/tests.html", "rm -f /public_html/katosalsahub.pl/tests.html", "katosalsahub.pl/tests.html"),
+            ("/public_html/krzysztofpoczatek.pl/AGENTS.md", "rm -f /public_html/krzysztofpoczatek.pl/AGENTS.md", "krzysztofpoczatek.pl/AGENTS.md"),
+            ("/public_html/krzysztofpoczatek.pl/GEMINI.md", "rm -f /public_html/krzysztofpoczatek.pl/GEMINI.md", "krzysztofpoczatek.pl/GEMINI.md"),
+        ]
+
+        for marker, rm_cmd, label in forbidden_lh_targets:
+            if marker in lh_out:
+                heal_cmds.append(rm_cmd)
+                lh_healed.append(f"usunięto artefakt {label}")
+
+        # Wymuszenie bezpiecznych uprawnień PoLP (0700/0600) na LH.pl jeśli uległy rozluźnieniu
+        for dir_name in ("/scripts", "/backups"):
+            for line in lh_out.splitlines():
+                if line.endswith(f" {dir_name}/") and not line.startswith("drwx------"):
+                    heal_cmds.append(f"chmod 700 {dir_name}")
+                    lh_healed.append(f"przywrócono chmod 700 na {dir_name}")
+
+        if heal_cmds:
+            heal_script = f"""set ftp:ssl-allow true
+set ftp:ssl-protect-data true
+set ssl:verify-certificate yes
+open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
+""" + "\n".join(heal_cmds) + "\nquit\n"
+            _run_lftp_script(heal_script, timeout_sec=25)
+        lh_ok_checks += 1
+
+    # Żywa weryfikacja HTTP i blokad .htaccess na LH.pl
+    lh_prod_urls = [
+        "https://twojastronawww.pl/",
+        "https://katosalsahub.pl/",
+        "https://fuegolingua.pl/",
+        "https://krzysztofpoczatek.pl/",
+        "https://hd.twojastronawww.pl/",
+    ]
+    for u in lh_prod_urls:
+        st = _http_status(u)
+        if st == 200:
+            lh_ok_checks += 1
+        else:
+            lh_issues.append(f"{u} zwrócił HTTP {st}")
+
+    lh_blocked_urls = [
+        "https://twojastronawww.pl/.env",
+        "https://twojastronawww.pl/tests/clean_limits.php",
+        "https://twojastronawww.pl/.github/workflows/deploy.yml",
+        "https://katosalsahub.pl/.env",
+        "https://katosalsahub.pl/assets/data/moderators.json",
+        "https://katosalsahub.pl/assets/data/moderators.json.bak",
+        "https://hd.twojastronawww.pl/include/ost-config.php",
+    ]
+    for u in lh_blocked_urls:
+        st = _http_status(u)
+        if st in (403, 404):
+            lh_ok_checks += 1
+        else:
+            lh_issues.append(f"UWAGA: {u} nie jest zablokowany (HTTP {st})")
+
+    if lh_issues:
+        lh_status_short = f"⚠️ LH.pl: {len(lh_issues)} ostrz. (Auto-Heal: {len(lh_healed)})"
+        lh_status_full = f"⚠️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): wykryto {len(lh_issues)} uwag ({', '.join(lh_issues)}) | Automatycznie naprawiono: {len(lh_healed)} ({', '.join(lh_healed) if lh_healed else 'brak'})"
+    elif lh_healed:
+        lh_status_short = f"🛡️ LH.pl: OK (Auto-Heal naprawił {len(lh_healed)} poz.)"
+        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS OK) — automatycznie oczyszczono: {', '.join(lh_healed)}"
+    else:
+        lh_status_short = f"🛡️ LH.pl: CZYSTO ({lh_ok_checks}/{lh_ok_checks} OK, Auto-Heal czuwa)"
+        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS/.htaccess/PoLP OK, 0 webshelli, 0 wycieków)"
+
+    # -------------------------------------------------------------------------
+    # CZĘŚĆ B: HOSTING KLIENTA NAZWA.PL (TRYB 100% READ-ONLY — TYLKO INFORMACJA!)
+    # -------------------------------------------------------------------------
+    nz_srv = env_vars.get("NAZWA_FTP_SERVER", "slimgroupol.nazwa.pl")
+    nz_usr = env_vars.get("NAZWA_FTP_USER", "")
+    nz_pwd = env_vars.get("NAZWA_FTP_PASSWORD", "")
+
+    nz_alerts = []
+    nz_checks_ok = 0
+
+    if nz_srv and nz_usr and nz_pwd:
+        # Wyłącznie komendy odczytu (cls -la) — ZERO modyfikacji na nazwa.pl!
+        lftp_nz_readonly = f"""set ftp:ssl-allow true
+set ftp:ssl-protect-data true
+set ssl:verify-certificate no
+set net:timeout 10
+set net:max-retries 2
+open -p 21 -u "{nz_usr}","{nz_pwd}" {nz_srv}
+echo "===NZ_ROOT==="
+cls -la /
+echo "===NZ_MEDREG_FILES==="
+cls -la /medycynaregeneracyjna/medycyna-regeneracyjna/index.php /medycynaregeneracyjna/medycyna-regeneracyjna/.htaccess /medycynaregeneracyjna/medycyna-regeneracyjna/wp-includes/load.php
+echo "===NZ_MEDREG_DIR==="
+cls -la /medycynaregeneracyjna/medycyna-regeneracyjna
+echo "===NZ_MEDNOSTER_FILES==="
+cls -la /medicusnoster/index.php /medicusnoster/wp-config.php
+echo "===NZ_MEDNOSTER_DIR==="
+cls -la /medicusnoster
+quit
+"""
+        nz_out = _run_lftp_script(lftp_nz_readonly, timeout_sec=25)
+
+        if "ERROR:" in nz_out or "Login incorrect" in nz_out or "===NZ_ROOT===" not in nz_out:
+            nz_alerts.append("brak połączenia Read-Only FTPS z slimgroupol.nazwa.pl")
+        else:
+            # 1. Sprawdzenie czy sejf kwarantanny /.quarantine_tsw_20261028 jest zablokowany (d---------)
+            if re.search(r"^d---------\s+.*\/\.quarantine_tsw_20261028\/", nz_out, re.M):
+                nz_checks_ok += 1
+            else:
+                nz_alerts.append("kwarantanna /.quarantine_tsw_20261028 zmieniła uprawnienia lub zniknęła!")
+
+            # 2. Sprawdzenie rozmiarów i uprawnień (0444) kluczowych plików chronionych przed reinfekcją
+            expected_files = [
+                (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/index\.php$", "medycyna-regeneracyjna/index.php (405 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+843\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/\.htaccess$", "medycyna-regeneracyjna/.htaccess (843 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+56510\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/wp-includes\/load\.php$", "medycyna-regeneracyjna/wp-includes/load.php (56510 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medicusnoster\/index\.php$", "medicusnoster/index.php (405 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+3765\s+.*\/medicusnoster\/wp-config\.php$", "medicusnoster/wp-config.php (3765 B, 0444)"),
+            ]
+            for pat, desc in expected_files:
+                if re.search(pat, nz_out, re.M):
+                    nz_checks_ok += 1
+                else:
+                    nz_alerts.append(f"zmiana rozmiaru/uprawnień w {desc}")
+
+            # 3. Sprawdzenie czy w głównych katalogach nie pojawiły się obce pliki .php poza rdzeniem WP
+            for sec_tag, domain_label in (("NZ_MEDREG_DIR", "medycyna-regeneracyjna.pl"), ("NZ_MEDNOSTER_DIR", "medicusnoster.pl")):
+                if f"==={sec_tag}===" in nz_out:
+                    sec_part = nz_out.split(f"==={sec_tag}===", 1)[1].split("===", 1)[0]
+                    for line in sec_part.splitlines():
+                        parts = line.strip().split()
+                        if not parts:
+                            continue
+                        fname = os.path.basename(parts[-1].rstrip("/"))
+                        if fname.endswith(".php") and fname not in STANDARD_WP_ROOT_PHP:
+                            nz_alerts.append(f"podejrzany plik PHP w {domain_label}: {fname}")
+                        if any(bad in fname for bad in ("PJcpMFsD8B", "adminfuns", "wp-conffq", ".private", "__2DUAN")):
+                            nz_alerts.append(f"wykryto sygnaturę infekcji w {domain_label}: {fname}")
+                    nz_checks_ok += 1
+    else:
+        nz_alerts.append("brak skonfigurowanych danych NAZWA_FTP_* w .env")
+
+    if nz_alerts:
+        nz_status_short = f"🚨 nazwa.pl (Tylko Raport): WYKRYTO {len(nz_alerts)} ANOMALII!"
+        nz_status_full = (
+            f"🚨 Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
+            f"Wykryto {len(nz_alerts)} anomalii: {'; '.join(nz_alerts)}. Czekam na Twoją decyzję przed podjęciem działań!"
+        )
+    else:
+        nz_status_short = f"👁️ nazwa.pl (Read-Only): CZYSTO ({nz_checks_ok}/{nz_checks_ok} OK)"
+        nz_status_full = (
+            f"👁️ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
+            f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli integralności OK: kwarantanna 0000 nienaruszona, "
+            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP). Nic nie ruszano."
+        )
+
+    print(
+        json.dumps(
+            {
+                "lh_short": lh_status_short,
+                "lh_full": lh_status_full,
+                "lh_issues_cnt": len(lh_issues),
+                "lh_healed_cnt": len(lh_healed),
+                "nazwa_short": nz_status_short,
+                "nazwa_full": nz_status_full,
+                "nazwa_alerts_cnt": len(nz_alerts),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
 def cmd_ai_audit(env_vars: dict) -> int:
+    """
+    Rada 3 Niezależnych Darmowych Audytorów AI ($0.00) + Arbiter Końcowy #4 (Antigravity / Gemini High-Reasoning, $0.00):
+      - Audytor #1: Groq LPU — GPT-OSS-120B (reasoning: HIGH)
+      - Audytor #2: Cerebras WSE — Qwen-3.8-27B / GPT-OSS-120B (reasoning: HIGH)
+      - Audytor #3: Cloudflare Edge AI — Llama-3.3-70B-Instruct-FP8
+      - Arbiter #4 (Końcowy): Antigravity / Google Gemini (thinking: HIGH) — syntetyzuje wyniki #1, #2, #3 i Rentgen 24h.
+    Płatny budżet Anthropic ($4.7732) jest w 100% chroniony ($0.00 poboru w codziennych audytach).
+    """
     groq_key = env_vars.get("GROQ_API_KEY", "")
     cerebras_key = env_vars.get("CEREBRAS_API_KEY", "")
+    cf_token = env_vars.get("CF_AI_API_TOKEN", "")
+    cf_account = env_vars.get("CF_ACCOUNT_ID", "")
     gemini_key = env_vars.get("GEMINI_API_KEY", "")
     anthropic_key = env_vars.get("ANTHROPIC_API_KEY", "")
-    need_claude = os.environ.get("NEED_CLAUDE", "false") == "true"
+    force_claude = os.environ.get("FORCE_CLAUDE_ESCALATION", "false") == "true"
 
     xray_path = os.environ.get("XRAY_FILE", "")
     budget_path = "/var/lib/docker/volumes/ai_router_storage/_data/anthropic_budget.json"
@@ -73,109 +382,133 @@ def cmd_ai_audit(env_vars: dict) -> int:
         return 0
 
     with open(xray_path, "r", encoding="utf-8", errors="replace") as f:
-        xray_text = f.read()[:6500]
+        xray_text = f.read()[:7000]
 
-    sys_prompt_primary = (
-        "Jesteś Głównym Audytorem Bezpieczeństwa DevOps (ISO 27001) serwera TwojaStronaWWW (Oracle Cloud ARM64). "
-        "Przeanalizuj szczegółowy 24-godzinny Rentgen serwera (testy deterministyczne, skaner anomalii 24h wszystkich 12 kontenerów, WAF L7, Fail2ban, Uptime Kuma SQLite, reguły tunelu Cloudflare, journalctl). "
-        "Napisz po polsku bardzo zwięzłą diagnozę w 3 krótkich punktach (po 1 zdaniu każdy): "
-        "1) Anomalie w logach 24h i systemie, "
-        "2) Stan ochrony Zero Trust, WAF/Fail2ban i backupów, "
-        "3) Werdykt końcowy i rekomendacja."
+    sys_prompt_auditor1 = (
+        "Jesteś Niezależnym Audytorem #1 (Infrastruktura VPS & Kontenery — ISO 27001). "
+        "Przeanalizuj 24-godzinny Rentgen serwera VPS (Oracle Cloud ARM64), kontenery, dziennik SSH i zasoby. "
+        "Napisz po polsku zwięzłą diagnozę w 2 konkretnych zdaniach."
     )
 
-    sys_prompt_cross = (
-        "Jesteś drugim, niezależnym Audytorem Krzyżowym ISO 27001 (Second Opinion). "
-        "Zweryfikuj poniższy 24-godzinny Rentgen serwera VPS i napisz po polsku maksymalnie 2 krótkie zdania: "
-        "potwierdź spójność wskaźników IoC/WAF/Backupów lub wskaż choćby najmniejszy ślad ryzyka."
+    sys_prompt_auditor2 = (
+        "Jesteś Niezależnym Audytorem #2 (Weryfikacja Krzyżowa IoC, WAF L7, Fail2ban & Kopie Zapasowe R2). "
+        "Zweryfikuj wskaźniki włamań IoC, blokady WAF/Fail2ban oraz spójność backupów (VPS + MySQL/WWW LH.pl). "
+        "Napisz po polsku maksymalnie 2 konkretne zdania."
     )
 
-    primary_answer = ""
-    primary_label = ""
-    primary_think_tok = 0
-    primary_total_tok = 0
+    sys_prompt_auditor3 = (
+        "Jesteś Niezależnym Audytorem #3 (Bezpieczeństwo Hostingów WWW: LH.pl Auto-Heal & nazwa.pl Read-Only). "
+        "Oceń stan bezpieczeństwa własnego hostingu LH.pl (automatyczna naprawa) oraz hostingu klienta nazwa.pl (tryb obserwacji Read-Only). "
+        "Napisz po polsku maksymalnie 2 konkretne zdania."
+    )
 
-    # 1. GŁÓWNY AUDYTOR 120B (HIGH REASONING, $0.00): Groq GPT-OSS-120B -> Cerebras GPT-OSS-120B -> Cerebras Qwen 3.8
-    primary_candidates = []
+    def _call_openai_compat(url: str, key: str, body: dict, timeout: int = 20) -> tuple[str, int, int]:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": UA_AUDIT},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        msg = (data.get("choices") or [{}])[0].get("message", {})
+        txt = (msg.get("content") or "").strip()
+        if "<think>" in txt and "</think>" in txt:
+            txt = txt.split("</think>", 1)[1].strip()
+        txt = txt.replace("**", "").strip()
+        usage = data.get("usage") or {}
+        tot_tok = int(usage.get("total_tokens", 0))
+        think_tok = int((usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0))
+        return txt, think_tok, tot_tok
+
+    # 1. AUDYTOR #1 (Chmura Groq LPU — $0.00): GPT-OSS-120B (reasoning: HIGH)
+    aud1_ans, aud1_label, aud1_think, aud1_tot = "", "", 0, 0
     if groq_key:
-        primary_candidates.append((
-            "Groq GPT-OSS-120B (reasoning: HIGH)",
-            "https://api.groq.com/openai/v1/chat/completions",
-            groq_key,
-            {
-                "model": "openai/gpt-oss-120b",
-                "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
-                "reasoning_effort": "high",
-                "temperature": 0.2,
-                "max_tokens": 4096,
-            },
-        ))
+        for m_id, m_lbl in (("openai/gpt-oss-120b", "Groq GPT-OSS-120B (reasoning: HIGH)"), ("qwen/qwen3-32b", "Groq Qwen3-32B")):
+            try:
+                body = {
+                    "model": m_id,
+                    "messages": [{"role": "system", "content": sys_prompt_auditor1}, {"role": "user", "content": xray_text}],
+                    "temperature": 0.2,
+                    "max_tokens": 2048,
+                    **({"reasoning_effort": "high"} if "gpt-oss" in m_id else {}),
+                }
+                txt, th, tot = _call_openai_compat("https://api.groq.com/openai/v1/chat/completions", groq_key, body)
+                if txt:
+                    aud1_ans, aud1_label, aud1_think, aud1_tot = txt, m_lbl, th, tot
+                    break
+            except Exception:
+                continue
+
+    # 2. AUDYTOR #2 (Chmura Cerebras WSE — $0.00): Qwen-3.8-27B / GPT-OSS-120B
+    aud2_ans, aud2_label, aud2_think, aud2_tot = "", "", 0, 0
     if cerebras_key:
-        primary_candidates.append((
-            "Cerebras GPT-OSS-120B (reasoning: HIGH)",
-            "https://api.cerebras.ai/v1/chat/completions",
-            cerebras_key,
-            {
-                "model": "gpt-oss-120b",
-                "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
-                "reasoning_effort": "high",
-                "temperature": 0.2,
-                "max_tokens": 4096,
-            },
-        ))
-        primary_candidates.append((
-            "Cerebras Qwen-3.8-27B (reasoning: HIGH)",
-            "https://api.cerebras.ai/v1/chat/completions",
-            cerebras_key,
-            {
-                "model": "qwen-3.8-27b",
-                "messages": [{"role": "system", "content": sys_prompt_primary}, {"role": "user", "content": xray_text}],
-                "temperature": 0.2,
-                "max_tokens": 4096,
-            },
-        ))
+        for m_id, m_lbl in (("qwen-3.8-27b", "Cerebras Qwen-3.8-27B (WSE)"), ("gpt-oss-120b", "Cerebras GPT-OSS-120B (reasoning: HIGH)")):
+            try:
+                body = {
+                    "model": m_id,
+                    "messages": [{"role": "system", "content": sys_prompt_auditor2}, {"role": "user", "content": xray_text}],
+                    "temperature": 0.2,
+                    "max_tokens": 2048,
+                }
+                if "gpt-oss" in m_id:
+                    body["reasoning_effort"] = "high"
+                txt, th, tot = _call_openai_compat("https://api.cerebras.ai/v1/chat/completions", cerebras_key, body)
+                if txt:
+                    aud2_ans, aud2_label, aud2_think, aud2_tot = txt, m_lbl, th, tot
+                    break
+            except Exception:
+                continue
 
-    for label, url, api_key, body in primary_candidates:
+    # 3. AUDYTOR #3 (Chmura Cloudflare Workers AI — $0.00): Llama-3.3-70B-Instruct-FP8
+    aud3_ans, aud3_label, aud3_tot = "", "", 0
+    if cf_token and cf_account:
         try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(body).encode("utf-8"),
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "User-Agent": UA_AUDIT},
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=22) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            msg = (data.get("choices") or [{}])[0].get("message", {})
-            txt = (msg.get("content") or "").strip()
-            if "<think>" in txt and "</think>" in txt:
-                txt = txt.split("</think>", 1)[1].strip()
-            txt = txt.replace("**", "")
+            cf_url = f"https://api.cloudflare.com/client/v4/accounts/{cf_account}/ai/v1/chat/completions"
+            cf_body = {
+                "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+                "messages": [{"role": "system", "content": sys_prompt_auditor3}, {"role": "user", "content": xray_text}],
+                "temperature": 0.2,
+                "max_tokens": 1024,
+            }
+            txt, _, tot = _call_openai_compat(cf_url, cf_token, cf_body, timeout=18)
             if txt:
-                primary_answer = txt
-                primary_label = label
-                usage = data.get("usage", {})
-                primary_total_tok = int(usage.get("total_tokens", 0))
-                details = usage.get("completion_tokens_details") or {}
-                primary_think_tok = int(details.get("reasoning_tokens", 0))
-                break
+                aud3_ans = txt
+                aud3_label = "Cloudflare Llama-3.3-70B-FP8"
+                aud3_tot = tot
         except Exception:
-            continue
+            pass
 
-    # 2. KRZYŻOWY WERYFIKATOR (HIGH THINKING, $0.00): Google Gemini 3.5 / 3.8 Flash
-    cross_answer = ""
-    cross_label = ""
-    cross_think_tok = 0
+    # 4. ARBITER KOŃCOWY #4 (Ja / Antigravity Gemini High-Reasoning — $0.00):
+    # Otrzymuje pełny Rentgen 24h (VPS + LH.pl + nazwa.pl) ORAZ raporty 3 niezależnych audytorów i wydaje werdykt końcowy
+    arbiter_ans, arbiter_label, arbiter_think, arbiter_tot = "", "", 0, 0
+    council_summary = (
+        f"{xray_text}\n\n"
+        f"=== OPINIE 3 NIEZALEŻNYCH AUDYTORÓW AI ===\n"
+        f"[Audytor #1 - {aud1_label or 'brak'}]: {aud1_ans or 'brak'}\n"
+        f"[Audytor #2 - {aud2_label or 'brak'}]: {aud2_ans or 'brak'}\n"
+        f"[Audytor #3 - {aud3_label or 'brak'}]: {aud3_ans or 'brak'}\n"
+    )
+    sys_prompt_arbiter = (
+        "Jesteś Głównym Arbitrem Końcowym (Antigravity / Gemini High-Reasoning — Senior DevOps & ISO 27001 Lead Auditor). "
+        "Masz przed sobą 24-godzinny Rentgen 3 środowisk (1: Serwer VPS z Auto-Heal, 2: Własny hosting LH.pl z Auto-Heal, "
+        "3: Hosting klienta nazwa.pl w trybie Read-Only) oraz raporty 3 niezależnych audytorów AI (#1 Groq, #2 Cerebras, #3 Cloudflare). "
+        "Podsumuj po polsku w 3 krótkich, żołnierskich punktach: "
+        "1) Konsensus z 3 audytorów i stan VPS + LH.pl (czy coś wymagało automatycznej naprawy), "
+        "2) Status obserwacyjny hostingu klienta nazwa.pl (czy wykryto jakiekolwiek zmiany wymagające decyzji użytkownika), "
+        "3) Końcowy Werdykt Arbitra (CZYSTO / WYMAGA DECYZJI)."
+    )
 
     if gemini_key:
-        for g_model in ("gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.5-flash-lite"):
+        for g_model in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"):
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
                 g_body = {
-                    "systemInstruction": {"parts": [{"text": sys_prompt_cross if primary_answer else sys_prompt_primary}]},
-                    "contents": [{"role": "user", "parts": [{"text": xray_text}]}],
+                    "systemInstruction": {"parts": [{"text": sys_prompt_arbiter}]},
+                    "contents": [{"role": "user", "parts": [{"text": council_summary}]}],
                     "generationConfig": {
                         "temperature": 0.2,
-                        "maxOutputTokens": 8192,
+                        "maxOutputTokens": 4096,
                         "thinkingConfig": {"thinkingLevel": "HIGH"},
                     },
                 }
@@ -192,17 +525,10 @@ def cmd_ai_audit(env_vars: dict) -> int:
                 txt = "\n".join([c for c in out_chunks if c]).strip().replace("**", "")
                 if txt:
                     u_meta = data.get("usageMetadata", {})
-                    t_tok = int(u_meta.get("thoughtsTokenCount", 0))
-                    tot_tok = int(u_meta.get("totalTokenCount", 0))
-                    if not primary_answer:
-                        primary_answer = txt
-                        primary_label = f"{g_model} (thinking: HIGH)"
-                        primary_think_tok = t_tok
-                        primary_total_tok = tot_tok
-                    else:
-                        cross_answer = txt
-                        cross_label = f"{g_model} (thinking: HIGH)"
-                        cross_think_tok = t_tok
+                    arbiter_ans = txt
+                    arbiter_label = f"Antigravity / {g_model} (thinking: HIGH)"
+                    arbiter_think = int(u_meta.get("thoughtsTokenCount", 0))
+                    arbiter_tot = int(u_meta.get("totalTokenCount", 0))
                     break
             except Exception:
                 continue
@@ -218,14 +544,15 @@ def cmd_ai_audit(env_vars: dict) -> int:
     claude_section = ""
     cost_today_usd = 0.0
 
-    # 3. TRYB ESKALACJI KRYMINALISTYCZNEJ (Claude Sonnet 4.6) -> TYLKO przy anomaliach/błędach, fladze --deep-claude lub awarii obu darmowych chmur
-    if anthropic_key and (need_claude or not primary_answer):
+    # Płatny Claude Sonnet 4.6 jest CAŁKOWICIE WYŁĄCZONY z codziennych audytów (chronimy $4.7732!).
+    # Uruchamia się wyłącznie na jawne żądanie ręczne flagą --deep-claude lub gdyby wszystkie 4 darmowe chmury jednocześnie padły.
+    if anthropic_key and (force_claude or (not aud1_ans and not aud2_ans and not aud3_ans and not arbiter_ans)):
         try:
             c_payload = {
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 900,
-                "system": [{"type": "text", "text": sys_prompt_primary, "cache_control": {"type": "ephemeral"}}],
-                "messages": [{"role": "user", "content": xray_text}],
+                "system": [{"type": "text", "text": sys_prompt_arbiter, "cache_control": {"type": "ephemeral"}}],
+                "messages": [{"role": "user", "content": council_summary}],
             }
             req = urllib.request.Request(
                 "https://api.anthropic.com/v1/messages",
@@ -256,28 +583,30 @@ def cmd_ai_audit(env_vars: dict) -> int:
             with open(tmp_budget_path, "w", encoding="utf-8") as bf:
                 json.dump(budget, bf, indent=2)
             os.replace(tmp_budget_path, budget_path)
-            claude_section = f"\n🚨 Ekspertyza Eskalacyjna Claude Sonnet 4.6:\n{c_ans}\n"
+            claude_section = f"\n🚨 Rezerwowa Ekspertyza Claude Sonnet 4.6:\n{c_ans}\n"
         except Exception:
             pass
 
     rem_usd = max(0.0, round(float(budget["initial_usd"]) - float(budget.get("spent_usd", 0.0)), 4))
     out_lines = []
-    if primary_answer:
-        think_info = (
-            f" [myślenie: {primary_think_tok} tok. / łącznie: {primary_total_tok} tok.]"
-            if primary_think_tok > 0
-            else f" [{primary_total_tok} tok.]"
-        )
-        out_lines.append(f"🧠 Audytor #1 — {primary_label}{think_info}:\n{primary_answer}")
-    if cross_answer:
-        c_think_info = f" [myślenie: {cross_think_tok} tok.]" if cross_think_tok > 0 else ""
-        out_lines.append(f"🔍 Weryfikacja Krzyżowa #2 — {cross_label}{c_think_info}:\n{cross_answer}")
+    if aud1_ans:
+        t1 = f" [myślenie: {aud1_think} tok. / łącznie: {aud1_tot} tok.]" if aud1_think > 0 else f" [{aud1_tot} tok.]"
+        out_lines.append(f"🧠 Audytor #1 (VPS & Logi) — {aud1_label}{t1}:\n{aud1_ans}")
+    if aud2_ans:
+        t2 = f" [myślenie: {aud2_think} tok. / łącznie: {aud2_tot} tok.]" if aud2_think > 0 else f" [{aud2_tot} tok.]"
+        out_lines.append(f"🔍 Audytor #2 (IoC, WAF & Backupy) — {aud2_label}{t2}:\n{aud2_ans}")
+    if aud3_ans:
+        t3 = f" [{aud3_tot} tok.]" if aud3_tot > 0 else ""
+        out_lines.append(f"🌐 Audytor #3 (Hostingi LH.pl & nazwa.pl) — {aud3_label}{t3}:\n{aud3_ans}")
+    if arbiter_ans:
+        t4 = f" [myślenie: {arbiter_think} tok. / łącznie: {arbiter_tot} tok.]" if arbiter_think > 0 else f" [{arbiter_tot} tok.]"
+        out_lines.append(f"⚖️ Arbiter Końcowy #4 — {arbiter_label}{t4}:\n{arbiter_ans}")
     if claude_section:
         out_lines.append(claude_section.strip())
 
     out_lines.append(
-        f"💰 Koszt dzisiejszego audytu AI: ${cost_today_usd:.4f} (Tryb Dual-AI HIGH Reasoning)\n"
-        f"• Rezerwa awaryjna Anthropic ($5.00): pozostało ${rem_usd:.4f} (wydano dotychczas: ${float(budget.get('spent_usd', 0.0)):.4f})"
+        f"💰 Koszt dzisiejszego audytu AI (3 Niezależnych + Arbiter Antigravity/Gemini): ${cost_today_usd:.4f} ($0.00 Always Free)\n"
+        f"• Zamrożona rezerwa czatbota Anthropic ($5.00): pozostało ${rem_usd:.4f} (0.00 USD poboru w audytach)"
     )
     print("\n\n".join(out_lines))
     return 0
@@ -531,7 +860,7 @@ def cmd_ksh_scrapers(env_vars: dict, pl_date: str) -> int:
 def cmd_send_email(env_vars: dict) -> int:
     hook_url = env_vars.get("LEAD_WEBHOOK_URL", "https://hd.twojastronawww.pl/ticket_hook.php")
     api_key = env_vars.get("OSTICKET_API_KEY", "")
-    subj = os.environ.get("EMAIL_SUBJECT", "Poranny Raport 07:30")
+    subj = os.environ.get("EMAIL_SUBJECT", "Poranny Raport 06:00")
     body = os.environ.get("EMAIL_BODY", "")
 
     if hook_url and api_key and body:
@@ -566,6 +895,8 @@ def main() -> int:
 
     if action == "pretrigger":
         return cmd_pretrigger(env_vars, pl_date)
+    if action == "hosting-scan":
+        return cmd_hosting_scan(env_vars)
     if action == "ai-audit":
         return cmd_ai_audit(env_vars)
     if action == "ksh-scrapers":

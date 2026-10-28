@@ -1142,19 +1142,19 @@ if [[ -f "${ENV_FILE}" ]]; then
             fi
         fi
 
-        # Codzienny Poranny Raport o 07:30 rano (Europe/Warsaw): Scrapery KSH/DancePuls + Audyt ISO 27001 (E-mail + Ntfy.sh)
+        # Codzienny Poranny Raport o 06:00 rano (Europe/Warsaw): Scrapery KSH/DancePuls + Audyt ISO 27001 (VPS + LH.pl Auto-Heal + nazwa.pl Read-Only + Rada 3 AI + Arbiter Antigravity)
         PL_HOUR="$(TZ=Europe/Warsaw date +%H 2>/dev/null || date +%H)"
         PL_MIN="$(TZ=Europe/Warsaw date +%M 2>/dev/null || date +%M)"
         PL_DATE="$(TZ=Europe/Warsaw date +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d)"
         MORNING_STAMP_FILE="/var/tmp/devops-morning-digest.date"
         LAST_MORNING_DATE="$(cat "${MORNING_STAMP_FILE}" 2>/dev/null || echo '')"
 
-        # Pre-trigger o 07:15 (Europe/Warsaw): wywołanie workflow_dispatch dla weekly-report.yml bez czekania na kolejkę crona GitHuba
-        if [[ "${PL_HOUR}" == "07" && $((10#${PL_MIN})) -ge 12 && $((10#${PL_MIN})) -le 22 && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
+        # Pre-trigger o 05:45 (Europe/Warsaw): wywołanie workflow_dispatch dla weekly-report.yml bez czekania na kolejkę crona GitHuba
+        if [[ "${PL_HOUR}" == "05" && $((10#${PL_MIN})) -ge 40 && $((10#${PL_MIN})) -le 52 && "${LAST_MORNING_DATE}" != "${PL_DATE}" ]]; then
             sudo ENV_FILE="${ENV_FILE}" PL_DATE="${PL_DATE}" python3 "${STACK_ROOT}/scripts/morning-digest.py" pretrigger >/dev/null 2>&1 || true
         fi
 
-        if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${LAST_MORNING_DATE}" != "${PL_DATE}" && ( ( "${PL_HOUR}" == "07" && $((10#${PL_MIN})) -ge 28 ) || "${PL_HOUR}" == "08" ) ]]; then
+        if [[ "${FORCE_MORNING_REPORT}" == "true" ]] || [[ "${LAST_MORNING_DATE}" != "${PL_DATE}" && ( ( "${PL_HOUR}" == "05" && $((10#${PL_MIN})) -ge 58 ) || "${PL_HOUR}" == "06" ) ]]; then
             echo "${PL_DATE}" > "${MORNING_STAMP_FILE}" 2>/dev/null || true
             if [[ -f "${STACK_ROOT}/scripts/sync-gsc-keywords.sh" ]]; then
                 bash "${STACK_ROOT}/scripts/sync-gsc-keywords.sh" >/dev/null 2>&1 || true
@@ -1170,21 +1170,41 @@ if [[ -f "${ENV_FILE}" ]]; then
             WA_TOP_TOPIC="$(echo "${AI_METRICS_RAW}" | awk '/^ai_router_question_topics_total\{/ && $NF > 0 {val=$NF; match($0, /topic="[^"]+"/); t=substr($0, RSTART+7, RLENGTH-8); if (val > max) {max=val; best=t}} END {print (best != "" ? best " (" max ")" : "brak")}')"
             WA_TOP_TERM="$(echo "${AI_METRICS_RAW}" | awk '/^web_analytics_search_terms_total\{/ && $NF > 0 {val=$NF; match($0, /term="[^"]+"/); t=substr($0, RSTART+6, RLENGTH-7); if (t != "brak-wyszukiwan" && val > max) {max=val; best=t}} END {print (best != "" ? best " (" max ")" : "brak")}')"
 
+            # Zbieranie skanu hostingów zewnętrznych:
+            # 1) LH.pl (serwer417204.lh.pl) — tryb AUTO-HEAL (automatyczna naprawa wycieków dev/test i uprawnień)
+            # 2) nazwa.pl (slimgroupol.nazwa.pl) — tryb 100% READ-ONLY / ALERT-ONLY (tylko informacja bez modyfikacji plików)
+            HOSTING_SCAN_DATA=""
+            LH_SHORT=""
+            LH_FULL=""
+            NAZWA_SHORT=""
+            NAZWA_FULL=""
+            if command -v python3 >/dev/null 2>&1; then
+                HOSTING_SCAN_DATA="$(sudo ENV_FILE="${ENV_FILE}" python3 "${STACK_ROOT}/scripts/morning-digest.py" hosting-scan 2>/dev/null || true)"
+                LH_SHORT="$(echo "${HOSTING_SCAN_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("lh_short",""))' 2>/dev/null || echo '')"
+                LH_FULL="$(echo "${HOSTING_SCAN_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("lh_full",""))' 2>/dev/null || echo '')"
+                NAZWA_SHORT="$(echo "${HOSTING_SCAN_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("nazwa_short",""))' 2>/dev/null || echo '')"
+                NAZWA_FULL="$(echo "${HOSTING_SCAN_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("nazwa_full",""))' 2>/dev/null || echo '')"
+            fi
+
             # Zbieranie Pełnego Rentgena 24h (Deep X-Ray 24h) z odfiltrowaniem szumu healthchecków
             AI_AUDIT_INSIGHT=""
             if command -v python3 >/dev/null 2>&1; then
                 XRAY_FILE="/var/tmp/devops-xray.txt"
                 {
-                    echo "=== WYNIK DETERMINISTYCZNEGO AUDYTU 5 WARSTW (ISO 27001) ==="
-                    echo "Data: ${PL_DATE} | Wynik: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL (IoC Clean=${IOC_CLEAN:-1}, Krytyczne wyjatki 24h=${LOG_CRITICAL_24H:-0})"
+                    echo "=== WYNIK DETERMINISTYCZNEGO AUDYTU 5 WARSTW VPS (ISO 27001, AUTO-HEAL) ==="
+                    echo "Data: ${PL_DATE} | Wynik VPS: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL (IoC Clean=${IOC_CLEAN:-1}, Krytyczne wyjatki 24h=${LOG_CRITICAL_24H:-0})"
                     echo "Dysk: ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | RAM: ${MEM_INFO} | Bufor OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB"
-                    echo "Backupy (harmonogram 03:00 UTC + szyfrowanie AES-256-CBC do Cloudflare R2): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Weryfikacja integralnosci: Nocny Restore Drill (--verify-only)=${DRILL_OK:-1}, SQLite PRAGMA quick_check=${SQLITE_OK:-1}, MySQL dump=${MYSQL_OK:-1}, tar -tzf=1 (100% OK)"
+                    echo "Backupy (harmonogram 03:00 UTC / 05:00 PL + szyfrowanie AES-256-CBC do Cloudflare R2): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu | Weryfikacja integralnosci: Nocny Restore Drill (--verify-only)=${DRILL_OK:-1}, SQLite PRAGMA quick_check=${SQLITE_OK:-1}, MySQL dump=${MYSQL_OK:-1}, tar -tzf=1 (100% OK)"
                     echo "Architektura Zero Trust & Dostep: Porty 80/443 zamkniete w WAN (UFW + DOCKER-USER DROP), dostep wylacznie przez Cloudflare Zero Trust (Access MFA + Catch-All 404) i tunel SSH Ed25519 (PasswordAuthentication=no, PermitRootLogin=no, Grafana PoLP Viewer)"
                     echo "Ochrona IPS/WAF: Fail2ban zbanowane IP=${F2B_BANNED:-0} (aktywne IP: ${F2B_IP_LIST:-brak}) | WAF L7 zablokowane ataki=${WAF_BLOCKED_TOTAL:-0}"
                     echo "Analityka WWW i AI: Odslony=${WA_PV_TOTAL:-0} | Unikalni=${WA_UV_TOTAL:-0} | Zaangazowani(>=15s)=${WA_ENG_TOTAL:-0} | LCP=${WA_LCP_AVG:-b/d} | Leady=${WA_LEADS_TOTAL:-0} | Top temat AI=${WA_TOP_TOPIC:-brak} | Top fraza=${WA_TOP_TERM:-brak}"
                     if [[ -n "${HINTS_SUMMARY}" ]]; then
-                        echo "Wykryte wskazowki naprawcze: ${HINTS_SUMMARY}"
+                        echo "Wykryte wskazowki naprawcze VPS: ${HINTS_SUMMARY}"
                     fi
+                    echo "=== SKAN HOSTINGU WLASNEGO LH.PL (TRYB AUTO-HEAL) ==="
+                    echo "${LH_FULL:-Brak danych z LH.pl}"
+                    echo "=== SKAN HOSTINGU KLIENTA NAZWA.PL (TRYB 100% READ-ONLY / TYLKO INFORMACJA) ==="
+                    echo "${NAZWA_FULL:-Brak danych z nazwa.pl}"
                     echo "=== ROZMIARY LOGOW KONTENEROW (TOP 5) ==="
                     sudo sh -c 'du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -hr | head -n 5' || true
                     echo "=== USTAWIENIA BEZPIECZENSTWA UPTIME KUMA (kuma.db) ==="
@@ -1212,13 +1232,8 @@ if [[ -f "${ENV_FILE}" ]]; then
                         | grep -vE '(kex_exchange_identification|kex_protocol_error|Unable to negotiate with|maximum authentication attempts exceeded|corrupted MAC on input|Connection reset by peer|banner exchange)' | tail -n 8 || true
                 } > "${XRAY_FILE}" 2>/dev/null
 
-                NEED_CLAUDE="false"
-                if [[ "${FORCE_CLAUDE_ESCALATION}" == "true" || "${FAIL_COUNT}" -gt 0 || "${WARN_COUNT}" -gt 0 || "${IOC_CLEAN:-1}" -eq 0 || "${LOG_CRITICAL_24H:-0}" -gt 0 ]]; then
-                    NEED_CLAUDE="true"
-                fi
-
-                # Poranny Audytor Dual-AI (delegacja do scripts/morning-digest.py ai-audit: "reasoning_effort": "high", "thinkingLevel": "HIGH" + eskalacja Claude Sonnet 4.6)
-                AI_AUDIT_INSIGHT="$(sudo ENV_FILE="${ENV_FILE}" XRAY_FILE="${XRAY_FILE}" NEED_CLAUDE="${NEED_CLAUDE}" python3 "${STACK_ROOT}/scripts/morning-digest.py" ai-audit 2>/dev/null || true)"
+                # Poranna Rada 3 Niezależnych Audytorów AI + Arbiter Końcowy Antigravity ($0.00, ochrona puli $4.77 Anthropic)
+                AI_AUDIT_INSIGHT="$(sudo ENV_FILE="${ENV_FILE}" XRAY_FILE="${XRAY_FILE}" FORCE_CLAUDE_ESCALATION="${FORCE_CLAUDE_ESCALATION}" python3 "${STACK_ROOT}/scripts/morning-digest.py" ai-audit 2>/dev/null || true)"
                 rm -f "${XRAY_FILE}" 2>/dev/null || true
             fi
 
@@ -1232,12 +1247,21 @@ if [[ -f "${ENV_FILE}" ]]; then
             KSH_EV_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("events_cnt",0))' 2>/dev/null || echo '0')"
             KSH_CLS_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("classes_cnt",0))' 2>/dev/null || echo '0')"
 
-            AUDIT_BODY="✅ Audyt (${TOTAL_TESTS} testów): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
-💾 Backupy (03:00): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
+            AUDIT_BODY="✅ Audyt VPS (${TOTAL_TESTS} testów, Auto-Heal): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+${LH_SHORT:-🟢 LH.pl (Auto-Heal): OK}
+${NAZWA_SHORT:-🟢 nazwa.pl (Read-Only): OK}
+💾 Backupy (03:00 UTC / 05:00 PL): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
 🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | SWAP ${SWAP_TOTAL_MB:-0}M | ${MEM_INFO}
 📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}
 🔍 Puls SEO & AI: Top temat AI: ${WA_TOP_TOPIC:-brak} | Top fraza: ${WA_TOP_TERM:-brak}
 🛡️ Ochrona: NTP=${NTP_STATE:-yes} | BBR=${TCP_CC:-bbr} | WAF L7: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
+            if [[ -n "${LH_FULL}" || -n "${NAZWA_FULL}" ]]; then
+                AUDIT_BODY="${AUDIT_BODY}
+
+🌐 SKAN HOSTINGÓW ZEWNĘTRZNYCH (LH.PL AUTO-HEAL + NAZWA.PL READ-ONLY):
+${LH_FULL}
+${NAZWA_FULL}"
+            fi
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
                 AUDIT_BODY="${AUDIT_BODY}
 
@@ -1250,22 +1274,22 @@ ${AUDIT_BODY}"
 
             # 1. Wysyłka powiadomienia Push na Ntfy.sh
             curl -s --max-time 5 \
-                -H "Title: Raport 07:30 (${PL_DATE}): KSH (${KSH_EV_CNT} impr.) + VPS (${OK_COUNT} OK / ${FAIL_COUNT} FAIL)" \
+                -H "Title: Raport 06:00 (${PL_DATE}): VPS (${OK_COUNT} OK) + LH.pl + nazwa.pl + KSH (${KSH_EV_CNT} impr.)" \
                 -H "Priority: default" \
                 -H "Tags: sunny,robot" \
                 -d "${NTFY_BODY}" \
                 "https://ntfy.sh/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
 
-            # 2. Wysyłka pełnego, połączonego raportu (Scrapery KSH + Audyt ISO 27001) na E-mail (poczatek.krzysztof@gmail.com)
-            EMAIL_SUBJECT="☀️ Raport 07:30 (${PL_DATE}): Scrapery KSH (${KSH_EV_CNT} impr. / ${KSH_CLS_CNT} kursów) + Audyt VPS [${OK_COUNT} OK / ${FAIL_COUNT} FAIL]"
-            EMAIL_BODY="☀️ PORANNY RAPORT SYSTEMOWY (07:30) — ${PL_DATE}
-TwojaStronaWWW DevOps Stack & Kato Salsa Hub / DancePuls
+            # 2. Wysyłka pełnego, połączonego raportu (Scrapery KSH + Audyt ISO 27001 VPS/LH/nazwa + 3 AI + Antigravity) na E-mail (poczatek.krzysztof@gmail.com)
+            EMAIL_SUBJECT="☀️ Raport 06:00 (${PL_DATE}): VPS [${OK_COUNT} OK / ${FAIL_COUNT} FAIL] + LH.pl + nazwa.pl + KSH (${KSH_EV_CNT} impr.)"
+            EMAIL_BODY="☀️ PORANNY RAPORT SYSTEMOWY (06:00) — ${PL_DATE}
+TwojaStronaWWW DevOps Stack (VPS + LH.pl Auto-Heal + nazwa.pl Read-Only) & Kato Salsa Hub / DancePuls
 
 🕺 CZĘŚĆ 1: SCRAPERY KATO SALSA HUB & DANCEPULS
 ──────────────────────────────────────────────────────
 ${KSH_FULL:-Brak danych ze scraperów.}
 
-🛡️ CZĘŚĆ 2: AUDYT BEZPIECZEŃSTWA I INFRASTRUKTURY VPS & WWW (ISO 27001)
+🛡️ CZĘŚĆ 2: AUDYT BEZPIECZEŃSTWA VPS, LH.PL (AUTO-HEAL) I NAZWA.PL (READ-ONLY) + RADA 3 AI + ARBITER ANTIGRAVITY
 ──────────────────────────────────────────────────────
 ${AUDIT_BODY}
 
