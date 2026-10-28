@@ -385,21 +385,27 @@ def cmd_ai_audit(env_vars: dict) -> int:
         xray_text = f.read()[:7000]
 
     sys_prompt_auditor1 = (
-        "Jesteś Niezależnym Audytorem #1 (Infrastruktura VPS & Kontenery — ISO 27001). "
-        "Przeanalizuj 24-godzinny Rentgen serwera VPS (Oracle Cloud ARM64), kontenery, dziennik SSH i zasoby. "
-        "Napisz po polsku zwięzłą diagnozę w 2 konkretnych zdaniach."
+        "Jesteś Niezależnym Audytorem #1 (Perspektywa Red Team / Pentester & Eksfiltracja). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń ekspozycję endpointów HTTP, blokady .htaccess (.env/.git/tests), uprawnienia PoLP i czy Auto-Heal musiał coś naprawić.\n"
+        "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), ataki zablokowane przez WAF L7 i Fail2ban oraz logi 12 kontenerów.\n"
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) czy kwarantanna 0000 i zablokowane pliki 0444 nie wykazują śladów reinfekcji."
     )
 
     sys_prompt_auditor2 = (
-        "Jesteś Niezależnym Audytorem #2 (Weryfikacja Krzyżowa IoC, WAF L7, Fail2ban & Kopie Zapasowe R2). "
-        "Zweryfikuj wskaźniki włamań IoC, blokady WAF/Fail2ban oraz spójność backupów (VPS + MySQL/WWW LH.pl). "
-        "Napisz po polsku maksymalnie 2 konkretne zdania."
+        "Jesteś Niezależnym Audytorem #2 (Perspektywa Blue Team / Kryminalistyka IoC & Ciągłość Działania DR). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: zweryfikuj czystość drzewa plików FTPS, brak webshelli/symlinków, stan Auto-Heal oraz świeżość i spójność zrzutów MySQL i archiwum WWW.\n"
+        "- [2. Serwer VPS (Auto-Heal)]: zweryfikuj wskaźniki włamań IoC (Clean=1, 0 wyjątków 24h), kondycję zasobów (RAM/Dysk/SWAP) oraz nocny Restore Drill i SQLite PRAGMA quick_check.\n"
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: zweryfikuj w trybie czystego odczytu 8 kontroli integralności (rozmiary co do bajtu index.php/.htaccess/load.php/wp-config.php i brak nowych plików PHP)."
     )
 
     sys_prompt_auditor3 = (
-        "Jesteś Niezależnym Audytorem #3 (Bezpieczeństwo Hostingów WWW: LH.pl Auto-Heal & nazwa.pl Read-Only). "
-        "Oceń stan bezpieczeństwa własnego hostingu LH.pl (automatyczna naprawa) oraz hostingu klienta nazwa.pl (tryb obserwacji Read-Only). "
-        "Napisz po polsku maksymalnie 2 konkretne zdania."
+        "Jesteś Niezależnym Audytorem #3 (Perspektywa Audytora Zgodności ISO 27001 & Bezpieczeństwa Aplikacji Webowych). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń zgodność konfiguracji wszystkich domen na LH.pl, status 13 testów kontrolnych i skuteczność automatycznej samonaprawy.\n"
+        "- [2. Serwer VPS (Auto-Heal)]: oceń zgodność 78 testów ISO 27001 na VPS, separację sieci Docker oraz ochronę sekretów i kopii zapasowych AES-256-CBC w Cloudflare R2.\n"
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: potwierdź stan obserwacyjny środowiska klienta na nazwa.pl (czy wymagana jest jakakolwiek decyzja właściciela, przy zachowaniu 0 modyfikacji)."
     )
 
     def _call_openai_compat(url: str, key: str, body: dict, timeout: int = 20) -> tuple[str, int, int]:
@@ -490,13 +496,14 @@ def cmd_ai_audit(env_vars: dict) -> int:
         f"[Audytor #3 - {aud3_label or 'brak'}]: {aud3_ans or 'brak'}\n"
     )
     sys_prompt_arbiter = (
-        "Jesteś Głównym Arbitrem Końcowym (Antigravity / Gemini High-Reasoning — Senior DevOps & ISO 27001 Lead Auditor). "
-        "Masz przed sobą 24-godzinny Rentgen 3 środowisk (1: Serwer VPS z Auto-Heal, 2: Własny hosting LH.pl z Auto-Heal, "
-        "3: Hosting klienta nazwa.pl w trybie Read-Only) oraz raporty 3 niezależnych audytorów AI (#1 Groq, #2 Cerebras, #3 Cloudflare). "
-        "Podsumuj po polsku w 3 krótkich, żołnierskich punktach: "
-        "1) Konsensus z 3 audytorów i stan VPS + LH.pl (czy coś wymagało automatycznej naprawy), "
-        "2) Status obserwacyjny hostingu klienta nazwa.pl (czy wykryto jakiekolwiek zmiany wymagające decyzji użytkownika), "
-        "3) Końcowy Werdykt Arbitra (CZYSTO / WYMAGA DECYZJI)."
+        "Jesteś Głównym Arbitrem Końcowym #4 (Antigravity / Gemini High-Reasoning — Senior DevOps & ISO 27001 Lead Auditor). "
+        "Masz przed sobą surowy 24-godzinny Rentgen wszystkich 3 przestrzeni ORAZ 3 niezależne audyty krzyżowe od Audytora #1 (Groq Red Team), "
+        "Audytora #2 (Cerebras Blue Team) i Audytora #3 (Cloudflare ISO 27001), z których każdy badał wszystkie 3 środowiska. "
+        "Zbadaj osobiście wszystkie 3 obszary, skonfrontuj wnioski całej trójki audytorów i wypisz po polsku dokładnie 4 zwięzłe punkty:\n"
+        "1) [1. Twój Hosting LH.pl (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (czy wykryto i automatycznie naprawiono jakiekolwiek zagrożenia),\n"
+        "2) [2. Serwer VPS (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (stan 78 testów, kontenerów, WAF/Fail2ban, IoC i kopii R2),\n"
+        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan kwarantanny 0000 i plików 0444; czy cokolwiek wymaga decyzji użytkownika),\n"
+        "4) [4. Werdykt Końcowy Arbitra (Matryca 3×3)]: CZYSTO / WYMAGA DECYZJI NA NAZWA.PL."
     )
 
     if gemini_key:
@@ -591,21 +598,21 @@ def cmd_ai_audit(env_vars: dict) -> int:
     out_lines = []
     if aud1_ans:
         t1 = f" [myślenie: {aud1_think} tok. / łącznie: {aud1_tot} tok.]" if aud1_think > 0 else f" [{aud1_tot} tok.]"
-        out_lines.append(f"🧠 Audytor #1 (VPS & Logi) — {aud1_label}{t1}:\n{aud1_ans}")
+        out_lines.append(f"🧠 Audytor Krzyżowy #1 (LH.pl + VPS + nazwa.pl | Red Team) — {aud1_label}{t1}:\n{aud1_ans}")
     if aud2_ans:
         t2 = f" [myślenie: {aud2_think} tok. / łącznie: {aud2_tot} tok.]" if aud2_think > 0 else f" [{aud2_tot} tok.]"
-        out_lines.append(f"🔍 Audytor #2 (IoC, WAF & Backupy) — {aud2_label}{t2}:\n{aud2_ans}")
+        out_lines.append(f"🔍 Audytor Krzyżowy #2 (LH.pl + VPS + nazwa.pl | Blue Team & DR) — {aud2_label}{t2}:\n{aud2_ans}")
     if aud3_ans:
         t3 = f" [{aud3_tot} tok.]" if aud3_tot > 0 else ""
-        out_lines.append(f"🌐 Audytor #3 (Hostingi LH.pl & nazwa.pl) — {aud3_label}{t3}:\n{aud3_ans}")
+        out_lines.append(f"🌐 Audytor Krzyżowy #3 (LH.pl + VPS + nazwa.pl | ISO 27001) — {aud3_label}{t3}:\n{aud3_ans}")
     if arbiter_ans:
         t4 = f" [myślenie: {arbiter_think} tok. / łącznie: {arbiter_tot} tok.]" if arbiter_think > 0 else f" [{arbiter_tot} tok.]"
-        out_lines.append(f"⚖️ Arbiter Końcowy #4 — {arbiter_label}{t4}:\n{arbiter_ans}")
+        out_lines.append(f"⚖️ Arbiter Końcowy #4 (Synteza 3×3: LH.pl + VPS + nazwa.pl) — {arbiter_label}{t4}:\n{arbiter_ans}")
     if claude_section:
         out_lines.append(claude_section.strip())
 
     out_lines.append(
-        f"💰 Koszt dzisiejszego audytu AI (3 Niezależnych + Arbiter Antigravity/Gemini): ${cost_today_usd:.4f} ($0.00 Always Free)\n"
+        f"💰 Koszt dzisiejszego audytu krzyżowego 3×3 (3 Niezależnych + Arbiter Antigravity): ${cost_today_usd:.4f} ($0.00 Always Free)\n"
         f"• Zamrożona rezerwa czatbota Anthropic ($5.00): pozostało ${rem_usd:.4f} (0.00 USD poboru w audytach)"
     )
     print("\n\n".join(out_lines))
