@@ -300,27 +300,54 @@ open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
     # -------------------------------------------------------------------------
     now_utc = datetime.datetime.now(datetime.timezone.utc)
 
-    def _check_rdap_domain(dom: str) -> tuple[str, int, str]:
+    rdap_cache_file = "/var/tmp/devops-rdap-cache.json"
+    rdap_cache = {
+        "raricart.pl": {"exp": "2026-11-25", "reg": "LH.pl"},
+        "twojastronawww.pl": {"exp": "2027-01-31", "reg": "LH.pl"},
+        "fuegolingua.pl": {"exp": "2027-02-01", "reg": "LH.pl"},
+        "medycyna-regeneracyjna.pl": {"exp": "2027-04-26", "reg": "nazwa.pl"},
+        "galanonim.pl": {"exp": "2027-05-08", "reg": "home.pl"},
+        "medicusnoster.pl": {"exp": "2027-06-22", "reg": "nazwa.pl"},
+        "katosalsahub.pl": {"exp": "2027-07-06", "reg": "LH.pl"},
+        "krzysztofpoczatek.pl": {"exp": "2027-07-07", "reg": "LH.pl"},
+    }
+    if os.path.exists(rdap_cache_file):
         try:
-            req = urllib.request.Request(f"https://rdap.dns.pl/domain/{dom}", headers={"User-Agent": UA_AUDIT})
-            with urllib.request.urlopen(req, timeout=6) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            evs = {e.get("eventAction"): (e.get("eventDate") or "")[:10] for e in d.get("events", [])}
-            exp = evs.get("expiration", "?")
-            days = 9999
-            if exp != "?":
+            with open(rdap_cache_file, "r", encoding="utf-8") as cf:
+                rdap_cache.update(json.load(cf))
+        except Exception:
+            pass
+
+    def _check_rdap_domain(dom: str) -> tuple[str, int, str]:
+        cached = rdap_cache.get(dom, {})
+        exp = cached.get("exp", "?")
+        reg_name = cached.get("reg", "?")
+        last_ts = float(cached.get("ts", 0))
+        if time.time() - last_ts > 43200:
+            try:
+                req = urllib.request.Request(f"https://rdap.dns.pl/domain/{dom}", headers={"User-Agent": UA_AUDIT})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    d = json.loads(r.read().decode("utf-8"))
+                evs = {e.get("eventAction"): (e.get("eventDate") or "")[:10] for e in d.get("events", [])}
+                if evs.get("expiration"):
+                    exp = evs["expiration"]
+                for ent in d.get("entities", []):
+                    vcard = ent.get("vcardArray", [None, []])[1]
+                    for item in vcard:
+                        if item[0] == "fn":
+                            reg_name = item[3].split()[0]
+                rdap_cache[dom] = {"exp": exp, "reg": reg_name, "ts": time.time()}
+            except Exception:
+                pass
+        days = 9999
+        if exp != "?":
+            try:
                 dt = datetime.datetime.strptime(exp, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
                 days = (dt - now_utc).days
-            reg_name = "?"
-            for ent in d.get("entities", []):
-                vcard = ent.get("vcardArray", [None, []])[1]
-                for item in vcard:
-                    if item[0] == "fn":
-                        reg_name = item[3].split()[0]
-            flag = "⚠️ PILNE OPŁACENIE! " if days <= 35 else ""
-            return f"{flag}{dom}: do {exp} ({days} dni, {reg_name})", days, exp
-        except Exception:
-            return f"{dom}: b/d", 9999, "?"
+            except Exception:
+                pass
+        flag = "⚠️ PILNE OPŁACENIE! " if days <= 35 else ""
+        return f"{flag}{dom}: do {exp} ({days} dni, {reg_name})", days, exp
 
     def _check_ssl_days(host: str) -> str:
         try:
@@ -479,6 +506,11 @@ quit
     nz_domains = ["medycyna-regeneracyjna.pl", "medicusnoster.pl"]
     nz_dom_str = " | ".join([_check_rdap_domain(d)[0] for d in nz_domains])
     nz_ssl_str = " | ".join([_check_ssl_days(d) for d in nz_domains])
+    try:
+        with open(rdap_cache_file, "w", encoding="utf-8") as cf:
+            json.dump(rdap_cache, cf, ensure_ascii=False)
+    except Exception:
+        pass
     nz_ops_footer = (
         f"\n  • Terminy wygaśnięcia domen klienta (NASK RDAP): {nz_dom_str}"
         f"\n  • Ważność certyfikatów SSL/TLS klienta: {nz_ssl_str}"
@@ -575,13 +607,13 @@ def cmd_ai_audit(env_vars: dict) -> int:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         choice = (data.get("choices") or [{}])[0]
-        if choice.get("finish_reason") == "length":
-            return "", 0, 0
         msg = choice.get("message", {})
         txt = (msg.get("content") or "").strip()
         if "<think>" in txt and "</think>" in txt:
             txt = txt.split("</think>", 1)[1].strip()
         txt = txt.replace("**", "").strip()
+        if choice.get("finish_reason") == "length" and len(txt) < 80:
+            return "", 0, 0
         usage = data.get("usage") or {}
         tot_tok = int(usage.get("total_tokens", 0))
         think_tok = int((usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0))
@@ -634,9 +666,9 @@ def cmd_ai_audit(env_vars: dict) -> int:
                 "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
                 "messages": [{"role": "system", "content": sys_prompt_auditor3}, {"role": "user", "content": xray_text}],
                 "temperature": 0.2,
-                "max_tokens": 1024,
+                "max_tokens": 2048,
             }
-            txt, _, tot = _call_openai_compat(cf_url, cf_token, cf_body, timeout=18)
+            txt, _, tot = _call_openai_compat(cf_url, cf_token, cf_body, timeout=25)
             if txt:
                 aud3_ans = txt
                 aud3_label = "Cloudflare Llama-3.3-70B-FP8"
@@ -666,17 +698,18 @@ def cmd_ai_audit(env_vars: dict) -> int:
     )
 
     if gemini_key:
-        for g_model in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.8-flash"):
+        for g_model in ("gemini-3.5-flash-lite", "gemini-3.5-flash", "gemma-4-31b-it", "gemini-3.7-flash", "gemini-3.8-flash"):
             try:
                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{g_model}:generateContent?key={gemini_key}"
+                gen_cfg = {
+                    "temperature": 0.2,
+                    "maxOutputTokens": 4096,
+                    **({"thinkingConfig": {"thinkingLevel": "HIGH"}} if "gemini-3" in g_model else {}),
+                }
                 g_body = {
                     "systemInstruction": {"parts": [{"text": sys_prompt_arbiter}]},
                     "contents": [{"role": "user", "parts": [{"text": council_summary}]}],
-                    "generationConfig": {
-                        "temperature": 0.2,
-                        "maxOutputTokens": 4096,
-                        "thinkingConfig": {"thinkingLevel": "HIGH"},
-                    },
+                    "generationConfig": gen_cfg,
                 }
                 req = urllib.request.Request(
                     g_url,
@@ -684,7 +717,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
                     headers={"Content-Type": "application/json", "User-Agent": UA_AUDIT},
                     method="POST",
                 )
-                with urllib.request.urlopen(req, timeout=22) as resp:
+                with urllib.request.urlopen(req, timeout=32) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts")) or []
                 out_chunks = [p.get("text", "").strip() for p in parts if not p.get("thought") and p.get("text")]
