@@ -94,38 +94,44 @@ def _http_status(url: str, timeout: int = 6) -> int:
 
 
 def _run_lftp_script(lftp_commands: str, timeout_sec: int = 25) -> str:
-    cmd_file = ""
+    """
+    Wykonuje skrypt lftp przekazując komendy wyłącznie przez potok pamięci RAM (stdin),
+    dzięki czemu żadne hasło FTPS nigdy nie trafia na dysk (/tmp) ani do listy procesów (ps aux).
+    """
     try:
-        fd, cmd_file = tempfile.mkstemp(prefix="lftp_audit_", suffix=".cmd")
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(lftp_commands)
         proc = subprocess.run(
-            [
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{cmd_file}:/cmd:ro",
-                "alpine:latest",
-                "sh",
-                "-c",
-                "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp -f /cmd",
-            ],
+            ["lftp"],
+            input=lftp_commands,
             capture_output=True,
             text=True,
             timeout=timeout_sec,
             check=False,
         )
         return (proc.stdout or "") + "\n" + (proc.stderr or "")
+    except FileNotFoundError:
+        try:
+            proc = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-i",
+                    "alpine:latest",
+                    "sh",
+                    "-c",
+                    "apk add --no-cache lftp ca-certificates >/dev/null 2>&1 && lftp",
+                ],
+                input=lftp_commands,
+                capture_output=True,
+                text=True,
+                timeout=timeout_sec,
+                check=False,
+            )
+            return (proc.stdout or "") + "\n" + (proc.stderr or "")
+        except Exception as exc:
+            return f"ERROR: {exc}"
     except Exception as exc:
         return f"ERROR: {exc}"
-    finally:
-        if cmd_file and os.path.exists(cmd_file):
-            try:
-                os.remove(cmd_file)
-            except Exception:
-                pass
 
 
 def cmd_hosting_scan(env_vars: dict) -> int:
@@ -266,10 +272,10 @@ open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
     nz_checks_ok = 0
 
     if nz_srv and nz_usr and nz_pwd:
-        # Wyłącznie komendy odczytu (cls -la) — ZERO modyfikacji na nazwa.pl!
+        # Wyłącznie komendy odczytu (cls -la) z pełną weryfikacją certyfikatu TLS — ZERO modyfikacji na nazwa.pl!
         lftp_nz_readonly = f"""set ftp:ssl-allow true
 set ftp:ssl-protect-data true
-set ssl:verify-certificate no
+set ssl:verify-certificate yes
 set net:timeout 10
 set net:max-retries 2
 open -p 21 -u "{nz_usr}","{nz_pwd}" {nz_srv}
@@ -324,6 +330,22 @@ quit
                         if any(bad in fname for bad in ("PJcpMFsD8B", "adminfuns", "wp-conffq", ".private", "__2DUAN")):
                             nz_alerts.append(f"wykryto sygnaturę infekcji w {domain_label}: {fname}")
                     nz_checks_ok += 1
+
+            # 4. Nieinwazyjna kontrola Read-Only wyrenderowanego HTML-a przez HTTPS (wykrywanie wstrzyknięć z bazy MySQL WP)
+            for nz_url in ("https://medycyna-regeneracyjna.pl/", "https://medicusnoster.pl/"):
+                try:
+                    req = urllib.request.Request(nz_url, headers={"User-Agent": UA_AUDIT}, method="GET")
+                    with urllib.request.urlopen(req, timeout=8) as resp:
+                        html_body = resp.read(250_000).decode("utf-8", errors="ignore")
+                        if resp.status == 200 and not any(
+                            sig in html_body
+                            for sig in ("eval(function(p,a,c,k", "document.write(unescape(", "fromCharCode(104,116,116,112")
+                        ):
+                            nz_checks_ok += 1
+                        else:
+                            nz_alerts.append(f"podejrzana zawartość HTML lub status na {nz_url}")
+                except Exception:
+                    nz_alerts.append(f"błąd odczytu HTTPS dla {nz_url}")
     else:
         nz_alerts.append("brak skonfigurowanych danych NAZWA_FTP_* w .env")
 
@@ -337,8 +359,8 @@ quit
         nz_status_short = f"👁️ nazwa.pl (Read-Only): CZYSTO ({nz_checks_ok}/{nz_checks_ok} OK)"
         nz_status_full = (
             f"👁️ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
-            f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli integralności OK: kwarantanna 0000 nienaruszona, "
-            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP). Nic nie ruszano."
+            f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli FTPS TLS + DOM HTTPS OK: kwarantanna 0000 nienaruszona, "
+            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP, czysty kod HTML). Nic nie ruszano."
         )
 
     print(
