@@ -16,6 +16,7 @@ import datetime
 import json
 import os
 import re
+import socket
 import ssl
 import subprocess
 import sys
@@ -153,6 +154,7 @@ def cmd_hosting_scan(env_vars: dict) -> int:
     lh_healed = []
     lh_issues = []
     lh_ok_checks = 0
+    lh_telemetry_summary = ""
 
     if lh_srv and lh_usr and lh_pwd:
         lftp_lh_check = f"""set ftp:ssl-allow true
@@ -173,10 +175,51 @@ echo "===LH_KSH==="
 cls -la /public_html/katosalsahub.pl
 echo "===LH_KP==="
 cls -la /public_html/krzysztofpoczatek.pl
+echo "===LH_TELEMETRY_START==="
+cat /backups/lh-telemetry.json
+echo "===LH_TELEMETRY_END==="
 quit
 """
         lh_out = _run_lftp_script(lftp_lh_check, timeout_sec=25)
         heal_cmds = []
+
+        # Odczyt telemetrii dysku LH.pl, skrzynek pocztowych IMAP i ticketów osTicket
+        if "===LH_TELEMETRY_START===" in lh_out and "===LH_TELEMETRY_END===" in lh_out:
+            raw_tel = lh_out.split("===LH_TELEMETRY_START===", 1)[1].split("===LH_TELEMETRY_END===", 1)[0].strip()
+            try:
+                tel = json.loads(raw_tel)
+                q = tel.get("quota") or {}
+                used_mb = q.get("used_mb", 0)
+                lim_mb = q.get("limit_mb", 4000)
+                q_pct = q.get("pct", 0.0)
+                q_files = q.get("files", 0)
+                if q_pct >= 85.0:
+                    lh_issues.append(f"dysk LH.pl zapełniony w {q_pct}% ({used_mb}/{lim_mb} MB)")
+
+                dirs_mb = tel.get("dirs_mb") or {}
+                top_dirs = ", ".join([f"{k}: {v}M" for k, v in list(dirs_mb.items())[:5]])
+
+                mb_parts = []
+                for mb in tel.get("mailboxes") or []:
+                    em = mb.get("email", "?")
+                    u_m = mb.get("used_mb", 0)
+                    l_m = mb.get("limit_mb", 0)
+                    p_m = mb.get("pct", 0.0)
+                    msgs = mb.get("messages", 0)
+                    unseen = mb.get("unseen", 0)
+                    if p_m >= 80.0:
+                        lh_issues.append(f"skrzynka {em} zapełniona w {p_m}% ({u_m}/{l_m} MB)")
+                    mb_parts.append(f"{em}: {u_m}/{l_m} MB ({p_m}%, {msgs} wiad. / {unseen} nieprzecz.)")
+
+                open_t = tel.get("osticket_open_tickets", 0)
+                lh_telemetry_summary = (
+                    f"\n  • Dysk konta LH.pl: {used_mb} MB / {lim_mb} MB ({q_pct}%, {q_files} plików) | Rozkład: {top_dirs}"
+                    f"\n  • Skrzynki pocztowe IMAP (LH.pl): {' | '.join(mb_parts) if mb_parts else 'brak danych'}"
+                    f"\n  • Helpdesk osTicket (hd.twojastronawww.pl): {open_t} otwartych zgłoszeń"
+                )
+                lh_ok_checks += 1
+            except Exception:
+                pass
 
         # Sprawdzenie czy w /public_html nie pojawiły się niebezpieczne symlinki lub artefakty deweloperskie
         forbidden_lh_targets = [
@@ -252,15 +295,97 @@ open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
         else:
             lh_issues.append(f"UWAGA: {u} nie jest zablokowany (HTTP {st})")
 
+    # -------------------------------------------------------------------------
+    # DODATKOWY SKAN OPERACYJNY: TERMINY OPŁACENIA DOMEN (NASK RDAP), WAŻNOŚĆ SSL I CZARNE LISTY RBL
+    # -------------------------------------------------------------------------
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+
+    def _check_rdap_domain(dom: str) -> tuple[str, int, str]:
+        try:
+            req = urllib.request.Request(f"https://rdap.dns.pl/domain/{dom}", headers={"User-Agent": UA_AUDIT})
+            with urllib.request.urlopen(req, timeout=6) as r:
+                d = json.loads(r.read().decode("utf-8"))
+            evs = {e.get("eventAction"): (e.get("eventDate") or "")[:10] for e in d.get("events", [])}
+            exp = evs.get("expiration", "?")
+            days = 9999
+            if exp != "?":
+                dt = datetime.datetime.strptime(exp, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+                days = (dt - now_utc).days
+            reg_name = "?"
+            for ent in d.get("entities", []):
+                vcard = ent.get("vcardArray", [None, []])[1]
+                for item in vcard:
+                    if item[0] == "fn":
+                        reg_name = item[3].split()[0]
+            flag = "⚠️ PILNE OPŁACENIE! " if days <= 35 else ""
+            return f"{flag}{dom}: do {exp} ({days} dni, {reg_name})", days, exp
+        except Exception:
+            return f"{dom}: b/d", 9999, "?"
+
+    def _check_ssl_days(host: str) -> str:
+        try:
+            ctx = ssl.create_default_context()
+            with socket.create_connection((host, 443), timeout=5) as sock:
+                with ctx.wrap_socket(sock, server_hostname=host) as ssock:
+                    cert = ssock.getpeercert()
+            not_after = cert.get("notAfter", "")
+            if not_after:
+                dt = datetime.datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=datetime.timezone.utc)
+                days = (dt - now_utc).days
+                flag = "⚠️ " if days <= 14 else ""
+                return f"{flag}{host}: {days} dni (do {dt.strftime('%Y-%m-%d')})"
+        except ssl.SSLCertVerificationError:
+            return f"⚠️ {host}: brak dedykowanego SSL (domyślny cert hostingu)"
+        except Exception:
+            pass
+        return f"{host}: b/d"
+
+    def _check_rbl_ip(ip_addr: str) -> str:
+        rev = ".".join(reversed(ip_addr.split(".")))
+        listed = []
+        for rbl in ("zen.spamhaus.org", "bl.spamcop.net", "b.barracudacentral.org"):
+            try:
+                res = socket.gethostbyname(f"{rev}.{rbl}")
+                if res.startswith("127.0.0.") and not res.endswith(".255"):
+                    listed.append(rbl)
+            except Exception:
+                pass
+        return f"🚨 NA CZARNEJ LIŚCIE: {', '.join(listed)}" if listed else "CZYSTE (0/3 RBL)"
+
+    own_domains = ["raricart.pl", "twojastronawww.pl", "fuegolingua.pl", "galanonim.pl", "katosalsahub.pl", "krzysztofpoczatek.pl"]
+    own_dom_results = [_check_rdap_domain(d) for d in own_domains]
+    own_dom_results.sort(key=lambda x: x[1])
+    own_dom_str = " | ".join([x[0] for x in own_dom_results])
+    expiring_soon = [x[0] for x in own_dom_results if x[1] <= 35]
+
+    own_ssl_hosts = ["twojastronawww.pl", "katosalsahub.pl", "fuegolingua.pl", "krzysztofpoczatek.pl", "hd.twojastronawww.pl", "raricart.pl", "galanonim.pl"]
+    own_ssl_str = " | ".join([_check_ssl_days(h) for h in own_ssl_hosts])
+
+    try:
+        lh_mail_ip = socket.gethostbyname("mail-serwer417204.lh.pl")
+        lh_rbl_str = f"mail-serwer417204.lh.pl ({lh_mail_ip}): {_check_rbl_ip(lh_mail_ip)}"
+    except Exception:
+        lh_rbl_str = "mail-serwer417204.lh.pl: b/d"
+    vps_rbl_str = f"VPS (89.168.62.31): {_check_rbl_ip('89.168.62.31')}"
+
+    lh_ops_footer = (
+        f"{lh_telemetry_summary}"
+        f"\n  • Terminy wygaśnięcia / opłacenia domen (NASK RDAP): {own_dom_str}"
+        f"\n  • Ważność certyfikatów SSL/TLS: {own_ssl_str}"
+        f"\n  • Reputacja IP / Antyspam RBL: {lh_rbl_str} | {vps_rbl_str}"
+    )
+
+    dom_warn_suffix = f" [⚠️ DOMENA DO OPŁACENIA: {expiring_soon[0]}]" if expiring_soon else ""
+
     if lh_issues:
-        lh_status_short = f"⚠️ LH.pl: {len(lh_issues)} ostrz. (Auto-Heal: {len(lh_healed)})"
-        lh_status_full = f"⚠️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): wykryto {len(lh_issues)} uwag ({', '.join(lh_issues)}) | Automatycznie naprawiono: {len(lh_healed)} ({', '.join(lh_healed) if lh_healed else 'brak'})"
+        lh_status_short = f"⚠️ LH.pl: {len(lh_issues)} ostrz. (Auto-Heal: {len(lh_healed)}){dom_warn_suffix}"
+        lh_status_full = f"⚠️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): wykryto {len(lh_issues)} uwag ({', '.join(lh_issues)}) | Automatycznie naprawiono: {len(lh_healed)} ({', '.join(lh_healed) if lh_healed else 'brak'}){lh_ops_footer}"
     elif lh_healed:
-        lh_status_short = f"🛡️ LH.pl: OK (Auto-Heal naprawił {len(lh_healed)} poz.)"
-        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS OK) — automatycznie oczyszczono: {', '.join(lh_healed)}"
+        lh_status_short = f"🛡️ LH.pl: OK (Auto-Heal naprawił {len(lh_healed)} poz.){dom_warn_suffix}"
+        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS OK) — automatycznie oczyszczono: {', '.join(lh_healed)}{lh_ops_footer}"
     else:
-        lh_status_short = f"🛡️ LH.pl: CZYSTO ({lh_ok_checks}/{lh_ok_checks} OK, Auto-Heal czuwa)"
-        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS/.htaccess/PoLP OK, 0 webshelli, 0 wycieków)"
+        lh_status_short = f"🛡️ LH.pl: CZYSTO ({lh_ok_checks}/{lh_ok_checks} OK, Auto-Heal czuwa){dom_warn_suffix}"
+        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS/.htaccess/PoLP OK, 0 webshelli, 0 wycieków){lh_ops_footer}"
 
     # -------------------------------------------------------------------------
     # CZĘŚĆ B: HOSTING KLIENTA NAZWA.PL (TRYB 100% READ-ONLY — TYLKO INFORMACJA!)
@@ -351,18 +476,26 @@ quit
     else:
         nz_alerts.append("brak skonfigurowanych danych NAZWA_FTP_* w .env")
 
+    nz_domains = ["medycyna-regeneracyjna.pl", "medicusnoster.pl"]
+    nz_dom_str = " | ".join([_check_rdap_domain(d)[0] for d in nz_domains])
+    nz_ssl_str = " | ".join([_check_ssl_days(d) for d in nz_domains])
+    nz_ops_footer = (
+        f"\n  • Terminy wygaśnięcia domen klienta (NASK RDAP): {nz_dom_str}"
+        f"\n  • Ważność certyfikatów SSL/TLS klienta: {nz_ssl_str}"
+    )
+
     if nz_alerts:
         nz_status_short = f"🚨 nazwa.pl (Tylko Raport): WYKRYTO {len(nz_alerts)} ANOMALII!"
         nz_status_full = (
             f"🚨 Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
-            f"Wykryto {len(nz_alerts)} anomalii: {'; '.join(nz_alerts)}. Czekam na Twoją decyzję przed podjęciem działań!"
+            f"Wykryto {len(nz_alerts)} anomalii: {'; '.join(nz_alerts)}. Czekam na Twoją decyzję przed podjęciem działań!{nz_ops_footer}"
         )
     else:
         nz_status_short = f"👁️ nazwa.pl (Read-Only): CZYSTO ({nz_checks_ok}/{nz_checks_ok} OK)"
         nz_status_full = (
             f"👁️ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
             f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli FTPS TLS + DOM HTTPS OK: kwarantanna 0000 nienaruszona, "
-            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP, czysty kod HTML). Nic nie ruszano."
+            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP, czysty kod HTML). Nic nie ruszano.{nz_ops_footer}"
         )
 
     print(
@@ -409,27 +542,27 @@ def cmd_ai_audit(env_vars: dict) -> int:
         xray_text = f.read()[:7000]
 
     sys_prompt_auditor1 = (
-        "Jesteś Niezależnym Audytorem #1 (Perspektywa Red Team / Pentester & Eksfiltracja). "
-        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
-        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń ekspozycję endpointów HTTP, blokady .htaccess (.env/.git/tests), uprawnienia PoLP i czy Auto-Heal musiał coś naprawić.\n"
-        "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), ataki zablokowane przez WAF L7 i Fail2ban oraz logi 12 kontenerów.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) czy kwarantanna 0000 i zablokowane pliki 0444 nie wykazują śladów reinfekcji."
+        "Jesteś Niezależnym Audytorem #1 (Perspektywa Red Team / Pentester, Certyfikaty SSL & Reputacja RBL). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń blokady .htaccess, uprawnienia PoLP, Auto-Heal, ważność certyfikatów SSL, reputację antyspamową RBL oraz terminy wygaśnięcia domen (wskaż jeśli domena wymaga opłacenia <35 dni).\n"
+        "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), blokady WAF L7 i Fail2ban, reputację RBL IP VPS oraz logi 12 kontenerów.\n"
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) kwarantannę 0000, pliki 0444, czysty kod HTML oraz ważność domen i certyfikatów SSL klienta."
     )
 
     sys_prompt_auditor2 = (
-        "Jesteś Niezależnym Audytorem #2 (Perspektywa Blue Team / Kryminalistyka IoC & Ciągłość Działania DR). "
-        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
-        "- [1. Twój Hosting LH.pl (Auto-Heal)]: zweryfikuj czystość drzewa plików FTPS, brak webshelli/symlinków, stan Auto-Heal oraz świeżość i spójność zrzutów MySQL i archiwum WWW.\n"
+        "Jesteś Niezależnym Audytorem #2 (Perspektywa Blue Team / Kryminalistyka IoC, Zasoby, Skrzynki IMAP & Ciągłość DR). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: zweryfikuj czystość FTPS, zajętość dysku konta (MB/%), zajętość 3 skrzynek pocztowych IMAP i nieprzeczytane maile, otwarte tickety osTicket oraz terminy odnowienia domen NASK RDAP.\n"
         "- [2. Serwer VPS (Auto-Heal)]: zweryfikuj wskaźniki włamań IoC (Clean=1, 0 wyjątków 24h), kondycję zasobów (RAM/Dysk/SWAP) oraz nocny Restore Drill i SQLite PRAGMA quick_check.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: zweryfikuj w trybie czystego odczytu 8 kontroli integralności (rozmiary co do bajtu index.php/.htaccess/load.php/wp-config.php i brak nowych plików PHP)."
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: zweryfikuj w trybie czystego odczytu 10/10 kontroli integralności (rozmiary co do bajtu index.php/.htaccess/load.php/wp-config.php, brak nowych plików PHP, czysty DOM HTTPS oraz terminy domen)."
     )
 
     sys_prompt_auditor3 = (
-        "Jesteś Niezależnym Audytorem #3 (Perspektywa Audytora Zgodności ISO 27001 & Bezpieczeństwa Aplikacji Webowych). "
-        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1 zdaniu na obszar):\n"
-        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń zgodność konfiguracji wszystkich domen na LH.pl, status 13 testów kontrolnych i skuteczność automatycznej samonaprawy.\n"
+        "Jesteś Niezależnym Audytorem #3 (Perspektywa Audytora Zgodności ISO 27001, SLA, Domeny & Poczta). "
+        "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
+        "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń zgodność konfiguracji domen, status testów kontrolnych, higienę skrzynek pocztowych IMAP/osTicket oraz pilne terminy płatności za domeny (NASK RDAP) i SSL.\n"
         "- [2. Serwer VPS (Auto-Heal)]: oceń zgodność 78 testów ISO 27001 na VPS, separację sieci Docker oraz ochronę sekretów i kopii zapasowych AES-256-CBC w Cloudflare R2.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: potwierdź stan obserwacyjny środowiska klienta na nazwa.pl (czy wymagana jest jakakolwiek decyzja właściciela, przy zachowaniu 0 modyfikacji)."
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: potwierdź stan obserwacyjny środowiska klienta na nazwa.pl (10/10 kontroli, stan SSL i domen oraz czy wymagana jest jakakolwiek decyzja właściciela przy zachowaniu 0 modyfikacji)."
     )
 
     def _call_openai_compat(url: str, key: str, body: dict, timeout: int = 20) -> tuple[str, int, int]:
@@ -526,10 +659,10 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Masz przed sobą surowy 24-godzinny Rentgen wszystkich 3 przestrzeni ORAZ 3 niezależne audyty krzyżowe od Audytora #1 (Groq Red Team), "
         "Audytora #2 (Cerebras Blue Team) i Audytora #3 (Cloudflare ISO 27001), z których każdy badał wszystkie 3 środowiska. "
         "Zbadaj osobiście wszystkie 3 obszary, skonfrontuj wnioski całej trójki audytorów i wypisz po polsku dokładnie 4 zwięzłe punkty:\n"
-        "1) [1. Twój Hosting LH.pl (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (czy wykryto i automatycznie naprawiono jakiekolwiek zagrożenia),\n"
-        "2) [2. Serwer VPS (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (stan 78 testów, kontenerów, WAF/Fail2ban, IoC i kopii R2),\n"
-        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan kwarantanny 0000 i plików 0444; czy cokolwiek wymaga decyzji użytkownika),\n"
-        "4) [4. Werdykt Końcowy Arbitra (Matryca 3×3)]: CZYSTO / WYMAGA DECYZJI NA NAZWA.PL."
+        "1) [1. Twój Hosting LH.pl (Auto-Heal, Poczta & Domeny)]: Twoja weryfikacja + konsensus 3 audytorów (bezpieczeństwo, zajętość dysku i skrzynek pocztowych IMAP, tickety osTicket, RBL oraz zbliżające się terminy opłacenia domen/SSL),\n"
+        "2) [2. Serwer VPS (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (stan 78 testów, kontenerów, WAF/Fail2ban, IoC, RBL i kopii R2),\n"
+        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan 10/10 kontroli kwarantanny 0000, plików 0444, DOM HTTPS oraz stan SSL/domen klienta),\n"
+        "4) [4. Werdykt Końcowy Arbitra (Matryca 3×3)]: CZYSTO / PRZYPOMNIENIE O PŁATNOŚCI DOMENY / WYMAGA DECYZJI."
     )
 
     if gemini_key:
