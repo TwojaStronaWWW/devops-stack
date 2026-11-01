@@ -1221,7 +1221,7 @@ if [[ -f "${ENV_FILE}" ]]; then
                             echo "--- [${cname}] ANOMALIE 24H ---"
                             echo "${anom_24h}"
                         else
-                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|referenced_memory|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
+                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|referenced_memory|Found node without cache information|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
                             echo "--- [${cname}] 24h: 0 bledow/ostrzezen (ostatni wpis: ${last_line})"
                         fi
                     done

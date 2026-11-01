@@ -439,7 +439,7 @@ cls -la /medycynaregeneracyjna/medycyna-regeneracyjna/index.php /medycynaregener
 echo "===NZ_MEDREG_DIR==="
 cls -la /medycynaregeneracyjna/medycyna-regeneracyjna
 echo "===NZ_MEDNOSTER_FILES==="
-cls -la /medicusnoster/index.php /medicusnoster/wp-config.php
+cls -la /medicusnoster/index.php /medicusnoster/.htaccess /medicusnoster/wp-config.php
 echo "===NZ_MEDNOSTER_DIR==="
 cls -la /medicusnoster
 quit
@@ -461,6 +461,7 @@ quit
                 (r"^-r--r--r--\s+\S+\s+\S+\s+843\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/\.htaccess$", "medycyna-regeneracyjna/.htaccess (843 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+56510\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/wp-includes\/load\.php$", "medycyna-regeneracyjna/wp-includes/load.php (56510 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medicusnoster\/index\.php$", "medicusnoster/index.php (405 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+397\s+.*\/medicusnoster\/\.htaccess$", "medicusnoster/.htaccess (397 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+3765\s+.*\/medicusnoster\/wp-config\.php$", "medicusnoster/wp-config.php (3765 B, 0444)"),
             ]
             for pat, desc in expected_files:
@@ -485,7 +486,7 @@ quit
                     nz_checks_ok += 1
 
             # 4. Nieinwazyjna kontrola Read-Only wyrenderowanego HTML-a przez HTTPS (wykrywanie wstrzyknięć z bazy MySQL WP)
-            for nz_url, verify_ssl in (("https://medycyna-regeneracyjna.pl/", True), ("https://medicusnoster.pl/", False)):
+            for nz_url, verify_ssl in (("https://medycyna-regeneracyjna.pl/", True), ("https://medicusnoster.pl/", True)):
                 try:
                     req = urllib.request.Request(nz_url, headers={"User-Agent": UA_AUDIT}, method="GET")
                     ssl_ctx = ssl.create_default_context() if verify_ssl else ssl._create_unverified_context()

@@ -38,6 +38,7 @@ dist/
 # Runtime data & Docker volumes persisted locally
 /data/
 /volumes/
+/sites/
 logs/
 *.log
 *.prom
