@@ -183,7 +183,7 @@ function aiDispatchLeadNotifications(
                 curl_setopt_array($chLead, $leadCurlOpts);
                 @curl_exec($chLead);
                 $leadHttpCode = (int)curl_getinfo($chLead, CURLINFO_HTTP_CODE);
-                curl_close($chLead);
+                unset($chLead);
                 if ($leadHttpCode >= 200 && $leadHttpCode < 300) {
                     $ntfyDelivered = true;
                     break;
@@ -257,7 +257,7 @@ function aiDispatchLeadNotifications(
             }
             curl_setopt_array($chNtfy, $hotCurlOpts);
             @curl_exec($chNtfy);
-            curl_close($chNtfy);
+            unset($chNtfy);
         }
 
         if ($leadWebhookUrl !== '' && filter_var($leadWebhookUrl, FILTER_VALIDATE_URL)) {

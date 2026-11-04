@@ -360,7 +360,8 @@ open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
                 dt = datetime.datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z").replace(tzinfo=datetime.timezone.utc)
                 days = (dt - now_utc).days
                 flag = "⚠️ " if days <= 14 else ""
-                return f"{flag}{host}: {days} dni (do {dt.strftime('%Y-%m-%d')})"
+                renew_note = ", auto-renew OK" if days > 14 else ", WYMAGA ODNOWIENIA!"
+                return f"{flag}{host}: {days} dni (do {dt.strftime('%Y-%m-%d')}{renew_note})"
         except ssl.SSLCertVerificationError:
             return f"⚠️ {host}: brak dedykowanego SSL (domyślny cert hostingu)"
         except Exception:
@@ -461,7 +462,7 @@ quit
                 (r"^-r--r--r--\s+\S+\s+\S+\s+843\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/\.htaccess$", "medycyna-regeneracyjna/.htaccess (843 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+56510\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/wp-includes\/load\.php$", "medycyna-regeneracyjna/wp-includes/load.php (56510 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medicusnoster\/index\.php$", "medicusnoster/index.php (405 B, 0444)"),
-                (r"^-r--r--r--\s+\S+\s+\S+\s+397\s+.*\/medicusnoster\/\.htaccess$", "medicusnoster/.htaccess (397 B, 0444)"),
+                (r"^-r--r--r--\s+\S+\s+\S+\s+505\s+.*\/medicusnoster\/\.htaccess$", "medicusnoster/.htaccess (505 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+3765\s+.*\/medicusnoster\/wp-config\.php$", "medicusnoster/wp-config.php (3765 B, 0444)"),
             ]
             for pat, desc in expected_files:

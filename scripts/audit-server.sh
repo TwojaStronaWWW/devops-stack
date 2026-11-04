@@ -531,6 +531,16 @@ APT_PENDING_COUNT="$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)"
 APT_PENDING_COUNT="${APT_PENDING_COUNT:-0}"
 if [[ "${APT_PENDING_COUNT}" -gt 0 ]]; then
     sudo -n DEBIAN_FRONTEND=noninteractive apt-get -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --with-new-pkgs upgrade -y >/dev/null 2>&1 || true
+    # Jeśli aktualizacja APT zrestartowała docker.service (np. aktualizacja docker-ce), upewnij się że stack Compose jest podniesiony
+    if command -v docker >/dev/null 2>&1 && [[ -f "${ENV_FILE}" ]]; then
+        (
+            flock -n 9 || exit 0
+            docker compose --env-file "${ENV_FILE}" \
+                -f "${STACK_ROOT}/compose/docker-compose.yml" \
+                -f "${STACK_ROOT}/compose/extensions.yml" \
+                -f "${STACK_ROOT}/compose/runners.yml" up -d >/dev/null 2>&1 || true
+        ) 9>/tmp/devops-stack-deploy.lock
+    fi
     APT_AFTER_COUNT="$(apt-get -s upgrade 2>/dev/null | grep -c '^Inst ' || true)"
     APT_AFTER_COUNT="${APT_AFTER_COUNT:-0}"
     if [[ "${APT_AFTER_COUNT}" -eq 0 ]]; then
@@ -586,16 +596,56 @@ else
     )
 
     for CNAME in "${EXPECTED_CONTAINERS[@]}"; do
+        C_HEALED=0
+        if ! docker inspect "${CNAME}" >/dev/null 2>&1; then
+            # Auto-Heal brakującego kontenera z definicji Compose
+            if [[ -f "${ENV_FILE}" ]]; then
+                (
+                    flock -n 9 || exit 0
+                    docker compose --env-file "${ENV_FILE}" \
+                        -f "${STACK_ROOT}/compose/docker-compose.yml" \
+                        -f "${STACK_ROOT}/compose/extensions.yml" \
+                        -f "${STACK_ROOT}/compose/runners.yml" up -d "${CNAME}" >/dev/null 2>&1 || true
+                ) 9>/tmp/devops-stack-deploy.lock
+                C_HEALED=1
+            fi
+        fi
+
         if ! docker inspect "${CNAME}" >/dev/null 2>&1; then
             CONTAINERS_HEALTHY=0
             fail "Kontener '${CNAME}' NIE ISTNIEJE (nie został uruchomiony)!" \
                  "cd ${STACK_ROOT}/compose && docker compose -f docker-compose.yml -f extensions.yml -f runners.yml up -d"
         else
             C_STATE="$(docker inspect -f '{{.State.Status}}' "${CNAME}" 2>/dev/null || echo 'unknown')"
+            if [[ "${C_STATE}" != "running" ]]; then
+                # Auto-Heal zatrzymanego kontenera (np. po wyścigu portów przy restarcie dockerd)
+                if [[ "${CNAME}" == "grafana" ]] && docker inspect medicusnoster-serve >/dev/null 2>&1; then
+                    if ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' medicusnoster-serve 2>/dev/null | grep -q '^PORT='; then
+                        docker rm -f medicusnoster-serve >/dev/null 2>&1 || true
+                        docker run -d --name medicusnoster-serve --restart unless-stopped --network host -e PORT=4001 -v /opt/medicusnoster-preview:/app:ro -w /app node:22-alpine node scripts/serve.js >/dev/null 2>&1 || true
+                    fi
+                fi
+                if [[ -f "${ENV_FILE}" ]]; then
+                    (
+                        flock -n 9 || exit 0
+                        docker compose --env-file "${ENV_FILE}" \
+                            -f "${STACK_ROOT}/compose/docker-compose.yml" \
+                            -f "${STACK_ROOT}/compose/extensions.yml" \
+                            -f "${STACK_ROOT}/compose/runners.yml" up -d "${CNAME}" >/dev/null 2>&1 \
+                            || docker start "${CNAME}" >/dev/null 2>&1 || true
+                    ) 9>/tmp/devops-stack-deploy.lock
+                else
+                    docker start "${CNAME}" >/dev/null 2>&1 || true
+                fi
+                sleep 2
+                C_STATE="$(docker inspect -f '{{.State.Status}}' "${CNAME}" 2>/dev/null || echo 'unknown')"
+                C_HEALED=1
+            fi
+
             C_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CNAME}" 2>/dev/null || echo 'none')"
             C_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "${CNAME}" 2>/dev/null || echo '0')"
 
-            # Jeśli kontener został świeżo utworzony podczas deployu i jest w fazie 'starting', poczekaj na pierwszy wynik healthchecka
+            # Jeśli kontener został świeżo utworzony podczas deployu lub Auto-Heala i jest w fazie 'starting', poczekaj na pierwszy wynik healthchecka
             if [[ "${C_STATE}" == "running" && "${C_HEALTH}" == "starting" ]]; then
                 for _wait_hc in {1..18}; do
                     sleep 2
@@ -609,6 +659,8 @@ else
                     if [[ "${C_RESTARTS}" -gt 3 ]]; then
                         warn "Kontener '${CNAME}' działa (${C_STATE}/${C_HEALTH}), ale miał ${C_RESTARTS} restartów." \
                              "docker logs --tail 50 ${CNAME}"
+                    elif [[ "${C_HEALED}" -eq 1 ]]; then
+                        pass "Kontener '${CNAME}': ${C_STATE} (health: ${C_HEALTH}, Auto-Heal: automatycznie wznowiono usługę)"
                     else
                         pass "Kontener '${CNAME}': ${C_STATE} (health: ${C_HEALTH}, restarty: ${C_RESTARTS})"
                     fi
