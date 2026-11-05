@@ -1488,8 +1488,28 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
 
   const analyticsUrl = routerUrl.replace(/\/chat-router\.php.*$/, '/analytics');
 
+  function isOwnerAnalyticsIgnored() {
+    try {
+      const loc = win?.location || {};
+      const params = new URLSearchParams(loc.search || '');
+      const toggle = params.get('ignore_analytics');
+      if (toggle === '1' || toggle === 'true') {
+        win?.localStorage?.setItem('tsw_ignore_analytics', '1');
+        return true;
+      }
+      if (toggle === '0' || toggle === 'false') {
+        win?.localStorage?.removeItem('tsw_ignore_analytics');
+        return false;
+      }
+      return win?.localStorage?.getItem('tsw_ignore_analytics') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
   function sendAnalyticsBeacon(extra) {
     try {
+      if (isOwnerAnalyticsIgnored()) return;
       const nav = win?.navigator || (typeof navigator !== 'undefined' ? navigator : null);
       const loc = win?.location || {};
       const params = new URLSearchParams(loc.search || '');

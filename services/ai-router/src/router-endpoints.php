@@ -60,6 +60,34 @@ function getClientIp(): string {
 }
 
 /**
+ * Sprawdza, czy podany adres IP należy do właściciela/administratora lub ruchu lokalnego,
+ * który powinien być wykluczony ze statystyk Web Analytics i tematów AI (100% Zero-PII).
+ */
+function isAnalyticsIgnoredIp(string $ip): bool {
+    $ip = trim($ip);
+    if ($ip === '' || $ip === '127.0.0.1' || $ip === '::1') {
+        return true;
+    }
+
+    // Lista wykluczonych adresów IP ze zmiennej środowiskowej ANALYTICS_IGNORED_IPS (np. z .env)
+    $envIgnored = trim((string)(getenv('ANALYTICS_IGNORED_IPS') ?: ''));
+    if ($envIgnored !== '') {
+        foreach (explode(',', $envIgnored) as $candidate) {
+            if (trim($candidate) === $ip) {
+                return true;
+            }
+        }
+    }
+
+    // Bezpieczny skrót SHA-256 adresu IP właściciela (Zero-PII w repozytorium Git)
+    $ignoredHashes = [
+        '501395eff118a3793aa56f40839f5849acbd37fa05bd56a93054fcf9bbb3505a',
+    ];
+    $ipHash = hash('sha256', 'tsw_ignore_ip_v1|' . $ip);
+    return in_array($ipHash, $ignoredHashes, true);
+}
+
+/**
  * Nakłada tymczasową blokadę (Penalty Box) na adres IP agresora w pliku rate-limit
  */
 function banClientIp(string $rateFile, int $seconds, string $reason): void {
@@ -326,7 +354,7 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
 
     $ua = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
     $rawType = strtolower(trim((string)($beacon['type'] ?? 'pageview')));
-    if ($rawType !== 'gsc_sync' && preg_match('/(bot|crawler|spider|lighthouse|headless|uptime-kuma|curl|python)/i', $ua)) {
+    if ($rawType !== 'gsc_sync' && preg_match('/(bot|crawler|spider|lighthouse|headless|playwright|puppeteer|cypress|uptime-kuma|curl|python|wget)/i', $ua)) {
         http_response_code(202);
         echo json_encode(['success' => true, 'skipped' => 'bot']);
         exit;
@@ -340,8 +368,15 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
         exit;
     }
 
-    // Ochrona Penalty Box i lekki Rate Limiter dla beaconów analityki (max 30 zdarzeń / 60s per IP)
+    // Wykluczenie ruchu właściciela/administratora (IP oraz flaga ignore_analytics) przed zapisem statystyk
     $bIp = getClientIp();
+    if ($rawType !== 'gsc_sync' && (isAnalyticsIgnoredIp($bIp) || !empty($beacon['ignore_analytics']))) {
+        http_response_code(202);
+        echo json_encode(['success' => true, 'skipped' => 'ignored_ip']);
+        exit;
+    }
+
+    // Ochrona Penalty Box i lekki Rate Limiter dla beaconów analityki (max 30 zdarzeń / 60s per IP)
     $bRateDir = is_dir('/app/storage/rate_limits')
         ? '/app/storage/rate_limits'
         : (dirname(__DIR__) . '/storage/rate_limits');

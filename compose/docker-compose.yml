@@ -347,6 +347,7 @@ services:
       - OSTICKET_API_KEY=${OSTICKET_API_KEY:-}
       - PHP_CLI_SERVER_WORKERS=4
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl,https://raricart.pl,https://www.raricart.pl}
+      - ANALYTICS_IGNORED_IPS=${ANALYTICS_IGNORED_IPS:-}
       - TZ=${TZ:-Europe/Warsaw}
     deploy:
       resources:

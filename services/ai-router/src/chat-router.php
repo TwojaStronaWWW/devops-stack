@@ -483,10 +483,17 @@ if ($aiSite === 'radar-p1') {
     }
 }
 
-// Detekcja namiarów kontaktowych (Zero-PII na dysku) i ekstrakcja tematów pytań
+// Detekcja namiarów kontaktowych (Zero-PII na dysku) i ekstrakcja tematów pytań (z wykluczeniem pre-warmingu, botów i IP właściciela)
 $leadInfo = aiExtractContactLeads($question, $sanitizedHistory, $isAmmsSite);
 $hasContactLead = !empty($leadInfo['hasContactLead']);
-aiExtractAndRecordTopics($aiSite, $question, $hasContactLead);
+$uaChat = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
+$skipChatAnalytics = !$isFromCloudflare
+    || isAnalyticsIgnoredIp($clientIp)
+    || !empty($payload['ignore_analytics'])
+    || (bool)preg_match('/(bot|crawler|spider|lighthouse|headless|playwright|puppeteer|cypress|uptime-kuma|curl|python|wget)/i', $uaChat);
+if (!$skipChatAnalytics) {
+    aiExtractAndRecordTopics($aiSite, $question, $hasContactLead);
+}
 
 // Pamięć podręczna odpowiedzi RAG (< 5 ms)
 $normalizedQ = trim((string)preg_replace('/[\p{P}\p{S}\s]+/u', ' ', mb_strtolower(trim($question))));

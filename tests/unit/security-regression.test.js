@@ -140,6 +140,16 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
         $_SERVER = ['REMOTE_ADDR' => 'invalid_ip'];
         if (getClientIp() !== '127.0.0.1') { fwrite(STDERR, "Fail Fallback IP\\n"); exit(1); }
 
+        // 1b. Testy isAnalyticsIgnoredIp()
+        if (!isAnalyticsIgnoredIp('127.0.0.1') || !isAnalyticsIgnoredIp('::1')) {
+            fwrite(STDERR, "Fail localhost ignored IP\\n"); exit(1);
+        }
+        putenv('ANALYTICS_IGNORED_IPS=198.51.100.250, 203.0.113.250');
+        if (!isAnalyticsIgnoredIp('198.51.100.250') || !isAnalyticsIgnoredIp('203.0.113.250') || isAnalyticsIgnoredIp('198.51.100.180')) {
+            fwrite(STDERR, "Fail ANALYTICS_IGNORED_IPS env\\n"); exit(1);
+        }
+        putenv('ANALYTICS_IGNORED_IPS=');
+
         // 2. Testy load_env()
         $tmpEnv = sys_get_temp_dir() . '/test_tsw_env_' . getmypid() . '.env';
         file_put_contents($tmpEnv, "# Komentarz\\n\\nTEST_TSW_KEY_A = \\"wartosc_a\\"\\nTEST_TSW_KEY_B='wartosc_b'\\nEXISTING_TSW_KEY=nowa\\n");
