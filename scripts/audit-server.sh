@@ -939,19 +939,24 @@ if [[ "${MEM_TOTAL_MB:-0}" -gt 16000 && -d /dev/shm && -w /dev/shm ]]; then
     fi
     # Realnie używana pamięć przez system i kontenery (z wyłączeniem bufora OCI w /dev/shm)
     REAL_USED_MB=$(( MEM_TOTAL_MB - MEM_AVAIL_NOW_MB - CURRENT_BUF_MB ))
-    if [[ "${REAL_USED_MB}" -gt 8192 ]]; then
-        # Gdy działa środowisko AMMS/Oracle (>8 GiB realnego użycia), zredukuj bufor OCI do 1024 MiB, zwalniając ~3.8 GiB RAM dla usług
-        OCI_BUFFER_TARGET_MB=1024
+    if [[ "${REAL_USED_MB}" -gt 5500 ]]; then
+        # Gdy usługi (np. środowisko Szpital/AMMS/Oracle) same zużywają >23% RAM (>5.5 GiB), wyłącz sztuczny bufor (0 MiB), zwalniając 100% RAM dla usług
+        OCI_BUFFER_TARGET_MB=0
     fi
-    if [[ "${CURRENT_BUF_MB}" -ne "${OCI_BUFFER_TARGET_MB}" ]]; then
+    if [[ "${OCI_BUFFER_TARGET_MB}" -eq 0 ]]; then
+        rm -f "${OCI_BUFFER_FILE}" 2>/dev/null || true
+        OCI_BUFFER_BYTES=0
+    elif [[ "${CURRENT_BUF_MB}" -ne "${OCI_BUFFER_TARGET_MB}" ]]; then
         rm -f "${OCI_BUFFER_FILE}" 2>/dev/null || true
         dd if=/dev/zero of="${OCI_BUFFER_FILE}" bs=1M count="${OCI_BUFFER_TARGET_MB}" status=none 2>/dev/null || true
         chmod 600 "${OCI_BUFFER_FILE}" 2>/dev/null || true
+        OCI_BUFFER_BYTES="$(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0)"
+    else
+        OCI_BUFFER_BYTES="$(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0)"
     fi
-    OCI_BUFFER_BYTES="$(wc -c < "${OCI_BUFFER_FILE}" 2>/dev/null | tr -d ' ' || echo 0)"
 fi
 MEM_INFO="$(free -h | awk '/^Mem:/ {print "Użyte przez usługi: "$3" / "$2" (Dostępne: "$7")"}')"
-pass "Pamięć RAM hosta: ${MEM_INFO} + Bufor Ochronny OCI: $(( OCI_BUFFER_BYTES / 1048576 )) MiB (>20% RAM)."
+pass "Pamięć RAM hosta: ${MEM_INFO} (Bufor OCI auto: $(( OCI_BUFFER_BYTES / 1048576 )) MiB)."
 
 # 2-swap. Kontrola i automatyczna samonaprawa poduszki bezpieczeństwa SWAP (2 GB) oraz vm.swappiness=10
 SWAP_TOTAL_MB="$(free -m | awk '/^Swap:/ {print $2}')"

@@ -48,7 +48,9 @@ services/ai-router/storage/metrics/
 services/ai-router/storage/cache/
 services/ai-router/storage/p1_*
 
-# OS & Editor artifacts
+# OS, Python & Editor artifacts
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db
 .idea/

@@ -365,7 +365,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 3,
+        "w": 4,
         "x": 0,
         "y": 16
       },
@@ -436,14 +436,14 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 6,
-        "x": 3,
+        "w": 4,
+        "x": 4,
         "y": 16
       },
       "id": 5,
-      "description": "Lewy zegar pokazuje realne zużycie pamięci przez usługi (~5.6%). Prawy zegar pokazuje wartość sztucznie zawyżoną o +20.3% (4.75 GiB w /dev/shm) dla Oracle Cloud (~25.9%), aby chronić darmowy serwer ARM64 przed wyłączeniem za bezczynność (<20% RAM).",
+      "description": "Realne zużycie pamięci RAM przez system i kontenery (z automatycznym buforem OCI Keepalive w tle, aktywowanym wyłącznie wtedy, gdy realne zużycie spadnie poniżej 22%).",
       "options": {
-        "orientation": "vertical",
+        "orientation": "auto",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -464,24 +464,12 @@
           "editorMode": "code",
           "expr": "clamp_min(((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes - (devops_oci_keepalive_buffer_bytes or vector(0))) / node_memory_MemTotal_bytes) * 100, 0)",
           "instant": true,
-          "legendFormat": "Realny RAM usług",
+          "legendFormat": "Zużycie RAM",
           "range": false,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
-          "instant": true,
-          "legendFormat": "Sztuczny dla OCI (+20%)",
-          "range": false,
-          "refId": "B"
         }
       ],
-      "title": "RAM: Sztucznie +20% (Ochrona OCI)",
+      "title": "Pamięć RAM (24 GB)",
       "type": "gauge"
     },
     {
@@ -520,8 +508,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 3,
-        "x": 9,
+        "w": 4,
+        "x": 8,
         "y": 16
       },
       "id": 6,
@@ -552,7 +540,7 @@
           "refId": "A"
         }
       ],
-      "title": "Dysk SSD (96 GB)",
+      "title": "Dysk SSD (200 GB)",
       "type": "gauge"
     },
     {
