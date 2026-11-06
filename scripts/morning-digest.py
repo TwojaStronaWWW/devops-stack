@@ -440,7 +440,7 @@ cls -la /medycynaregeneracyjna/medycyna-regeneracyjna/index.php /medycynaregener
 echo "===NZ_MEDREG_DIR==="
 cls -la /medycynaregeneracyjna/medycyna-regeneracyjna
 echo "===NZ_MEDNOSTER_FILES==="
-cls -la /medicusnoster/index.php /medicusnoster/.htaccess /medicusnoster/wp-config.php
+cls -la /medicusnoster/index.html /medicusnoster/.htaccess /medicusnoster/.env
 echo "===NZ_MEDNOSTER_DIR==="
 cls -la /medicusnoster
 quit
@@ -456,14 +456,14 @@ quit
             else:
                 nz_alerts.append("kwarantanna /.quarantine_tsw_20261028 zmieniła uprawnienia lub zniknęła!")
 
-            # 2. Sprawdzenie rozmiarów i uprawnień (0444) kluczowych plików chronionych przed reinfekcją
+            # 2. Sprawdzenie rozmiarów i uprawnień kluczowych plików (medycyna-regeneracyjna: WP 0444; medicusnoster: szablon statyczny TSW + .env 0600)
             expected_files = [
                 (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/index\.php$", "medycyna-regeneracyjna/index.php (405 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+843\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/\.htaccess$", "medycyna-regeneracyjna/.htaccess (843 B, 0444)"),
                 (r"^-r--r--r--\s+\S+\s+\S+\s+56510\s+.*\/medycynaregeneracyjna\/medycyna-regeneracyjna\/wp-includes\/load\.php$", "medycyna-regeneracyjna/wp-includes/load.php (56510 B, 0444)"),
-                (r"^-r--r--r--\s+\S+\s+\S+\s+405\s+.*\/medicusnoster\/index\.php$", "medicusnoster/index.php (405 B, 0444)"),
-                (r"^-r--r--r--\s+\S+\s+\S+\s+505\s+.*\/medicusnoster\/\.htaccess$", "medicusnoster/.htaccess (505 B, 0444)"),
-                (r"^-r--r--r--\s+\S+\s+\S+\s+3765\s+.*\/medicusnoster\/wp-config\.php$", "medicusnoster/wp-config.php (3765 B, 0444)"),
+                (r"^-rw-r--r--\s+\S+\s+\S+\s+\d{4,6}\s+.*\/medicusnoster\/index\.html$", "medicusnoster/index.html (0644, statyczny szablon TSW)"),
+                (r"^-rw-r--r--\s+\S+\s+\S+\s+\d{3,5}\s+.*\/medicusnoster\/\.htaccess$", "medicusnoster/.htaccess (0644, HSTS/CSP)"),
+                (r"^-rw-------\s+\S+\s+\S+\s+\d{2,4}\s+.*\/medicusnoster\/\.env$", "medicusnoster/.env (0600 PoLP)"),
             ]
             for pat, desc in expected_files:
                 if re.search(pat, nz_out, re.M):
@@ -471,7 +471,7 @@ quit
                 else:
                     nz_alerts.append(f"zmiana rozmiaru/uprawnień w {desc}")
 
-            # 3. Sprawdzenie czy w głównych katalogach nie pojawiły się obce pliki .php poza rdzeniem WP
+            # 3. Sprawdzenie czy w głównych katalogach nie pojawiły się obce pliki .php (w medicusnoster.pl 0 plików PHP w root, w medycyna-regeneracyjna.pl tylko rdzeń WP)
             for sec_tag, domain_label in (("NZ_MEDREG_DIR", "medycyna-regeneracyjna.pl"), ("NZ_MEDNOSTER_DIR", "medicusnoster.pl")):
                 if f"==={sec_tag}===" in nz_out:
                     sec_part = nz_out.split(f"==={sec_tag}===", 1)[1].split("===", 1)[0]
@@ -480,7 +480,7 @@ quit
                         if not parts:
                             continue
                         fname = os.path.basename(parts[-1].rstrip("/"))
-                        if fname.endswith(".php") and fname not in STANDARD_WP_ROOT_PHP:
+                        if fname.endswith(".php") and (sec_tag == "NZ_MEDNOSTER_DIR" or fname not in STANDARD_WP_ROOT_PHP):
                             nz_alerts.append(f"podejrzany plik PHP w {domain_label}: {fname}")
                         if any(bad in fname for bad in ("PJcpMFsD8B", "adminfuns", "wp-conffq", ".private", "__2DUAN")):
                             nz_alerts.append(f"wykryto sygnaturę infekcji w {domain_label}: {fname}")
@@ -529,7 +529,7 @@ quit
         nz_status_full = (
             f"👁️ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
             f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli FTPS TLS + DOM HTTPS OK: kwarantanna 0000 nienaruszona, "
-            f"index.php/.htaccess/load.php/wp-config.php bez zmian, 0 nowych plików PHP, czysty kod HTML). Nic nie ruszano.{nz_ops_footer}"
+            f"medycyna-regeneracyjna 0444 bez zmian, medicusnoster statyczny szablon TSW + .env 0600 OK, 0 obcych plików PHP, czysty kod HTML). Nic nie ruszano.{nz_ops_footer}"
         )
 
     print(
@@ -580,7 +580,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
         "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń blokady .htaccess, uprawnienia PoLP, Auto-Heal, ważność certyfikatów SSL, reputację antyspamową RBL oraz terminy wygaśnięcia domen (wskaż jeśli domena wymaga opłacenia <35 dni).\n"
         "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), blokady WAF L7 i Fail2ban, reputację RBL IP VPS oraz logi 12 kontenerów.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) kwarantannę 0000, pliki 0444, czysty kod HTML oraz ważność domen i certyfikatów SSL klienta."
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) kwarantannę 0000, pliki 0444 na medycyna-regeneracyjna.pl, szablon statyczny TSW + .env 0600 na medicusnoster.pl, czysty kod HTML oraz ważność domen i certyfikatów SSL klienta."
     )
 
     sys_prompt_auditor2 = (
@@ -588,7 +588,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
         "- [1. Twój Hosting LH.pl (Auto-Heal)]: zweryfikuj czystość FTPS, zajętość dysku konta (MB/%), zajętość 3 skrzynek pocztowych IMAP i nieprzeczytane maile, otwarte tickety osTicket oraz terminy odnowienia domen NASK RDAP.\n"
         "- [2. Serwer VPS (Auto-Heal)]: zweryfikuj wskaźniki włamań IoC (Clean=1, 0 wyjątków 24h), kondycję zasobów (RAM/Dysk/SWAP) oraz nocny Restore Drill i SQLite PRAGMA quick_check.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: zweryfikuj w trybie czystego odczytu 10/10 kontroli integralności (rozmiary co do bajtu index.php/.htaccess/load.php/wp-config.php, brak nowych plików PHP, czysty DOM HTTPS oraz terminy domen)."
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: zweryfikuj w trybie czystego odczytu 11/11 kontroli integralności (medycyna-regeneracyjna.pl 0444, medicusnoster.pl index.html/.htaccess/.env 0600, brak obcych plików PHP, czysty DOM HTTPS oraz terminy domen)."
     )
 
     sys_prompt_auditor3 = (
@@ -596,7 +596,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
         "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń zgodność konfiguracji domen, status testów kontrolnych, higienę skrzynek pocztowych IMAP/osTicket oraz pilne terminy płatności za domeny (NASK RDAP) i SSL.\n"
         "- [2. Serwer VPS (Auto-Heal)]: oceń zgodność 78 testów ISO 27001 na VPS, separację sieci Docker oraz ochronę sekretów i kopii zapasowych AES-256-CBC w Cloudflare R2.\n"
-        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: potwierdź stan obserwacyjny środowiska klienta na nazwa.pl (10/10 kontroli, stan SSL i domen oraz czy wymagana jest jakakolwiek decyzja właściciela przy zachowaniu 0 modyfikacji)."
+        "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: potwierdź stan obserwacyjny środowiska klienta na nazwa.pl (11/11 kontroli, stan SSL i domen oraz czy wymagana jest jakakolwiek decyzja właściciela przy zachowaniu 0 modyfikacji)."
     )
 
     def _call_openai_compat(url: str, key: str, body: dict, timeout: int = 20) -> tuple[str, int, int]:
@@ -695,7 +695,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Zbadaj osobiście wszystkie 3 obszary, skonfrontuj wnioski całej trójki audytorów i wypisz po polsku dokładnie 4 zwięzłe punkty:\n"
         "1) [1. Twój Hosting LH.pl (Auto-Heal, Poczta & Domeny)]: Twoja weryfikacja + konsensus 3 audytorów (bezpieczeństwo, zajętość dysku i skrzynek pocztowych IMAP, tickety osTicket, RBL oraz zbliżające się terminy opłacenia domen/SSL),\n"
         "2) [2. Serwer VPS (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (stan 78 testów, kontenerów, WAF/Fail2ban, IoC, RBL i kopii R2),\n"
-        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan 10/10 kontroli kwarantanny 0000, plików 0444, DOM HTTPS oraz stan SSL/domen klienta),\n"
+        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan 11/11 kontroli kwarantanny 0000, plików 0444 na medycyna-regeneracyjna.pl, szablonu statycznego TSW + .env 0600 na medicusnoster.pl, DOM HTTPS oraz stan SSL/domen klienta),\n"
         "4) [4. Werdykt Końcowy Arbitra (Matryca 3×3)]: CZYSTO / PRZYPOMNIENIE O PŁATNOŚCI DOMENY / WYMAGA DECYZJI."
     )
 
