@@ -756,6 +756,11 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const metricsRes = await fetch(`${baseUrl}/metrics`);
       const metricsText = await metricsRes.text();
       assert.match(metricsText, /web_analytics_unique_visitors_today\{site="katosalsahub"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_unique_visitors_yesterday\{site="katosalsahub"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_period_unique_visitors\{site="katosalsahub",period="today",effective_label="Unikalni dziś"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_period_unique_visitors\{site="katosalsahub",period="yesterday",effective_label="Unikalni wczoraj"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_period_unique_visitors\{site="katosalsahub",period="auto",effective_label="[^"]+"\}\s+\d+/);
+      assert.match(metricsText, /web_analytics_period_pageviews\{site="katosalsahub",path="\/salsopedia\.html",label="[^"]+",period="today"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_unique_visitors_total\{site="katosalsahub"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_engaged_visits_total\{site="katosalsahub"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/salsopedia\.html",label="[^"]+"\}\s+[1-9]/);

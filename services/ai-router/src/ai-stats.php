@@ -167,6 +167,112 @@ function aiAnalyticsDay(): string
     return $cached;
 }
 
+/** Poprzednia doba analityczna (Wczoraj) w strefie Europe/Warsaw. */
+function aiAnalyticsYesterday(): string
+{
+    static $tz = null;
+    if ($tz === null) {
+        $tz = new DateTimeZone('Europe/Warsaw');
+    }
+    return (new DateTime('now', $tz))->modify('-1 day')->format('Y-m-d');
+}
+
+/**
+ * Czy w strefie Europe/Warsaw jest jeszcze przed godziną porannego przełączenia (domyślnie 09:00 rano)?
+ * Do 08:59:59 widok "auto" w Grafanie prezentuje statystyki z wczoraj, a od 09:00:00 przełącza na dzisiaj.
+ */
+function aiAnalyticsIsBeforeMorningCutoff(): bool
+{
+    static $tz = null;
+    if ($tz === null) {
+        $tz = new DateTimeZone('Europe/Warsaw');
+    }
+    $cutoffEnv = getenv('ANALYTICS_MORNING_CUTOFF_HOUR');
+    $cutoffHour = ($cutoffEnv !== false && $cutoffEnv !== '' && is_numeric($cutoffEnv))
+        ? max(0, min(24, (int)$cutoffEnv))
+        : 9;
+    $currentHour = (int)(new DateTime('@' . time()))->setTimezone($tz)->format('G');
+    return $currentHour < $cutoffHour;
+}
+
+function aiDailyAnalyticsBucketDefault(): array
+{
+    return [
+        'unique_visitors' => [], // site => [hash => 1] lub int (dla dni historycznych)
+        'pageviews'       => [], // "site|path" => n
+        'sources'         => [], // "site|source" => n
+        'devices'         => [], // "site|device" => n
+        'countries'       => [], // "site|country" => n
+        'search_terms'    => [], // "site|term" => n
+        'events'          => [], // "site|event" => n
+        'engaged_visits'  => [], // site => n
+        'lcp_sum_ms'      => [], // site => suma czasów LCP w ms
+        'lcp_cnt'         => [], // site => liczba pomiarów LCP
+        'ai_topics'       => [], // "site|topic" => n
+    ];
+}
+
+/**
+ * Przygotowuje i archiwizuje dzienne kubełki analityczne (today / yesterday / 7 dni historii).
+ */
+function aiPrepareWebAnalyticsDaily(array &$wa): string
+{
+    $today = aiAnalyticsDay();
+    if (!isset($wa['daily']) || !is_array($wa['daily'])) {
+        $wa['daily'] = [];
+    }
+    $prevDay = (string)($wa['day'] ?? '');
+    if ($prevDay !== '' && $prevDay !== $today) {
+        if (!isset($wa['daily'][$prevDay]) || !is_array($wa['daily'][$prevDay])) {
+            $wa['daily'][$prevDay] = aiDailyAnalyticsBucketDefault();
+        }
+        if (is_array($wa['unique_visitors'] ?? null) && !empty($wa['unique_visitors'])) {
+            $prevUv = is_array($wa['daily'][$prevDay]['unique_visitors'] ?? null)
+                ? $wa['daily'][$prevDay]['unique_visitors']
+                : [];
+            foreach ($wa['unique_visitors'] as $uSite => $uHashes) {
+                $cnt = is_array($uHashes) ? count($uHashes) : (int)$uHashes;
+                $existingCnt = isset($prevUv[$uSite])
+                    ? (is_array($prevUv[$uSite]) ? count($prevUv[$uSite]) : (int)$prevUv[$uSite])
+                    : 0;
+                $prevUv[(string)$uSite] = max($existingCnt, $cnt);
+            }
+            $wa['daily'][$prevDay]['unique_visitors'] = $prevUv;
+        }
+        $wa['day'] = $today;
+        $wa['unique_visitors'] = [];
+    } elseif ($prevDay === '') {
+        $wa['day'] = $today;
+    }
+
+    if (!isset($wa['daily'][$today]) || !is_array($wa['daily'][$today])) {
+        $wa['daily'][$today] = aiDailyAnalyticsBucketDefault();
+    } else {
+        $wa['daily'][$today] = array_replace(aiDailyAnalyticsBucketDefault(), $wa['daily'][$today]);
+    }
+
+    if (count($wa['daily']) > 7) {
+        ksort($wa['daily']);
+        $toRemove = array_slice(array_keys($wa['daily']), 0, count($wa['daily']) - 7);
+        foreach ($toRemove as $oldDay) {
+            unset($wa['daily'][$oldDay]);
+        }
+    }
+
+    foreach ($wa['daily'] as $dKey => &$dBucket) {
+        if ($dKey !== $today && isset($dBucket['unique_visitors']) && is_array($dBucket['unique_visitors'])) {
+            foreach ($dBucket['unique_visitors'] as $uSite => $uVal) {
+                if (is_array($uVal)) {
+                    $dBucket['unique_visitors'][$uSite] = count($uVal);
+                }
+            }
+        }
+    }
+    unset($dBucket);
+
+    return $today;
+}
+
 function aiSecondsToQuotaReset(): int
 {
     static $tz = null;
@@ -190,6 +296,7 @@ function aiStatsDefault(): array
         'models'        => [],  // model => dane
         'web_analytics' => [
             'day'                   => '',
+            'daily'                 => [], // "YYYY-MM-DD" => kubełek dzienny (today / yesterday / ostatnie 7 dni)
             'pageviews'             => [], // "site|path" => n
             'sources'               => [], // "site|source" => n
             'devices'               => [], // "site|device" => n
@@ -485,11 +592,8 @@ function aiRecordWebAnalytics(
             $s['web_analytics'] = aiStatsDefault()['web_analytics'];
         }
         $wa = &$s['web_analytics'];
-        $today = aiAnalyticsDay();
-        if (($wa['day'] ?? '') !== $today) {
-            $wa['day'] = $today;
-            $wa['unique_visitors'] = [];
-        }
+        $today = aiPrepareWebAnalyticsDaily($wa);
+        $dayBucket = &$wa['daily'][$today];
 
         if ($visitorHash !== '') {
             if (!isset($wa['unique_visitors'][$site]) || !is_array($wa['unique_visitors'][$site])) {
@@ -500,6 +604,7 @@ function aiRecordWebAnalytics(
                 $wa['unique_visitors_total'] = is_array($wa['unique_visitors_total'] ?? null) ? $wa['unique_visitors_total'] : [];
                 $wa['unique_visitors_total'][$site] = (int)($wa['unique_visitors_total'][$site] ?? 0) + 1;
             }
+            $dayBucket['unique_visitors'][$site] = count($wa['unique_visitors'][$site]);
         }
 
         if ($lcpMs >= 50.0 && $lcpMs <= 8000.0) {
@@ -509,39 +614,48 @@ function aiRecordWebAnalytics(
             $clampedLcpMs = min($lcpMs, 3500.0);
             $wa['lcp_sum_ms'][$site] = (float)($wa['lcp_sum_ms'][$site] ?? 0.0) + $clampedLcpMs;
             $wa['lcp_cnt'][$site] = (int)($wa['lcp_cnt'][$site] ?? 0) + 1;
+            $dayBucket['lcp_sum_ms'][$site] = (float)($dayBucket['lcp_sum_ms'][$site] ?? 0.0) + $clampedLcpMs;
+            $dayBucket['lcp_cnt'][$site] = (int)($dayBucket['lcp_cnt'][$site] ?? 0) + 1;
         }
 
         if ($eventType === 'search' && $searchTerm !== '') {
             $wa['search_terms'] = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
             aiBoundedIncrement($wa['search_terms'], $site . '|' . $searchTerm, 80);
+            aiBoundedIncrement($dayBucket['search_terms'], $site . '|' . $searchTerm, 80);
             return;
         }
 
         if ($eventType === 'engaged') {
             $wa['engaged_visits'] = is_array($wa['engaged_visits'] ?? null) ? $wa['engaged_visits'] : [];
             $wa['engaged_visits'][$site] = (int)($wa['engaged_visits'][$site] ?? 0) + 1;
+            $dayBucket['engaged_visits'][$site] = (int)($dayBucket['engaged_visits'][$site] ?? 0) + 1;
             return;
         }
 
         if ($eventType === 'event' && $eventName !== '') {
             $wa['events'] = is_array($wa['events'] ?? null) ? $wa['events'] : [];
             aiBoundedIncrement($wa['events'], $site . '|' . $eventName, 60);
+            aiBoundedIncrement($dayBucket['events'], $site . '|' . $eventName, 60);
             return;
         }
 
         $wa['pageviews'] = is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [];
         aiBoundedIncrement($wa['pageviews'], $site . '|' . $path, 60);
+        aiBoundedIncrement($dayBucket['pageviews'], $site . '|' . $path, 60);
 
         $wa['sources'] = is_array($wa['sources'] ?? null) ? $wa['sources'] : [];
         $sKey = $site . '|' . $source;
         $wa['sources'][$sKey] = (int)($wa['sources'][$sKey] ?? 0) + 1;
+        $dayBucket['sources'][$sKey] = (int)($dayBucket['sources'][$sKey] ?? 0) + 1;
 
         $wa['devices'] = is_array($wa['devices'] ?? null) ? $wa['devices'] : [];
         $dKey = $site . '|' . $device;
         $wa['devices'][$dKey] = (int)($wa['devices'][$dKey] ?? 0) + 1;
+        $dayBucket['devices'][$dKey] = (int)($dayBucket['devices'][$dKey] ?? 0) + 1;
 
         $wa['countries'] = is_array($wa['countries'] ?? null) ? $wa['countries'] : [];
         aiBoundedIncrement($wa['countries'], $site . '|' . $country, 40);
+        aiBoundedIncrement($dayBucket['countries'], $site . '|' . $country, 40);
     });
 }
 
@@ -610,13 +724,17 @@ function aiExtractAndRecordTopics(string $site, string $question, bool $hasConta
             $s['web_analytics'] = aiStatsDefault()['web_analytics'];
         }
         $wa = &$s['web_analytics'];
+        $today = aiPrepareWebAnalyticsDaily($wa);
+        $dayBucket = &$wa['daily'][$today];
         $wa['ai_topics'] = is_array($wa['ai_topics'] ?? null) ? $wa['ai_topics'] : [];
         foreach ($matchedTopics as $tCode) {
             aiBoundedIncrement($wa['ai_topics'], $site . '|' . $tCode, 60);
+            aiBoundedIncrement($dayBucket['ai_topics'], $site . '|' . $tCode, 60);
         }
         $wa['search_terms'] = is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [];
         foreach ($matchedCanonicalTerms as $cTerm) {
             aiBoundedIncrement($wa['search_terms'], $site . '|' . $cTerm, 80);
+            aiBoundedIncrement($dayBucket['search_terms'], $site . '|' . $cTerm, 80);
         }
     });
 }
@@ -925,23 +1043,67 @@ function aiRenderMetrics(): string
 
     // Bezciasteczkowa Analityka Ruchu WWW (Cookieless RODO / Zero-PII)
     $wa = is_array($s['web_analytics'] ?? null) ? $s['web_analytics'] : [];
-    $waSameDay = (($wa['day'] ?? '') === aiAnalyticsDay());
+    $todayDay = aiAnalyticsDay();
+    $yesterdayDay = aiAnalyticsYesterday();
+    $isBefore9am = aiAnalyticsIsBeforeMorningCutoff();
+    $waSameDay = (($wa['day'] ?? '') === $todayDay);
+    $waIsYesterday = (($wa['day'] ?? '') === $yesterdayDay);
+    $dailyMap = is_array($wa['daily'] ?? null) ? $wa['daily'] : [];
     $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1'];
+
+    $todayBucket = array_replace(
+        aiDailyAnalyticsBucketDefault(),
+        is_array($dailyMap[$todayDay] ?? null) ? $dailyMap[$todayDay] : []
+    );
+    $yesterdayBucket = array_replace(
+        aiDailyAnalyticsBucketDefault(),
+        is_array($dailyMap[$yesterdayDay] ?? null) ? $dailyMap[$yesterdayDay] : []
+    );
+
+    if ($waSameDay && is_array($wa['unique_visitors'] ?? null)) {
+        foreach ($wa['unique_visitors'] as $uSite => $uHashes) {
+            $cnt = is_array($uHashes) ? count($uHashes) : (int)$uHashes;
+            $cur = isset($todayBucket['unique_visitors'][$uSite])
+                ? (is_array($todayBucket['unique_visitors'][$uSite]) ? count($todayBucket['unique_visitors'][$uSite]) : (int)$todayBucket['unique_visitors'][$uSite])
+                : 0;
+            $todayBucket['unique_visitors'][$uSite] = max($cur, $cnt);
+        }
+    } elseif ($waIsYesterday && is_array($wa['unique_visitors'] ?? null)) {
+        foreach ($wa['unique_visitors'] as $uSite => $uHashes) {
+            $cnt = is_array($uHashes) ? count($uHashes) : (int)$uHashes;
+            $cur = isset($yesterdayBucket['unique_visitors'][$uSite])
+                ? (is_array($yesterdayBucket['unique_visitors'][$uSite]) ? count($yesterdayBucket['unique_visitors'][$uSite]) : (int)$yesterdayBucket['unique_visitors'][$uSite])
+                : 0;
+            $yesterdayBucket['unique_visitors'][$uSite] = max($cur, $cnt);
+        }
+    }
 
     $o[] = '# HELP web_analytics_unique_visitors_today Unikalni odwiedzajacy dzis wg anonimowego skrotu SHA-256 (Cookieless RODO, Europe/Warsaw)';
     $o[] = '# TYPE web_analytics_unique_visitors_today gauge';
     $uvMap = ($waSameDay && is_array($wa['unique_visitors'] ?? null)) ? $wa['unique_visitors'] : [];
     foreach ($knownSites as $defSite) {
-        $uvCount = isset($uvMap[$defSite]) && is_array($uvMap[$defSite]) ? count($uvMap[$defSite]) : 0;
+        $tUvRaw = $todayBucket['unique_visitors'][$defSite] ?? ($uvMap[$defSite] ?? 0);
+        $uvCount = is_array($tUvRaw) ? count($tUvRaw) : (int)$tUvRaw;
         $o[] = 'web_analytics_unique_visitors_today{site="' . aiEsc($defSite) . '"} ' . $uvCount;
+    }
+
+    $o[] = '# HELP web_analytics_unique_visitors_yesterday Unikalni odwiedzajacy wczoraj wg anonimowego skrotu SHA-256 (Cookieless RODO, Europe/Warsaw)';
+    $o[] = '# TYPE web_analytics_unique_visitors_yesterday gauge';
+    foreach ($knownSites as $defSite) {
+        $yUvRaw = $yesterdayBucket['unique_visitors'][$defSite] ?? 0;
+        $yUvCount = is_array($yUvRaw) ? count($yUvRaw) : (int)$yUvRaw;
+        $o[] = 'web_analytics_unique_visitors_yesterday{site="' . aiEsc($defSite) . '"} ' . $yUvCount;
     }
 
     $o[] = '# HELP web_analytics_unique_visitors_total Laczna historyczna liczba unikalnych dziennych wizyt wg strony (Cookieless counter)';
     $o[] = '# TYPE web_analytics_unique_visitors_total counter';
     $uvTotalMap = is_array($wa['unique_visitors_total'] ?? null) ? $wa['unique_visitors_total'] : [];
+    $totalUvBySite = [];
     foreach ($knownSites as $defSite) {
-        $uvTodayFallback = isset($uvMap[$defSite]) && is_array($uvMap[$defSite]) ? count($uvMap[$defSite]) : 0;
+        $tUvRaw = $todayBucket['unique_visitors'][$defSite] ?? ($uvMap[$defSite] ?? 0);
+        $uvTodayFallback = is_array($tUvRaw) ? count($tUvRaw) : (int)$tUvRaw;
         $uvTotalVal = max((int)($uvTotalMap[$defSite] ?? 0), $uvTodayFallback);
+        $totalUvBySite[$defSite] = $uvTotalVal;
         $o[] = 'web_analytics_unique_visitors_total{site="' . aiEsc($defSite) . '"} ' . $uvTotalVal;
     }
 
@@ -1193,6 +1355,209 @@ function aiRenderMetrics(): string
         [$tSite, $tCode] = array_pad(explode('|', (string)$topKey, 2), 2, 'general_inquiry');
         $tLabel = $topicLabels[$tCode] ?? ('💬 ' . $tCode);
         $o[] = 'ai_router_question_topics_total{site="' . aiEsc($tSite) . '",topic="' . aiEsc($tCode) . '",label="' . aiEsc($tLabel) . '"} ' . (int)$topCount;
+    }
+
+    // Metryki okresowe dla przełącznika w Grafanie: period="auto" (do 09:00 Wczoraj / po 09:00 Dziś), "today", "yesterday", "total"
+    $totalBucket = [
+        'unique_visitors' => $totalUvBySite,
+        'pageviews'       => is_array($wa['pageviews'] ?? null) ? $wa['pageviews'] : [],
+        'sources'         => is_array($wa['sources'] ?? null) ? $wa['sources'] : [],
+        'devices'         => is_array($wa['devices'] ?? null) ? $wa['devices'] : [],
+        'countries'       => is_array($wa['countries'] ?? null) ? $wa['countries'] : [],
+        'search_terms'    => is_array($wa['search_terms'] ?? null) ? $wa['search_terms'] : [],
+        'events'          => is_array($wa['events'] ?? null) ? $wa['events'] : [],
+        'engaged_visits'  => is_array($wa['engaged_visits'] ?? null) ? $wa['engaged_visits'] : [],
+        'lcp_sum_ms'      => is_array($wa['lcp_sum_ms'] ?? null) ? $wa['lcp_sum_ms'] : [],
+        'lcp_cnt'         => is_array($wa['lcp_cnt'] ?? null) ? $wa['lcp_cnt'] : [],
+        'ai_topics'       => is_array($wa['ai_topics'] ?? null) ? $wa['ai_topics'] : [],
+    ];
+    $autoBucket = $isBefore9am ? $yesterdayBucket : $todayBucket;
+    $periods = [
+        'auto'      => [
+            'bucket'   => $autoBucket,
+            'uv_label' => $isBefore9am ? 'Unikalni wczoraj (do 09:00)' : 'Unikalni dziś',
+        ],
+        'today'     => [
+            'bucket'   => $todayBucket,
+            'uv_label' => 'Unikalni dziś',
+        ],
+        'yesterday' => [
+            'bucket'   => $yesterdayBucket,
+            'uv_label' => 'Unikalni wczoraj',
+        ],
+        'total'     => [
+            'bucket'   => $totalBucket,
+            'uv_label' => 'Unikalni łącznie',
+        ],
+    ];
+
+    $o[] = '# HELP web_analytics_period_unique_visitors Unikalni odwiedzajacy wg wybranego okresu (auto: do 09:00 wczoraj / po 09:00 dzis, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_unique_visitors gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pUvMap = is_array($pCfg['bucket']['unique_visitors'] ?? null) ? $pCfg['bucket']['unique_visitors'] : [];
+        $effLabel = aiEsc((string)$pCfg['uv_label']);
+        foreach ($knownSites as $defSite) {
+            $rawUv = $pUvMap[$defSite] ?? 0;
+            $valUv = is_array($rawUv) ? count($rawUv) : (int)$rawUv;
+            $o[] = 'web_analytics_period_unique_visitors{site="' . aiEsc($defSite) . '",period="' . $pName . '",effective_label="' . $effLabel . '"} ' . $valUv;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_engaged_visits Zaangazowane sesje (>=15s) wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_engaged_visits gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pEngMap = is_array($pCfg['bucket']['engaged_visits'] ?? null) ? $pCfg['bucket']['engaged_visits'] : [];
+        foreach ($knownSites as $defSite) {
+            $o[] = 'web_analytics_period_engaged_visits{site="' . aiEsc($defSite) . '",period="' . $pName . '"} ' . (int)($pEngMap[$defSite] ?? 0);
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_pageviews Odslony podstron i sekcji SPA wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_pageviews gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pPvMap = is_array($pCfg['bucket']['pageviews'] ?? null) ? $pCfg['bucket']['pageviews'] : [];
+        foreach ($knownSites as $defSite) {
+            if (!isset($pPvMap[$defSite . '|/'])) {
+                $pPvMap[$defSite . '|/'] = 0;
+            }
+        }
+        foreach ($pPvMap as $pvKey => $pvCount) {
+            [$pvSite, $pvPath] = array_pad(explode('|', (string)$pvKey, 2), 2, '/');
+            $pvLabel = $pathLabels[$pvPath] ?? ('📄 ' . $pvPath);
+            $o[] = 'web_analytics_period_pageviews{site="' . aiEsc($pvSite) . '",path="' . aiEsc($pvPath) . '",label="' . aiEsc($pvLabel) . '",period="' . $pName . '"} ' . (int)$pvCount;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_sources Zrodla wejsc uzytkownikow wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_sources gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pSrcMap = is_array($pCfg['bucket']['sources'] ?? null) ? $pCfg['bucket']['sources'] : [];
+        foreach ($knownSites as $defSite) {
+            foreach (['direct', 'google', 'ai_search', 'facebook', 'instagram'] as $defSrc) {
+                $sKey = $defSite . '|' . $defSrc;
+                if (!isset($pSrcMap[$sKey])) {
+                    $pSrcMap[$sKey] = 0;
+                }
+            }
+        }
+        foreach ($pSrcMap as $sKey => $sCount) {
+            [$sSite, $sSource] = array_pad(explode('|', (string)$sKey, 2), 2, 'direct');
+            $sLabel = $sourceLabels[$sSource] ?? ('🌐 ' . $sSource);
+            $o[] = 'web_analytics_period_sources{site="' . aiEsc($sSite) . '",source="' . aiEsc($sSource) . '",label="' . aiEsc($sLabel) . '",period="' . $pName . '"} ' . (int)$sCount;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_devices Urzadzenia odwiedzajacych wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_devices gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pDevMap = is_array($pCfg['bucket']['devices'] ?? null) ? $pCfg['bucket']['devices'] : [];
+        foreach ($knownSites as $defSite) {
+            foreach (['mobile', 'desktop'] as $defDev) {
+                $dKey = $defSite . '|' . $defDev;
+                if (!isset($pDevMap[$dKey])) {
+                    $pDevMap[$dKey] = 0;
+                }
+            }
+        }
+        foreach ($pDevMap as $dKey => $dCount) {
+            [$dSite, $dDevice] = array_pad(explode('|', (string)$dKey, 2), 2, 'desktop');
+            $dLabel = $deviceLabels[$dDevice] ?? ('📱 ' . $dDevice);
+            $o[] = 'web_analytics_period_devices{site="' . aiEsc($dSite) . '",device="' . aiEsc($dDevice) . '",label="' . aiEsc($dLabel) . '",period="' . $pName . '"} ' . (int)$dCount;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_countries Kraje odwiedzajacych wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_countries gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pCntMap = is_array($pCfg['bucket']['countries'] ?? null) ? $pCfg['bucket']['countries'] : [];
+        foreach ($knownSites as $defSite) {
+            if (!isset($pCntMap[$defSite . '|PL'])) {
+                $pCntMap[$defSite . '|PL'] = 0;
+            }
+        }
+        foreach ($pCntMap as $cKey => $cCount) {
+            [$cSite, $cCountry] = array_pad(explode('|', (string)$cKey, 2), 2, 'PL');
+            $cLabel = $countryLabels[$cCountry] ?? ('🌍 Kraj: ' . $cCountry);
+            $o[] = 'web_analytics_period_countries{site="' . aiEsc($cSite) . '",country="' . aiEsc($cCountry) . '",label="' . aiEsc($cLabel) . '",period="' . $pName . '"} ' . (int)$cCount;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_search_terms Wyszukiwane hasla i frazy wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_search_terms gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pTermMap = is_array($pCfg['bucket']['search_terms'] ?? null) ? $pCfg['bucket']['search_terms'] : [];
+        $pSitesWithTerms = [];
+        foreach ($pTermMap as $tKey => $tCount) {
+            [$tSite, $tTerm] = array_pad(explode('|', (string)$tKey, 2), 2, '');
+            if ($tTerm !== '') {
+                $pSitesWithTerms[$tSite] = true;
+                $o[] = 'web_analytics_period_search_terms{site="' . aiEsc($tSite) . '",term="' . aiEsc($tTerm) . '",period="' . $pName . '"} ' . (int)$tCount;
+            }
+        }
+        foreach ($knownSites as $defSite) {
+            if (empty($pSitesWithTerms[$defSite])) {
+                $o[] = 'web_analytics_period_search_terms{site="' . aiEsc($defSite) . '",term="(brak wpisanych fraz UTM / wyszukiwarki)",period="' . $pName . '"} 0';
+            }
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_events Zdarzenia biznesowe i konwersje CTA wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_events gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pEvMap = is_array($pCfg['bucket']['events'] ?? null) ? $pCfg['bucket']['events'] : [];
+        foreach ($knownSites as $defSite) {
+            foreach (['chat_open', 'quick_prompt_click', 'cta_phone_click', 'contact_form_submit'] as $defEv) {
+                $eKey = $defSite . '|' . $defEv;
+                if (!isset($pEvMap[$eKey])) {
+                    $pEvMap[$eKey] = 0;
+                }
+            }
+        }
+        foreach ($pEvMap as $eKey => $eCount) {
+            [$eSite, $eName] = array_pad(explode('|', (string)$eKey, 2), 2, 'chat_open');
+            $eLabel = $eventLabels[$eName] ?? ('🎯 ' . $eName);
+            $o[] = 'web_analytics_period_events{site="' . aiEsc($eSite) . '",event="' . aiEsc($eName) . '",label="' . aiEsc($eLabel) . '",period="' . $pName . '"} ' . (int)$eCount;
+        }
+    }
+
+    $o[] = '# HELP web_analytics_period_lcp_seconds_sum Suma czasow LCP (s) wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_lcp_seconds_sum gauge';
+    $pLcpCountLines = [];
+    foreach ($periods as $pName => $pCfg) {
+        $pLcpSum = is_array($pCfg['bucket']['lcp_sum_ms'] ?? null) ? $pCfg['bucket']['lcp_sum_ms'] : [];
+        $pLcpCnt = is_array($pCfg['bucket']['lcp_cnt'] ?? null) ? $pCfg['bucket']['lcp_cnt'] : [];
+        foreach ($knownSites as $defSite) {
+            $cntVal = (int)($pLcpCnt[$defSite] ?? 0);
+            $sumMsVal = (float)($pLcpSum[$defSite] ?? 0.0);
+            if ($cntVal === 0 && (int)($lcpCntMap[$defSite] ?? 0) > 0) {
+                $cntVal = (int)$lcpCntMap[$defSite];
+                $sumMsVal = (float)($lcpSumMap[$defSite] ?? 0.0);
+            }
+            $sumSec = round($sumMsVal / 1000.0, 3);
+            $o[] = 'web_analytics_period_lcp_seconds_sum{site="' . aiEsc($defSite) . '",period="' . $pName . '"} ' . $sumSec;
+            $pLcpCountLines[] = 'web_analytics_period_lcp_seconds_count{site="' . aiEsc($defSite) . '",period="' . $pName . '"} ' . $cntVal;
+        }
+    }
+    $o[] = '# HELP web_analytics_period_lcp_seconds_count Liczba pomiarow LCP wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE web_analytics_period_lcp_seconds_count gauge';
+    foreach ($pLcpCountLines as $lcpLine) {
+        $o[] = $lcpLine;
+    }
+
+    $o[] = '# HELP ai_router_period_question_topics Tematy pytan do czatbota AI wg wybranego okresu (auto, today, yesterday, total)';
+    $o[] = '# TYPE ai_router_period_question_topics gauge';
+    foreach ($periods as $pName => $pCfg) {
+        $pTopMap = is_array($pCfg['bucket']['ai_topics'] ?? null) ? $pCfg['bucket']['ai_topics'] : [];
+        foreach (['katosalsahub|salsopedia', 'katosalsahub|figures', 'dancepuls|events_party', 'fuegolingua|spanish_course', 'twojastronawww|pricing', 'raricart|pricing', 'radar-p1|p1_erecepta'] as $defTop) {
+            if (!isset($pTopMap[$defTop])) {
+                $pTopMap[$defTop] = 0;
+            }
+        }
+        foreach ($pTopMap as $topKey => $topCount) {
+            [$tSite, $tCode] = array_pad(explode('|', (string)$topKey, 2), 2, 'general_inquiry');
+            $tLabel = $topicLabels[$tCode] ?? ('💬 ' . $tCode);
+            $o[] = 'ai_router_period_question_topics{site="' . aiEsc($tSite) . '",topic="' . aiEsc($tCode) . '",label="' . aiEsc($tLabel) . '",period="' . $pName . '"} ' . (int)$topCount;
+        }
     }
 
     $gscMap = is_array($wa['gsc_keywords'] ?? null) ? $wa['gsc_keywords'] : [];

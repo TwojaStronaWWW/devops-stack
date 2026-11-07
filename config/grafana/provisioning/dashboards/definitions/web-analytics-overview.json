@@ -6,7 +6,47 @@
   "id": null,
   "links": [
     {
-      "asDropdown": false,
+      "icon": "clock-nine",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "🕒 Auto (<9:00 Wczoraj / ≥9:00 Dziś)",
+      "tooltip": "Do 09:00 rano wyświetla statystyki z wczoraj, a po 09:00 z dzisiaj",
+      "type": "link",
+      "url": "/d/web-analytics-overview?var-site=${site}&var-period=auto"
+    },
+    {
+      "icon": "sun",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "☀️ Dziś",
+      "tooltip": "Pokaż wyłącznie ruch dzisiejszy (od 00:00 Europe/Warsaw)",
+      "type": "link",
+      "url": "/d/web-analytics-overview?var-site=${site}&var-period=today"
+    },
+    {
+      "icon": "moon",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "🌙 Wczoraj",
+      "tooltip": "Pokaż pełną wczorajszą dobę (00:00–24:00 Europe/Warsaw)",
+      "type": "link",
+      "url": "/d/web-analytics-overview?var-site=${site}&var-period=yesterday"
+    },
+    {
+      "icon": "apps",
+      "includeVars": false,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "📊 Łącznie",
+      "tooltip": "Pokaż skumulowane statystyki od początku działania",
+      "type": "link",
+      "url": "/d/web-analytics-overview?var-site=${site}&var-period=total"
+    },
+    {
+      "asDropdown": true,
       "icon": "external link",
       "includeVars": false,
       "keepTime": true,
@@ -20,12 +60,12 @@
     {
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 300,
-      "title": "📊 Analityka Ruchu WWW, Konwersji CTA & SEO (100% Cookieless RODO / Zero-PII)",
+      "title": "📊 Analityka Ruchu WWW, Konwersji CTA & SEO — Widok: ${period:text} (100% Cookieless RODO / Zero-PII)",
       "type": "row"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Unikalni odwiedzający dziś w wybranym serwisie (anonimowy dzienny skrót SHA-256 w strefie Europe/Warsaw, bez zapisu IP i bez ciasteczek).",
+      "description": "Unikalni odwiedzający w wybranym okresie (w trybie Auto: do 09:00 rano dane z Wczoraj, po 09:00 dane z Dziś; anonimowy dzienny skrót SHA-256 w strefie Europe/Warsaw, bez zapisu IP i bez ciasteczek).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -50,17 +90,18 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_unique_visitors_today{site=~\"$site\"}) or vector(0)",
-          "legendFormat": "Unikalni dziś",
+          "expr": "sum by (effective_label) (web_analytics_period_unique_visitors{site=~\"$site\",period=\"$period\"}) or sum(web_analytics_unique_visitors_today{site=~\"$site\"}) or vector(0)",
+          "instant": true,
+          "legendFormat": "{{effective_label}}",
           "refId": "A"
         }
       ],
-      "title": "Unikalni Dziś (UV)",
+      "title": "Unikalni Odwiedzający (UV)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Łączna liczba odsłon podstron i sekcji SPA w wybranych serwisach WWW.",
+      "description": "Liczba odsłon podstron i sekcji SPA w wybranym okresie (Auto: do 09:00 Wczoraj / po 09:00 Dziś, Dziś, Wczoraj lub Łącznie).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -85,7 +126,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"}) or sum(web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -95,7 +136,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Wejścia organiczne z wyszukiwarek (Google, Bing, DuckDuckGo) oraz wyszukiwarek AI (ChatGPT, Perplexity, Claude, Gemini).",
+      "description": "Wejścia organiczne z wyszukiwarek (Google, Bing, DuckDuckGo) oraz wyszukiwarek AI (ChatGPT, Perplexity, Claude, Gemini) w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -120,7 +161,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_sources_total{site=~\"$site\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_sources{site=~\"$site\",period=\"$period\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or sum(web_analytics_sources_total{site=~\"$site\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -130,7 +171,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Liczba zaangażowanych sesji, w których użytkownik aktywnie przeglądał stronę przez co najmniej 15 sekund (brak natychmiastowego odrzucenia / Non-Bounce).",
+      "description": "Liczba zaangażowanych sesji w wybranym okresie, w których użytkownik aktywnie przeglądał stronę przez co najmniej 15 sekund (brak natychmiastowego odrzucenia / Non-Bounce).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -155,7 +196,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_engaged_visits_total{site=~\"$site\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_engaged_visits{site=~\"$site\",period=\"$period\"}) or sum(web_analytics_engaged_visits_total{site=~\"$site\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -165,7 +206,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Odsetek użytkowników odwiedzających serwisy ze smartfonów i tabletów.",
+      "description": "Odsetek użytkowników odwiedzających serwisy ze smartfonów i tabletów w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -193,7 +234,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(web_analytics_devices_total{site=~\"$site\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_devices_total{site=~\"$site\",label!=\"\"}), 1)",
+          "expr": "100 * sum(web_analytics_period_devices{site=~\"$site\",period=\"$period\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_period_devices{site=~\"$site\",period=\"$period\",label!=\"\"}), 1) or (100 * sum(web_analytics_devices_total{site=~\"$site\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_devices_total{site=~\"$site\",label!=\"\"}), 1))",
           "instant": true,
           "refId": "A"
         }
@@ -230,7 +271,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_cwv_lcp_seconds_sum{site=~\"$site\"}) / clamp_min(sum(web_analytics_cwv_lcp_seconds_count{site=~\"$site\"}), 1)",
+          "expr": "sum(web_analytics_period_lcp_seconds_sum{site=~\"$site\",period=\"$period\"}) / clamp_min(sum(web_analytics_period_lcp_seconds_count{site=~\"$site\",period=\"$period\"}), 1) or (sum(web_analytics_cwv_lcp_seconds_sum{site=~\"$site\"}) / clamp_min(sum(web_analytics_cwv_lcp_seconds_count{site=~\"$site\"}), 1))",
           "instant": true,
           "refId": "A"
         }
@@ -240,7 +281,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Skąd przychodzą użytkownicy? Bezpośrednie (direct), Google/Bing/DuckDuckGo (SEO), AI Search (ChatGPT/Perplexity/Claude/Gemini) oraz Social Media (FB/IG/TikTok/YT).",
+      "description": "Skąd przychodzą użytkownicy w wybranym okresie? Bezpośrednie (direct), Google/Bing/DuckDuckGo (SEO), AI Search (ChatGPT/Perplexity/Claude/Gemini) oraz Social Media (FB/IG/TikTok/YT).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -264,7 +305,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (web_analytics_sources_total{site=~\"$site\",label!=\"\"})",
+          "expr": "sum by (label) (web_analytics_period_sources{site=~\"$site\",period=\"$period\",label!=\"\"}) or sum by (label) (web_analytics_sources_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -275,7 +316,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Najczęściej odwiedzane podstrony i sekcje SPA (np. /, /salsopedia.html, /#radio, /#mapa, /#cennik).",
+      "description": "Najczęściej odwiedzane podstrony i sekcje SPA w wybranym okresie (np. /, /salsopedia.html, /#radio, /#mapa, /#cennik).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -299,7 +340,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (label) (web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}))",
+          "expr": "topk(10, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or topk(5, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"})) or topk(10, sum by (label) (web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -310,7 +351,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Jakich haseł i pojęć szukają użytkownicy w Salsopedii oraz po jakich frazach UTM wchodzą na stronę.",
+      "description": "Jakich haseł i pojęć szukają użytkownicy w Salsopedii oraz po jakich frazach UTM wchodzą na stronę w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -334,7 +375,7 @@
       },
       "targets": [
         {
-          "expr": "topk(12, sum by (term) (web_analytics_search_terms_total{site=~\"$site\"}))",
+          "expr": "topk(12, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",period=\"$period\"}) > 0) or topk(3, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",period=\"$period\"})) or topk(12, sum by (term) (web_analytics_search_terms_total{site=~\"$site\"}))",
           "instant": true,
           "legendFormat": "🔍 {{term}}",
           "refId": "A"
@@ -382,7 +423,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Podział ruchu wg typu urządzenia (Smartfony, Tablety, Komputery).",
+      "description": "Podział ruchu wg typu urządzenia (Smartfony, Tablety, Komputery) w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -406,7 +447,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (web_analytics_devices_total{site=~\"$site\",label!=\"\"})",
+          "expr": "sum by (label) (web_analytics_period_devices{site=~\"$site\",period=\"$period\",label!=\"\"}) or sum by (label) (web_analytics_devices_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -417,7 +458,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Kraje odwiedzających rozpoznane na brzegu sieci Cloudflare (nagłówek CF-IPCountry, bez zapisu IP).",
+      "description": "Kraje odwiedzających rozpoznane na brzegu sieci Cloudflare w wybranym okresie (nagłówek CF-IPCountry, bez zapisu IP).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -441,7 +482,7 @@
       },
       "targets": [
         {
-          "expr": "topk(8, sum by (label) (web_analytics_countries_total{site=~\"$site\",label!=\"\"}))",
+          "expr": "topk(8, sum by (label) (web_analytics_period_countries{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or topk(4, sum by (label) (web_analytics_period_countries{site=~\"$site\",period=\"$period\",label!=\"\"})) or topk(8, sum by (label) (web_analytics_countries_total{site=~\"$site\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -452,7 +493,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Śledzenie mikro-konwersji i interakcji: otwarcia czatu AI, kliknięcia w szybkie podpowiedzi, kliknięcia w numer telefonu/e-mail oraz uruchomienia Radia Salsa.",
+      "description": "Śledzenie mikro-konwersji i interakcji w wybranym okresie: otwarcia czatu AI, kliknięcia w szybkie podpowiedzi, kliknięcia w numer telefonu/e-mail oraz uruchomienia Radia Salsa.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -476,7 +517,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (web_analytics_events_total{site=~\"$site\",label!=\"\"})",
+          "expr": "sum by (label) (web_analytics_period_events{site=~\"$site\",period=\"$period\",label!=\"\"}) or sum by (label) (web_analytics_events_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -487,7 +528,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Porównanie łącznej liczby odsłon pomiędzy wszystkimi serwisami platformy TwojaStronaWWW.",
+      "description": "Porównanie liczby odsłon pomiędzy wszystkimi serwisami platformy TwojaStronaWWW w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -511,7 +552,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (site) (web_analytics_pageviews_total{label!=\"\"})",
+          "expr": "sum by (site) (web_analytics_period_pageviews{period=\"$period\",label!=\"\"}) or sum by (site) (web_analytics_pageviews_total{label!=\"\"})",
           "instant": true,
           "legendFormat": "🌐 {{site}} (odsłony)",
           "refId": "A"
@@ -522,7 +563,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Automatyczna kategoryzacja tematów pytań zadawanych czatbotowi AI (Zero-PII — bez logowania surowych wiadomości klientów).",
+      "description": "Automatyczna kategoryzacja tematów pytań zadawanych czatbotowi AI w wybranym okresie (Zero-PII — bez logowania surowych wiadomości klientów).",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -546,7 +587,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (label) (ai_router_question_topics_total{site=~\"$site\",label!=\"\"})",
+          "expr": "topk(10, sum by (label) (ai_router_period_question_topics{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or topk(5, sum by (label) (ai_router_period_question_topics{site=~\"$site\",period=\"$period\",label!=\"\"})) or sum by (label) (ai_router_question_topics_total{site=~\"$site\",label!=\"\"})",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -665,12 +706,48 @@
         ],
         "query": "katosalsahub,dancepuls,fuegolingua,twojastronawww,raricart,radar-p1",
         "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "🕒 Auto (do 09:00 Wczoraj / po 09:00 Dziś)",
+          "value": "auto"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Okres (Dzień)",
+        "multi": false,
+        "name": "period",
+        "options": [
+          {
+            "selected": true,
+            "text": "🕒 Auto (do 09:00 Wczoraj / po 09:00 Dziś)",
+            "value": "auto"
+          },
+          {
+            "selected": false,
+            "text": "☀️ Dziś (od 00:00)",
+            "value": "today"
+          },
+          {
+            "selected": false,
+            "text": "🌙 Wczoraj (pełna doba)",
+            "value": "yesterday"
+          },
+          {
+            "selected": false,
+            "text": "📊 Łącznie (cały okres)",
+            "value": "total"
+          }
+        ],
+        "query": "🕒 Auto (do 09:00 Wczoraj / po 09:00 Dziś) : auto,☀️ Dziś (od 00:00) : today,🌙 Wczoraj (pełna doba) : yesterday,📊 Łącznie (cały okres) : total",
+        "type": "custom"
       }
     ]
   },
   "time": { "from": "now-24h", "to": "now" },
-  "timezone": "browser",
+  "timezone": "Europe/Warsaw",
   "title": "TwojaStronaWWW - Analityka Ruchu WWW & SEO (Cookieless)",
   "uid": "web-analytics-overview",
-  "version": 3
+  "version": 4
 }

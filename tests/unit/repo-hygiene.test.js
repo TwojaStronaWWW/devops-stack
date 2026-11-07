@@ -342,8 +342,25 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const webIds = webDash.panels.map((p) => p.id);
     assert.strictEqual(new Set(webIds).size, webIds.length, 'Zduplikowane ID paneli w dashboardzie web-analytics-overview');
     assert.ok(Array.isArray(webDash.templating?.list) && webDash.templating.list.some((v) => v.name === 'site'), 'Brak zmiennej $site w web-analytics-overview.json');
+    const periodVar = webDash.templating?.list?.find((v) => v.name === 'period');
+    assert.ok(periodVar, 'Brak zmiennej przełącznika dnia $period w web-analytics-overview.json');
+    assert.strictEqual(periodVar.current?.value, 'auto', 'Domyślną wartością przełącznika $period w Grafanie musi być auto (do 09:00 Wczoraj / po 09:00 Dziś)');
+    const periodOptionValues = (periodVar.options || []).map((o) => o.value);
+    for (const pOpt of ['auto', 'today', 'yesterday', 'total']) {
+      assert.ok(periodOptionValues.includes(pOpt), `Brak opcji '${pOpt}' w przełączniku $period dashboardu web-analytics-overview.json`);
+    }
     const webExprs = JSON.stringify(webDash.panels);
     for (const metric of [
+      'web_analytics_period_unique_visitors',
+      'web_analytics_period_pageviews',
+      'web_analytics_period_sources',
+      'web_analytics_period_engaged_visits',
+      'web_analytics_period_devices',
+      'web_analytics_period_countries',
+      'web_analytics_period_search_terms',
+      'web_analytics_period_events',
+      'web_analytics_period_lcp_seconds_sum',
+      'ai_router_period_question_topics',
       'web_analytics_unique_visitors_today',
       'web_analytics_unique_visitors_total',
       'web_analytics_engaged_visits_total',
