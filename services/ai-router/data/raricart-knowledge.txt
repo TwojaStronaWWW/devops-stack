@@ -1,43 +1,54 @@
-# BAZA WIEDZY: RARICART.PL (Mobilne Live Food Stations na Wesela, Eventy Firmowe i Przyjęcia)
+# BAZA WIEDZY: RARICART.PL (Mobilne Stanowiska Kulinarne na Wesela, Eventy Firmowe i Przyjęcia)
+
+## BEZWZGLĘDNA ZASADA DOTYCZĄCA CEN I WYCENY (PRZESTRZEGAJ ZAWSZE!):
+1. **NIE PODAWAJ ŻADNYCH KONKRETNYCH CEN, KWOT W ZŁOTYCH (PLN/zł), WIDEŁEK CENOWYCH, STAWEK ZA KILOMETR ANI PROCENTOWYCH RABATÓW.**
+2. W Raricart **każdą wycenę przygotowujemy wyłącznie indywidualnie** — obejmuje ona pełny koszt usługi, bez ukrytych opłat.
+3. Kwota zależy od **wybranego stoiska (lub połączenia kilku stoisk), liczby gości, czasu pracy oraz miejsca przyjęcia**.
+4. Gdy klient pyta o cenę, koszt, cennik lub wycenę (np. „ile kosztują lody włoskie?”, „jaka jest cena na 100 osób?”, „ile kosztuje pakiet?”), odpowiedz uprzejmie, że wycenę przygotowujemy indywidualnie na podstawie parametrów przyjęcia i zachęć do wypełnienia formularza kontaktowego na stronie (**#kontakt** / https://raricart.pl/#kontakt) — w ciągu **24 godzin** prześlemy konkretną ofertę, a termin rezerwujemy po jej akceptacji i wpłacie zaliczki.
 
 ## Czym jest Raricart?
-Raricart (https://raricart.pl/) to koncept mobilnych stacji gastronomicznych i degustacyjnych (Live Food Stations), w których jedzenie przygotowywane jest na żywo na oczach gości.
-- Stanowi nowoczesną, interaktywną alternatywę dla klasycznego cateringu i tradycyjnego słodkiego stołu na weselach, eventach firmowych, galach, jubileuszach, chrzcinach, komuniach i przyjęciach plenerowych.
-- Każde stanowisko obejmuje estetyczny mobilny wózek/stację, pełną aranżację wizualną dopasowaną do stylu przyjęcia oraz dedykowaną obsługę przez cały czas trwania serwisu.
+Raricart (https://raricart.pl/) to koncept mobilnych stanowisk kulinarnych i degustacyjnych (Live Food Stations), w których jedzenie przygotowywane jest na żywo na oczach gości.
+- Tworząc Raricart, założycielka marki **Emilia** postawiła na połączenie świetnego smaku, estetycznie podanych porcji i swobodnej atmosfery.
+- Nasze stoiska zaprojektowano tak, by dyskretnie dopełniały wystrój uroczystości i pozwalały każdemu gościowi skomponować porcję dokładnie tak, jak lubi.
+- Stanowiska utrzymane są w jasnej, spójnej stylistyce i od początku do samego końca serwisu są pełne oraz prezentują się świeżo.
 
-## Oferowane stanowiska Live Food i cennik pojedynczych stacji (https://raricart.pl/pakiety):
-1. **Lody Włoskie Live Station** — kremowe lody włoskie serwowane na bieżąco z bogatym wyborem dodatków (świeże owoce, sosy owocowe i czekoladowe, chrupiące posypki, orzechy, mini ciasteczka):
-   - Pakiet do 50 osób: **3 000 zł**
-   - Pakiet do 100 osób: **4 250 zł**
-   - Pakiet do 150 osób: **5 550 zł**
-2. **Mini Pancakes Live Station** — ciepłe, złociste mini naleśniczki wypiekane na miejscu na oczach gości z dodatkami (świeże owoce, kremy czekoladowe i pistacjowe, polewy, posypki, chrupiące ciasteczka):
-   - Pakiet do 50 osób: **3 150 zł**
-   - Pakiet do 100 osób: **4 500 zł**
-   - Pakiet do 150 osób: **5 850 zł**
-3. **Deska Serów Live Station** — wytrawna strefa degustacyjna obejmująca 12 wyselekcjonowanych pozycji włoskich serów i dojrzewających wędlin premium z wytrawnymi dodatkami, bakaliami, owocami, krakersami i sosami do samodzielnego komponowania mini desek:
-   - Pakiet do 50 osób: **3 250 zł**
-   - Pakiet do 100 osób: **4 750 zł**
-   - Pakiet do 150 osób: **6 300 zł**
+## Oferowane stanowiska kulinarne (https://raricart.pl/#oferta — Jedna formuła, różne odsłony):
+1. **Mini pancakes (NA SŁODKO — Puszyste, złociste i zawsze ciepłe)**:
+   - Gorące, puszyste placuszki wypiekane na miejscu na oczach gości.
+   - Lekka, efektowna alternatywa dla tradycyjnego słodkiego stołu, która przyciąga zapachem i pozwala każdemu stworzyć własną, ulubioną porcję (świeże owoce, sosy, polewy i chrupiące posypki).
+   - Czas serwisu dopasowujemy do harmonogramu przyjęcia. Wycena indywidualna.
+2. **Lody włoskie (ORZEŹWIENIE — Kremowa klasyka kręcona na żywo)**:
+   - Aksamitne lody o smaku śmietankowym, kręcone na bieżąco podczas przyjęcia.
+   - Podawane w chrupiących wafelkach lub kubeczkach ze strefą dodatków (sosy, polewy, posypki i owoce), dzięki którym każdy gość komponuje swój własny deser.
+   - Świetnie sprawdzają się zarówno w plenerze, jak i na sali. Wycena indywidualna.
+3. **Deska serów i wędlin (WYTRAWNIE — Włoskie sery, wędliny i dodatki)**:
+   - Bogato zaaranżowana strefa pełna wyselekcjonowanych serów, dojrzewających włoskich wędlin oraz świeżych owoców, orzechów, oliwek, konfitur i chrupiących dodatków.
+   - Idealna dla gości, którzy zamiast słodyczy wolą wyraziste, wytrawne smaki. Stanowisko uzupełniane na bieżąco podczas wydarzenia. Wycena indywidualna.
 
-## Pakiety łączone (2 oraz 3 stanowiska z rabatem):
-1. **Pakiety 2 stanowiska (rabat -5%, logistyka liczona tylko raz):**
-   - **Mini Pancakes + Lody Włoskie:** 50 os. **6 250 zł** | 100 os. **8 720 zł** | 150 os. **11 240 zł** | 200 os. **13 710 zł**
-   - **Mini Pancakes + Deska Serów:** 50 os. **6 490 zł** | 100 os. **9 200 zł** | 150 os. **11 950 zł** | 200 os. **14 660 zł**
-   - **Lody Włoskie + Deska Serów:** 50 os. **6 350 zł** | 100 os. **8 960 zł** | 150 os. **11 670 zł** | 200 os. **14 280 zł**
-2. **Pakiet Kompleksowy — 3 stanowiska (Mini Pancakes + Lody Włoskie + Deska Serów, rabat -10%):**
-   - 50 osób: **8 870 zł**
-   - 100 osób: **12 560 zł**
-   - 150 osób: **16 340 zł**
-   - 200 osób: **20 030 zł**
+## Dla kogo jest Raricart? (https://raricart.pl/#dlakogo)
+- **Wesela i poprawiny (Wesela z klasą)**: Elegancka strefa słodka lub wytrawna, która towarzyszy gościom od popołudniowej kawy w ogrodzie aż po wieczorną zabawę na sali. Płynne wydawanie porcji na żywo bez kolejek i przestojów.
+- **Biznes i korporacje (Eventy firmowe i gale)**: Konferencje, jubileusze, premiery produktów oraz spotkania integracyjne (sprawna obsługa wydarzeń od 50 do ponad 500 gości, możliwość personalizacji stoiska oraz pełnego brandingu, faktura VAT, ubezpieczenie OC i aktualne wymogi sanitarne).
+- **Uroczystości prywatne (Przyjęcia rodzinne i plenerowe)**: Urodziny, rocznice, komunie, chrzciny oraz kameralne spotkania w ogrodzie (pełna samowystarczalność techniczna — potrzebny wyłącznie dostęp do prądu 230 V, my zajmujemy się przygotowaniem, obsługą i sprzątaniem).
+- **Agencje i B2B (Agencje eventowe i Wedding Plannerzy)**: Sprawdzony podwykonawca dla organizatorów i koordynatorów (punktualny przyjazd, cichy i sprawny montaż przed wydarzeniem, nienaganny strój i wysoka kultura osobista zespołu).
 
-## Logistyka, dojazd i wymagania techniczne:
-- **Dojazd:** Do 50 km od bazy (Śląsk / Zabrze / Katowice i okolice) wliczony w cenę pakietu. Powyżej 50 km dopłata wynosi **+2 zł/km**.
-- **Wymagania na miejscu:** Standardowe podłączenie do prądu 230V oraz niewielka przestrzeń na ustawienie mobilnego stanowiska (wewnątrz sali lub w plenerze pod zadaszeniem).
-- **Montaż:** Ekipa Raricart przyjeżdża odpowiednio wcześniej przed startem serwisu, dyskretnie rozkłada stację i po zakończeniu zostawia idealny porządek.
+## Najczęstsze pytania i odpowiedzi (Oficjalne FAQ Raricart — https://raricart.pl/#faq):
+- **01 — LICZBA GOŚCI (Na jaką liczbę gości sprawdzi się stoisko Raricart?)**:
+  Obsługujemy zarówno kameralne przyjęcia na 20–30 osób, jak i duże wesela oraz spotkania firmowe. Nasze stoiska są przystosowane do sprawnej pracy na żywo, dzięki czemu wydawanie porcji przebiega płynnie, a goście nie czekają w kolejkach. Czas trwania serwisu oraz zakres oferty zawsze dopasowujemy indywidualnie do planowanej liczby uczestników.
+- **02 — ORGANIZACJA NA WESELU (W jakich godzinach najlepiej zaplanować serwis i jak wygląda montaż w trakcie przyjęcia?)**:
+  Godziny pracy stoiska dobieramy wspólnie do harmonogramu uroczystości – najczęściej są to godziny popołudniowe lub wieczorne, a także drugi dzień wesela. Wszystkie kwestie techniczne możemy ustalić bezpośrednio z managerem sali lub koordynatorem, a samo przygotowanie stanowiska przebiega cicho i dyskretnie, bez zakłócania przebiegu przyjęcia.
+- **03 — DOJAZD (Czy dojeżdżacie poza Śląsk i Małopolskę?)**:
+  Tak, realizujemy zamówienia w całej Polsce. Na co dzień działamy głównie na Śląsku i w Małopolsce, ale regularnie pojawiamy się również na przyjęciach we Wrocławiu, Warszawie, Łodzi, Poznaniu oraz w mniejszych miejscowościach. Koszt transportu zawsze obliczamy indywidualnie na podstawie lokalizacji i od razu uwzględniamy go w wycenie.
+- **04 — ŁĄCZENIE STOISK (Czy można połączyć kilka stoisk na jednym przyjęciu?)**:
+  Tak, możesz dowolnie połączyć dwa lub trzy stoiska na jednym przyjęciu, zestawiając propozycje słodkie z wytrawnymi. Wszystkie nasze stanowiska są utrzymane w tej samej jasnej stylistyce, dzięki czemu ustawione obok siebie tworzą spójną i elegancką całość.
+- **05 — MIEJSCE I PRĄD (Czego potrzebujecie na miejscu, aby rozstawić stoisko?)**:
+  Wystarczy nam około 2 × 2 m lub 3 × 3 m równej powierzchni – w sali, na tarasie, pod namiotem lub w ogrodzie – oraz dostęp do standardowego gniazdka 230 V. Nie wymagamy zaplecza kuchennego ani dostępu do bieżącej wody, ponieważ nasze stanowiska są w pełni samowystarczalne.
+- **06 — OBSŁUGA I SERWIS (Czy zapewniacie pełną obsługę, naczynia i sprzątanie po serwisie?)**:
+  Tak, kompleksowo dbamy o cały przebieg serwisu. W cenie zapewniamy transport, montaż stoiska, obsługę przez cały czas trwania wydarzenia, wszystkie składniki i dodatki, a także estetyczne naczynia, sztućce oraz serwetki. Po zakończeniu pracy sprawnie demontujemy stanowisko i pozostawiamy po sobie nienaganny porządek.
+- **07 — WYCENA I REZERWACJA (Jak wygląda wycena i rezerwacja terminu?)**:
+  Każdą wycenę przygotowujemy indywidualnie – obejmuje ona pełny koszt usługi, bez ukrytych opłat. Kwota zależy od wybranego stoiska, liczby gości, czasu pracy oraz miejsca przyjęcia. Po wysłaniu formularza kontaktowego w ciągu 24 godzin otrzymasz od nas konkretną ofertę, a sam termin rezerwujemy po jej akceptacji i wpłacie zaliczki.
 
 ## Kontakt i rezerwacja terminu:
-- Strona główna i formularz zapytania o dostępność terminu: https://raricart.pl/
-- Pełny cennik i konfigurator pakietów: https://raricart.pl/pakiety
+- Formularz wyceny i rezerwacji na stronie: https://raricart.pl/#kontakt
 - Telefon: **+48 883 392 688**
 - E-mail: **kontakt@raricart.pl**
-- Klient może również podać datę przyjęcia, liczbę gości oraz swój numer telefonu lub e-mail bezpośrednio tutaj na czacie – przekażemy namiar do natychmiastowego potwierdzenia wolnego terminu.
+- Klient może również podać datę przyjęcia, miejsce, liczbę gości oraz swój numer telefonu lub e-mail bezpośrednio tutaj na czacie – przekażemy szczegóły do przygotowania indywidualnej wyceny.

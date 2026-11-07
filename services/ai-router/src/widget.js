@@ -37,10 +37,10 @@ const QUICK_PROMPTS_MAP = {
     'Wyjaśnij figury: Dile Que No, Enchufla i Setenta'
   ],
   raricart: [
-    'Ile kosztują stacje Live Food (Lody, Pancakes, Sery)?',
-    'Jak działają pakiety łączone 2 i 3 stanowisk z rabatem?',
-    'Jak wygląda dojazd i montaż stacji na weselu lub evencie?',
-    'Jak sprawdzić wolny termin i zarezerwować datę?'
+    'Jak wygląda wycena i rezerwacja terminu?',
+    'Czy można połączyć kilka stoisk na jednym przyjęciu?',
+    'Czego potrzebujecie na miejscu, aby rozstawić stoisko?',
+    'Czy dojeżdżacie poza Śląsk i Małopolskę?'
   ],
   dancepuls: [
     'Czym jest aplikacja DancePuls?',
@@ -605,37 +605,58 @@ function getLocalFallbackAnswer(question, siteId, knowledgeEntries = []) {
   }
 
   // ===========================================================================
-  // 2. RARICART (Mobilne Live Food Stations na wesela i eventy)
+  // 2. RARICART (Mobilne Stanowiska Kulinarne na wesela i przyjęcia)
   // ===========================================================================
   if (resolvedSiteId === 'raricart') {
-    if (q.includes('pakiet') || q.includes('rabat') || q.includes('łącz') || q.includes('lacz') || q.includes('2 ') || q.includes('3 ') || q.includes('kompleks')) {
+    if (q.includes('cen') || q.includes('koszt') || q.includes('ile ') || q.includes('wycen') || q.includes('rezerwacj') || q.includes('termin') || q.includes('zaliczk')) {
       return (
-        `Oferujemy **pakiety łączone z rabatem** (logistyka i dojazd do 50 km liczone tylko raz):\n` +
-        `- **2 stanowiska (rabat -5%)**: np. *Mini Pancakes + Lody Włoskie*: 50 os. **6 250 zł** | 100 os. **8 720 zł** | 150 os. **11 240 zł** | 200 os. **13 710 zł**\n` +
-        `- **Pakiet Kompleksowy — 3 stanowiska (rabat -10%, Pancakes + Lody + Deska Serów)**: 50 os. **8 870 zł** | 100 os. **12 560 zł** | 150 os. **16 340 zł** | 200 os. **20 030 zł**\n` +
-        `Pełny konfigurator znajdziesz na https://raricart.pl/pakiety lub w sekcji **#kontakt**!`
+        `**Każdą wycenę przygotowujemy indywidualnie** – obejmuje ona pełny koszt usługi, bez ukrytych opłat. Kwota zależy od wybranego stoiska, liczby gości, czasu pracy oraz miejsca przyjęcia.\n` +
+        `Po wysłaniu formularza kontaktowego (**#kontakt**) w ciągu **24 godzin** otrzymasz od nas konkretną ofertę, a sam termin rezerwujemy po jej akceptacji i wpłacie zaliczki.`
       );
     }
-    if (q.includes('cen') || q.includes('koszt') || q.includes('ile ') || q.includes('lody') || q.includes('pancake') || q.includes('ser')) {
+    if (q.includes('pakiet') || q.includes('łącz') || q.includes('lacz') || q.includes('kilk') || q.includes('2 ') || q.includes('3 ') || q.includes('dwa') || q.includes('trzy')) {
       return (
-        `Cennik pojedynczych mobilnych stacji **Raricart Live Food Station** (pełna aranżacja + obsługa na żywo):\n` +
-        `- **Lody Włoskie Live Station**: do 50 os. **3 000 zł** | do 100 os. **4 250 zł** | do 150 os. **5 550 zł**\n` +
-        `- **Mini Pancakes Live Station**: do 50 os. **3 150 zł** | do 100 os. **4 500 zł** | do 150 os. **5 850 zł**\n` +
-        `- **Deska Serów Live Station (12 włoskich serów i wędlin)**: do 50 os. **3 250 zł** | do 100 os. **4 750 zł** | do 150 os. **6 300 zł**\n` +
-        `Sprawdź dostępne terminy w formularzu **#kontakt** lub zadzwoń: **+48 883 392 688**.`
+        `Tak, możesz **dowolnie połączyć dwa lub trzy stoiska** na jednym przyjęciu, zestawiając propozycje słodkie z wytrawnymi (**Mini pancakes**, **Lody włoskie**, **Deska serów i wędlin**).\n` +
+        `Wszystkie nasze stanowiska są utrzymane w tej samej jasnej stylistyce, dzięki czemu ustawione obok siebie tworzą spójną i elegancką całość. Napisz do nas przez formularz **#kontakt**, a przygotujemy indywidualną wycenę!`
       );
     }
-    if (q.includes('dojazd') || q.includes('montaż') || q.includes('montaz') || q.includes('prąd') || q.includes('prad') || q.includes('wymaga') || q.includes('gdzie')) {
+    if (q.includes('dojazd') || q.includes('śląsk') || q.includes('slask') || q.includes('małopol') || q.includes('malopol') || q.includes('polsk') || q.includes('transport') || q.includes('gdzie')) {
       return (
-        `Logistyka i montaż stanowisk **Raricart** są po naszej stronie:\n` +
-        `- **Dojazd do 50 km w cenie pakietu** (powyżej 50 km dopłata wynosi tylko **+2 zł/km**)\n` +
-        `- **Wymagania na miejscu**: standardowe gniazdko **230V** i kawałek miejsca na sali lub w plenerze pod zadaszeniem\n` +
-        `- Przyjeżdżamy odpowiednio wcześniej, rozkładamy stację i po serwisie zostawiamy idealny porządek.`
+        `Tak, **realizujemy zamówienia w całej Polsce**. Na co dzień działamy głównie na Śląsku i w Małopolsce, ale regularnie pojawiamy się również na przyjęciach we Wrocławiu, Warszawie, Łodzi, Poznaniu oraz w mniejszych miejscowościach.\n` +
+        `Koszt transportu zawsze obliczamy indywidualnie na podstawie lokalizacji i od razu uwzględniamy go w wycenie.`
+      );
+    }
+    if (q.includes('prąd') || q.includes('prad') || q.includes('miejsc') || q.includes('wymaga') || q.includes('rozstaw') || q.includes('wod') || q.includes('230')) {
+      return (
+        `Wystarczy nam około **2 × 2 m lub 3 × 3 m równej powierzchni** – w sali, na tarasie, pod namiotem lub w ogrodzie – oraz dostęp do standardowego **gniazdka 230 V**.\n` +
+        `Nie wymagamy zaplecza kuchennego ani dostępu do bieżącej wody, ponieważ nasze stanowiska są w pełni samowystarczalne.`
+      );
+    }
+    if (q.includes('gośc') || q.includes('gosc') || q.includes('osób') || q.includes('osob') || q.includes('kolejk')) {
+      return (
+        `Obsługujemy zarówno **kameralne przyjęcia na 20–30 osób**, jak i **duże wesela oraz spotkania firmowe**. Nasze stoiska są przystosowane do sprawnej pracy na żywo, dzięki czemu wydawanie porcji przebiega płynnie, a goście nie czekają w kolejkach.\n` +
+        `Czas trwania serwisu oraz zakres oferty zawsze dopasowujemy indywidualnie do planowanej liczby uczestników.`
+      );
+    }
+    if (q.includes('godzin') || q.includes('montaż') || q.includes('montaz') || q.includes('wesel') || q.includes('poprawin') || q.includes('obsług') || q.includes('obslug') || q.includes('naczyn') || q.includes('sprząt') || q.includes('sprzat')) {
+      return (
+        `Kompleksowo dbamy o cały przebieg serwisu:\n` +
+        `- **Godziny i montaż**: dobieramy wspólnie do harmonogramu uroczystości (popołudnie, wieczór lub drugi dzień wesela). Przygotowanie stanowiska przebiega cicho i dyskretnie, bez zakłócania przyjęcia.\n` +
+        `- **W cenie zapewniamy**: transport, montaż stoiska, obsługę przez cały czas trwania wydarzenia, wszystkie składniki i dodatki, a także estetyczne naczynia, sztućce oraz serwetki i nienaganny porządek po zakończeniu pracy.`
+      );
+    }
+    if (q.includes('lody') || q.includes('pancake') || q.includes('ser') || q.includes('ofert') || q.includes('stois') || q.includes('stacj')) {
+      return (
+        `Do wyboru masz **3 autorskie stanowiska kulinarne** przygotowywane na żywo (**#oferta**):\n` +
+        `- **Mini pancakes (NA SŁODKO)** – gorące, puszyste placuszki wypiekane na miejscu ze świeżymi owocami, sosami, polewami i posypkami\n` +
+        `- **Lody włoskie (ORZEŹWIENIE)** – aksamitne lody śmietankowe kręcone na bieżąco w wafelkach lub kubeczkach ze strefą dodatków\n` +
+        `- **Deska serów i wędlin (WYTRAWNIE)** – wyselekcjonowane sery, dojrzewające włoskie wędliny, owoce, orzechy, oliwki i konfitury.\n` +
+        `Opowiedz nam o swoim przyjęciu w formularzu **#kontakt**, a w 24h przygotujemy indywidualną ofertę!`
       );
     }
     return (
-      `Cześć! 🥞🍦🧀 Jestem wirtualnym doradcą **Raricart Live Food Station**. Tworzymy mobilne stacje kulinarne na żywo na wesela i eventy (**Lody Włoskie, Mini Pancakes, Deski Serów**).\n` +
-      `Zapytaj mnie o cennik na 50–200 gości, pakiety łączone lub zostaw datę przyjęcia i numer telefonu — potwierdzimy dostępność terminu (tel. **+48 883 392 688**, kontakt@raricart.pl)!`
+      `Cześć! 🥞🍦🧀 Jestem wirtualnym doradcą **Raricart**. Tworzymy mobilne stanowiska kulinarne na żywo na wesela, eventy firmowe i przyjęcia (**Mini pancakes, Lody włoskie, Deska serów i wędlin**).\n` +
+      `Każdą wycenę przygotowujemy indywidualnie w ciągu 24 godzin. Zapytaj mnie o szczegóły organizacji, łączenie stoisk lub przejdź do formularza **#kontakt** (tel. **+48 883 392 688**, kontakt@raricart.pl)!`
     );
   }
 
@@ -1219,7 +1240,7 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
       : siteId === 'fuegolingua'
       ? 'Napisz pytanie o kurs lub cennik...'
       : siteId === 'raricart'
-      ? 'Zapytaj o stacje Live Food, pakiety lub wolny termin...'
+      ? 'Zapytaj o stoiska kulinarne, organizację lub rezerwację terminu...'
       : 'Napisz pytanie o ofertę lub wycenę...';
 
   const root = doc.createElement('div');
@@ -1572,7 +1593,7 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
         : siteId === 'fuegolingua'
         ? '¡Hola! 💃 Jestem wirtualnym doradcą **Fuego Lingua**. W czym mogę Ci pomóc? Zapytaj o bezpłatną lekcję próbną, cennik lub kursy hiszpańskiego!'
         : siteId === 'raricart'
-        ? 'Cześć! 🥞🍦🧀 Jestem wirtualnym doradcą **Raricart Live Food Station**. Zapytaj o cennik stacji na żywo (Lody Włoskie, Mini Pancakes, Deska Serów), pakiety łączone lub dostępność terminu na Twoje wesele czy event!'
+        ? 'Cześć! 🥞🍦🧀 Jestem wirtualnym doradcą **Raricart**. Odpowiem na pytania o nasze mobilne stanowiska (**Mini pancakes, Lody włoskie, Deska serów i wędlin**), organizację serwisu na przyjęciu oraz indywidualną wycenę i rezerwację terminu!'
         : `Cześć! 👋 Jestem wirtualnym doradcą **${title}**. W czym mogę Ci pomóc? Zapytaj o ofertę, wycenę lub współpracę!`;
 
     appendMessageElement('model', welcomeText);
