@@ -439,9 +439,17 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
 
     $bType = in_array($rawType, ['pageview', 'search', 'event', 'engaged'], true) ? $rawType : 'pageview';
     $rawPath = trim((string)($beacon['path'] ?? '/'));
-    $bPath = substr(preg_replace('/[^a-zA-Z0-9_\/#.-]/', '', $rawPath) ?: '/', 0, 48);
+    $extractedPathTerm = '';
+    if (preg_match('/(?:[?&](?:term|q)=([a-z0-9_-]+)|term(term_[a-z0-9_]+))/i', $rawPath, $pm)) {
+        $extractedPathTerm = ($pm[1] ?? '') !== '' ? $pm[1] : ($pm[2] ?? '');
+    }
+    $cleanRawPath = (string)preg_replace('/(\?.*|termterm_[a-z0-9_]+)$/i', '', $rawPath);
+    $bPath = substr(preg_replace('/[^a-zA-Z0-9_\/#.-]/', '', $cleanRawPath) ?: '/', 0, 48);
     if (!str_starts_with($bPath, '/')) {
         $bPath = '/' . $bPath;
+    }
+    if (function_exists('aiNormalizeAnalyticsPath')) {
+        $bPath = aiNormalizeAnalyticsPath($bPath);
     }
 
     $utmSource = strtolower(trim((string)($beacon['utm_source'] ?? '')));
@@ -483,9 +491,14 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
     $visitorHash = substr(hash('sha256', aiAnalyticsDay() . '|' . $bSite . '|' . $bIp . '|' . $ua), 0, 16);
 
     $rawTerm = trim((string)($beacon['term'] ?? $beacon['search_term'] ?? $beacon['utm_term'] ?? ''));
+    if ($rawTerm === '' && $extractedPathTerm !== '') {
+        $rawTerm = $extractedPathTerm;
+    }
     $bTerm = mb_substr(trim((string)preg_replace('/[^a-ząćęłńóśźż0-9 _-]/iu', '', mb_strtolower($rawTerm))), 0, 40);
     if (mb_strlen($bTerm) < 2) {
         $bTerm = '';
+    } elseif (function_exists('aiNormalizeSearchTerm')) {
+        $bTerm = aiNormalizeSearchTerm($bTerm);
     }
 
     $rawEvent = strtolower(trim((string)($beacon['event'] ?? $beacon['event_name'] ?? '')));

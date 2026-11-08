@@ -729,6 +729,23 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       });
       assert.strictEqual(engRes.status, 202);
 
+      // 4b. Normalizacja surowych ID Salsopedii (term_*) oraz ścieżek /index.html#...
+      const normRes = await fetch(`${baseUrl}/analytics`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-Connecting-IP': visitorIp,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        },
+        body: JSON.stringify({
+          site_id: 'katosalsahub',
+          type: 'pageview',
+          path: '/index.html#faq',
+          utm_term: 'term_inst_16',
+        }),
+      });
+      assert.strictEqual(normRes.status, 202);
+
       // 5. Synchronizacja Google Search Console (gsc_sync) z WAN (Cloudflare) musi być zablokowana (HTTP 403)
       const wanGscRes = await fetch(`${baseUrl}/analytics`, {
         method: 'POST',
@@ -790,6 +807,8 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(metricsText, /web_analytics_devices_total\{site="katosalsahub",device="mobile",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_countries_total\{site="katosalsahub",country="PL",label="[^"]*Polska \(PL\)"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="rueda de casino"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_search_terms_total\{site="katosalsahub",term="Daniel „Kokosz” Machalica \(Good Mood\)"\}\s+[1-9]/);
+      assert.match(metricsText, /web_analytics_pageviews_total\{site="katosalsahub",path="\/#faq",label="❓ \/#faq \(Częste pytania i odpowiedzi\)"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="katosalsahub",event="cta_phone_click",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="raricart",event="contact_form_submit",label="[^"]+"\}\s+[1-9]/);
       assert.match(metricsText, /web_analytics_events_total\{site="radar-p1",event="nfz_region_select",label="[^"]+"\}\s+[1-9]/);
