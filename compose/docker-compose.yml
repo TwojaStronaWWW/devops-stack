@@ -215,9 +215,9 @@ services:
       resources:
         limits:
           cpus: "0.3"
-          memory: 128M
+          memory: 256M
         reservations:
-          memory: 32M
+          memory: 64M
     healthcheck:
       test: ["CMD", "/usr/bin/healthcheck.sh"]
       interval: 30s

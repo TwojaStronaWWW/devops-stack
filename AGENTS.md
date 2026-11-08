@@ -10,130 +10,78 @@ Jesteś **Senior DevOps Engineerem, Architektem Chmury (Oracle Cloud Infrastruct
 
 ## 2. TWARDE OGRANICZENIA ARCHITEKTONICZNE (HARD CONSTRAINTS)
 1. **Gwarancja 100% Always Free (0.00 PLN / 0.00 USD):**
-   - Infrastruktura jest hostowana w całości w ramach puli **Oracle Cloud Always Free**:
+   - Infrastruktura hostowana w całości w puli **Oracle Cloud Always Free**:
      - Maksymalnie 4 OCPU i 24 GB RAM dla maszyn Ampere Altra ARM64 (`VM.Standard.A1.Flex`).
      - Maksymalnie 200 GB przestrzeni dyskowej Block/Boot Volume na całe konto (tenancy).
      - **Bezwzględny zakaz** tworzenia płatnych zasobów (Load Balancerów, płatnych dysków, maszyn x86 ponad limit 2 micro).
 2. **Architektura Zero Trust & Ochrona Krawędziowa (Cloudflare Tunnel):**
    - **Brak otwartych portów webowych w WAN:** Porty 80 i 443 są zablokowane na zaporze UFW i Security Lists OCI.
-   - Cały ruch do serwisów webowych (Grafana, Uptime Kuma, Dozzle) trafia wyłącznie przez szyfrowany tunel **Cloudflare Zero Trust (`cloudflared`)**.
-   - Jedynym portem nasłuchującym na zewnątrz jest SSH (port 22), zabezpieczony kluczem Ed25519, stawką UFW (`limit 22/tcp`) oraz demonem Fail2ban. Logowanie hasłem jest bezwzględnie zablokowane (`PasswordAuthentication no`).
+   - Cały ruch do serwisów webowych (Grafana, Uptime Kuma, Dozzle, AI Router) trafia wyłącznie przez szyfrowany tunel **Cloudflare Zero Trust (`cloudflared`)**.
+   - Jedynym portem nasłuchującym na zewnątrz jest SSH (port 22), zabezpieczony kluczem Ed25519, stawką UFW (`limit 22/tcp`) oraz demonem Fail2ban (`PasswordAuthentication no`).
 3. **Dokeryzacja & Dwustrefowa Izolacja Sieciowa (Docker-First & Network Segmentation):**
-   - Usługi monitoringu, telemetrii i AI działają w wewnętrznej sieci mostkowej (`devops_internal_network`), a kontenery runnerów CI/CD są odseparowane w dedykowanej sieci (`devops_runners_network`), co uniemożliwia zadaniom CI/CD bezpośredni dostęp L3 do Prometheusa, Grafany, Uptime Kuma i AI Routera.
-   - Kontenery komunikują się po nazwach usług (DNS Dockera), nie wystawiając niepotrzebnych portów na `0.0.0.0`.
-   - Zapewnienie restartu usług: `restart: unless-stopped`.
+   - Usługi monitoringu, telemetrii i AI działają w sieci wewnętrznej (`devops_internal_network`), a kontenery runnerów CI/CD są odseparowane w dedykowanej sieci (`devops_runners_network`), co uniemożliwia zadaniom CI/CD bezpośredni dostęp L3 do Prometheusa, Grafany, Uptime Kuma i AI Routera.
+   - Kontenery komunikują się po nazwach usług (DNS Dockera), nie wystawiając portów na `0.0.0.0` (`restart: unless-stopped`).
 
 ---
 
 ## 3. STRUKTURA ROZWIĄZANIA (SOLUTION LAYOUT)
 ```plaintext
 VPS/
-├── .github/
-│   ├── workflows/
-│   │   ├── lint-compose.yml       # Quality Gate: walidacja Compose, składni skryptów i higieny
-│   │   ├── deploy.yml             # Automatyczny deploy po SSH na VPS + flush DNS nscd + audyt powykonawczy
-│   │   └── external-watchdog.yml  # Zewnętrzny Dead Man's Switch (WAN Watchdog z chmury GitHub -> Ntfy.sh)
-│   ├── ISSUE_TEMPLATE/            # Szablony zgłoszeń incydentów i zadań infrastrukturalnych
-│   ├── pull_request_template.md   # Checklista weryfikacyjna dla zmian infrastrukturalnych
-│   └── dependabot.yml             # Nadzór nad wersjami akcji GitHub i obrazów Docker
-├── .githooks/
-│   ├── pre-commit                 # Git hook chroniący przed wyciekiem kluczy i sekretów (.env, .env.bak*)
-│   └── commit-msg                 # Git hook wymuszający Conventional Commits
+├── .github/workflows/             # lint-compose.yml, deploy.yml (SSH + nscd flush + audyt), external-watchdog.yml, ai-security-review.yml
+├── .githooks/                     # pre-commit (ochrona sekretów .env/.env.bak*), commit-msg (Conventional Commits)
 ├── compose/
-│   ├── docker-compose.yml         # Główny stack (devops_internal_network): Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router, GitHub Exporter, OCI Keepalive Buffer
-│   ├── runners.yml                # Kontenerowe GitHub Actions Runnery ARM64 w odseparowanej sieci (devops_runners_network)
-│   ├── extensions.yml             # Szyfrowany tunel krawędziowy Cloudflare Zero Trust (cloudflared)
+│   ├── docker-compose.yml         # devops_internal_network: Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router (127.0.0.1:8085:8080), GitHub Exporter, OCI Keepalive Buffer
+│   ├── runners.yml                # Kontenerowe GitHub Actions Runnery ARM64 (devops_runners_network)
+│   └── extensions.yml             # Tunel krawędziowy Cloudflare Zero Trust (cloudflared --metrics 0.0.0.0:2000)
 ├── config/
-│   ├── grafana/                   # Provisioning źródeł danych (uid: prometheus) i 3 dashboardów (Centrum Monitoringu + AI Router + Analityka WWW & SEO)
-│   ├── node-exporter/             # Prometheus Textfile Collector (*.prom z telemetrią backupów, Fail2ban IPS, IoC i audytu)
+│   ├── grafana/                   # Provisioning źródeł (uid: prometheus) i 3 dashboardów (uptime-kuma-overview, ai-router-overview, web-analytics-overview)
+│   ├── node-exporter/             # Prometheus Textfile Collector (*.prom: backupy, Fail2ban IPS, IoC, audyt)
 │   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 21 reguł alertów (rules/ai-router.yml)
-├── docs/
-│   ├── AI_ROUTER_RAPORT.md        # Dokumentacja operacyjna, metryki, cache RAG, WAF/Penalty Box, Analityka WWW i raportowanie AI Routera
-│   └── CLOUDFLARE_STAGING_GUIDE.md# Przewodnik konfiguracji tuneli Cloudflare
+├── docs/                          # AI_ROUTER_RAPORT.md, CLOUDFLARE_STAGING_GUIDE.md
 ├── scripts/
-│   ├── 01-harden-os.sh            # Skrypt utwardzania Ubuntu (SSH, UFW, Fail2ban 1h->7d, sysctl + TCP BBR + inotify, NTP ISO 27001, SWAP 2GB, DOCKER-USER systemd hook, /dev/shm noexec, journald 200M)
-│   ├── 02-install-docker.sh       # Instalacja Docker CE i Docker Compose v2
-│   ├── ai-router-report.sh/.ps1   # Narzędzia CLI do generowania raportów skuteczności, cache'u i kaskady AI Routera
-│   ├── audit-server.sh            # Kompleksowy 5-warstwowy audyt (78 testów, IoC/SUID/IPS/WAF, Auto-Patching APT, DOCKER-USER, OOM/Inodes, Restore Drill) + delegacja porannego raportu do morning-digest.py
-│   ├── morning-digest.py          # Moduł Pythona dla porannego raportu 07:30/08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude 4.6 + scrapery Kato Salsa Hub & DancePuls + wysyłka E-mail)
-│   ├── backup-offsite.sh          # Snapshot wolumenów (weryfikacja tar -tzf + SQLite + AES-256 + nocny Restore Drill) do Cloudflare R2
-│   ├── backup-volumes.sh          # Lokalny snapshot wolumenów Dockera do archiwum .tar.gz
-│   ├── backup-websites-lh.sh      # Backup serwisów WWW z LH.pl (FTPS TLS + mysqldump + tar -tzf + AES-256) do Cloudflare R2
-│   ├── restore-backup.sh          # Automatyczne odtwarzanie (Disaster Recovery) i test Restore Drill (--verify-only)
-│   ├── open-dashboard.cmd/.ps1    # 1-klikowy launcher podnoszący tunel SSH i otwierający panele (3x Grafana Viewer PoLP + Dozzle + Kuma)
-│   ├── oracle-arm-hunter.sh       # Automatyczny łowca instancji ARM64 w OCI API
-│   ├── preview-tunnel.ps1/.sh     # Błyskawiczny Quick Tunnel dla lokalnego stagingu
-│   ├── setup-audit-timer.sh       # Idempotentna instalacja strażnika systemd 24/7 (devops-audit.timer co 15 min)
-│   ├── setup-backup-timer.sh      # Idempotentna instalacja harmonogramu backupów systemd (devops-backup.timer 03:00 UTC)
-│   ├── setup-kuma.js              # Idempotentna rejestracja 10 monitorów (w tym AI Router Healthcheck) w Uptime Kuma
-│   ├── setup-ntfy.js              # Automatyczna konfiguracja powiadomień Ntfy w Uptime Kuma
-│   ├── sync-gsc-keywords.sh       # Bezciasteczkowa synchronizacja słów kluczowych Google Search Console API + odświeżanie Sitemap + IndexNow
-│   ├── sync-p1-status.sh          # Synchronizacja telemetrii dostępności systemów państwowych (e-Zdrowie P1, eWUŚ, e-ZLA, KSeF) dla Radaru P1
-│   ├── verify-remote.ps1/.cmd     # Zdalny wyzwalacz pełnego audytu VPS z poziomu stacji roboczej Windows (npm run audit)
-│   ├── warm-ai-cache.sh           # Idempotentny pre-warming pamięci podręcznej RAG (Quick Prompts) po wdrożeniu
-│   └── runners/                   # Skrypty rejestracji i sterowania runnerami CI/CD
-├── services/
-│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, Multi-Provider RAG, Cache <5ms, WAF L7)
-│       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
-│       ├── src/
-│       │   ├── chat-router.php    # Główny orkiestrator POST /chat-router.php (CORS, Rate Limit, WAF L7 + 15m IP Penalty Box, RAG/SQLite FTS5, Cache <5ms)
-│       │   ├── router-endpoints.php# Endpointy GET (/widget.js, /radar, /health, /metrics), POST (/analytics) i blokady IP
-│       │   ├── llm-cascade.php    # Budowa instrukcji RAG i 15-modelowa kaskada LLM (Mistral Codestral SQL -> Gemini -> Groq -> Cerebras -> Workers AI -> OpenRouter -> Claude)
-│       │   ├── lead-notifier.php  # Ekstrakcja namiarów Zero-PII i asynchroniczne powiadomienia 1-Klik Ntfy.sh + webhook osTicket
-│       │   ├── p1-radar.html      # Panel statusowy Radaru P1 (e-Zdrowie CeZ, NFZ, ZUS, KSeF)
-│       │   ├── ai-stats.php       # Moduł telemetrii Prometheus (AI + Cookieless Web Analytics v3), Cooldownu modeli i limitów RPD (LOCK_EX, zero PII)
-│       │   └── widget.js          # Uniwersalny widget czatu AI + Cookieless Web Analytics serwowany przez GET /widget.js
-│       ├── data/                  # Bazy wiedzy RAG montowane :ro (fuegolingua, katosalsahub, twojastronawww)
-│       ├── storage/               # Trwały wolumen (ai_router_storage) na pliki rate-limit, cache RAG (/app/storage/cache) oraz ai_stats.json
-│       └── public-test/           # Tester frontendu (Vanilla HTML + JS + CSS)
-├── tests/
-│   └── unit/
-│       ├── repo-hygiene.test.js   # 26 testów higieny repozytorium, walidacji 3 dashboardów JSON, telemetrii AI/WWW i kontraktu _site-template
-│       └── security-regression.test.js # 16 testów regresji bezpieczeństwa OWASP / ISO 27001 / Zero Trust / WAF / Analytics (łącznie 42 testy)
-├── DISASTER_RECOVERY.md           # Procedura odtworzenia serwera i serwisów od zera (RTO < 15 min)
-├── README.md                      # Dokumentacja produkcyjna z adresami i procedurami
-├── SECURITY.md                    # Polityka bezpieczeństwa ISO 27001 i Responsible Disclosure
-├── LICENSE                        # Licencja platformy TwojaStronaWWW
-├── .editorconfig                  # Standard kodowania LF, UTF-8 i wcięć
-└── .gitignore                     # Rygor ISO 27001: wykluczenie kluczy, certyfikatów, .env, .env.bak* i metryk runtime
+│   ├── 01-harden-os.sh / 02-install-docker.sh
+│   ├── audit-server.sh            # 5-warstwowy audyt (78 testów: IoC/SUID/IPS/WAF, APT, DOCKER-USER, Restore Drill) -> audit.prom
+│   ├── morning-digest.py          # Poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude Sonnet 4.6 + E-mail)
+│   ├── backup-offsite.sh / backup-volumes.sh / backup-websites-lh.sh / restore-backup.sh
+│   ├── setup-audit-timer.sh (co 15 min) / setup-backup-timer.sh (03:00 UTC)
+│   ├── setup-kuma.js / setup-ntfy.js / sync-gsc-keywords.sh / sync-p1-status.sh / warm-ai-cache.sh
+│   ├── open-dashboard.cmd/.ps1 / open-amms-assistant.cmd/.ps1 / verify-remote.ps1/.cmd / ai-router-report.sh/.ps1
+│   └── oracle-arm-hunter.sh / preview-tunnel.ps1/.sh / runners/
+├── services/ai-router/            # Mikro-router AI, AMMS RAG & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, 4 workery PHP)
+│   ├── src/                       # chat-router.php, router-endpoints.php, llm-cascade.php, lead-notifier.php, ai-stats.php, amms-rag-search.php, amms-teams.html, p1-radar.html, widget.js
+│   ├── data/                      # Bazy wiedzy RAG :ro (*-knowledge.txt + amms-knowledge.sqlite)
+│   ├── storage/                   # Wolumen ai_router_storage (rate_limits, cache RAG, ai_stats.json)
+│   └── public-test/               # Tester frontendu (index.html, app.js, style.css)
+├── tests/unit/                    # repo-hygiene.test.js (26 testów) + security-regression.test.js (16 testów = 42 testy)
+└── DISASTER_RECOVERY.md / README.md / SECURITY.md
 ```
 
 ---
 
 ## 4. STANDARDY BEZPIECZEŃSTWA INFRASTRUKTURY (ISO 27001)
 1. **Zarządzanie Poświadczeniami i Sekretami (Dual-Tier Secrets Management):**
-   - **Warstwa Główna (Sejf Administratora):** Wszystkie poświadczenia produkcyjne (hasła Grafana, Uptime Kuma, tokeny Cloudflare, klucze SSH, tokeny runnerów, 6 kluczy API dla AI Routera: Gemini, Groq, Cerebras, Cloudflare Workers AI, OpenRouter, Anthropic Claude) przechowywane są w szyfrowanej bazie **KeePass Password Safe** (`Databasekpoczatek.kdbx` w grupie `VPS - TwojaStronaWWW`).
-   - **Warstwa Automatyzacji CI/CD:** Dane uwierzytelniające dla pipeline'ów GitHub Actions (`VPS_HOST`, `VPS_SSH_KEY`, `FTP_*`, `LH_*`) przechowywane są wyłącznie w **GitHub Actions Secrets**.
-   - **Środowisko Hosta VPS:** Na serwerze plik `.env` posiada rygorystyczne uprawnienia `chmod 600` (właściciel `ubuntu`).
-   - **Bezwzględna Procedura Rejestracji w KeePass (KeePass-First Secret Provisioning):** Zanim jakikolwiek nowy klucz, hasło lub token (Cloudflare R2, SSH, API, baza danych, token runnera, Gemini/Groq/Cerebras/Cloudflare/OpenRouter/Anthropic API) zostanie wdrożony do pliku `.env` na serwerze lub do kodu aplikacji, Agent ma bezwzględny obowiązek natychmiastowego zapisania/zaktualizowania go w bazie **KeePass** (`Databasekpoczatek.kdbx`) w odpowiedniej grupie projektowej. Żaden sekret nie może istnieć w infrastrukturze ani kodzie bez odzwierciedlenia w sejfie administratora. W przypadku braku wpisu Agent automatycznie tworzy stosowny wpis w KeePassie.
-   - **Zakaz Haseł Słownikowych:** Wszystkie nowe hasła muszą być kryptograficznie silnymi ciągami (min. 32 znaki, litery wielkie/małe, cyfry, symbole, wysoka entropia, brak znaku `$` unikający kolizji z interpolacją Compose).
-   - **Zero Secret Leakage:** Pliki `.env`, `.env.bak*`, certyfikaty, klucze prywatne (`*.pem`, `*.key`, `id_ed25519*`) oraz pliki metryk runtime (`*.prom`) pod żadnym pozorem nie mogą trafić do repozytorium Git (`.gitignore` oraz `.githooks/pre-commit`).
+   - **Warstwa Główna (Sejf Administratora):** Wszystkie poświadczenia produkcyjne (Grafana, Uptime Kuma, Cloudflare, SSH, tokeny runnerów, 7 kluczy API dla AI Routera) przechowywane są w bazie **KeePass** (`Databasekpoczatek.kdbx` $\rightarrow$ `VPS - TwojaStronaWWW`).
+   - **Warstwa CI/CD i Hosta:** Sekrety GitHub Actions (`VPS_HOST`, `VPS_SSH_KEY`, `FTP_*`, `LH_*`); na VPS `/opt/devops-stack/.env` posiada uprawnienia `chmod 600` (właściciel `ubuntu`).
+   - **KeePass-First Secret Provisioning:** Zanim jakikolwiek nowy klucz, hasło lub token trafi do `.env` lub kodu, Agent ma bezwzględny obowiązek zapisania go w bazie **KeePass**. Nowe hasła muszą mieć min. 32 znaki bez znaku `$`. Pliki `.env`, `.env.bak*`, `*.pem`, `*.key`, `id_ed25519*` i `*.prom` są wykluczone z Git.
 2. **Kopie Zapasowe, Weryfikacja Integralności, Nocny Restore Drill i Autonomiczny Audyt 24/7 (Disaster Recovery):**
-   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Regularny snapshot wszystkich 7 wolumenów Dockera z automatycznym testem spójności baz SQLite (`PRAGMA quick_check`) i integralności archiwum (`tar -tzf`, metryka `devops_backup_verified`), natychmiastowym usuwaniem tymczasowych plików cząstkowych po weryfikacji paczki zbiorczej, szyfrowaniem symetrycznym AES-256-CBC (`BACKUP_ENCRYPTION_KEY`), retencją **30 dni lokalnie na VPS** oraz **14 dni w Cloudflare R2** (`rclone delete --min-age 14d`, gwarantującą 100% mieszczenie się w darmowym limicie 10 GB R2). Każdej nocy po wysyłce automatycznie uruchamiany jest nieinwazyjny test odtworzeniowy `restore-backup.sh --verify-only` (metryka `devops_backup_restore_drill_verified`).
-   - **Backup Stron WWW (`backup-websites-lh.sh`):** Niezależny backup plików stron z hostingu **LH.pl** przez szyfrowany kanał **FTPS TLS** (`ftp:ssl-allow true`, `ftp:ssl-protect-data true`, normalizacja uprawnień `--no-perms` + `chown`), zrzut baz MySQL (`mysqldump`), test integralności `tar -tzf` (`devops_backup_websites_verified`, `devops_backup_websites_db_verified`) oraz wysyłka i rotacja (30 dni lokalnie / 14 dni w Cloudflare R2).
-   - **Automated Garbage Collection i Ochrona Zasobów (OCI Keepalive Buffer):** Po każdym wdrożeniu (`deploy.yml`), podczas nocnego backupu (`backup-offsite.sh`) oraz w trakcie samonaprawy strażnika (`audit-server.sh`) automatycznie czyszczone są osierocone warstwy obrazów Dockera (`docker image prune -f`) oraz stary cache budowania (`docker builder prune --filter "until=168h" -f`). Kontener `oci-keepalive-buffer` utrzymuje bezpieczny bufor +20% (4.8 GB RAM w `tmpfs`, `devops_oci_keepalive_buffer_bytes`), chroniąc darmową maszynę Ampere A1 przed odebraniem przez Oracle Cloud z powodu zbyt niskiego utylizowania RAM-u.
-   - **Automatyzacja Harmonogramów Systemd, Wykrywanie Włamań (IoC / IPS / WAF) i Poranny Audytor Dual-AI (`HIGH Reasoning` $0.00 + Smart Escalation Claude Sonnet 4.6):**
-     - `devops-backup.timer` (`setup-backup-timer.sh`) — codzienny backup i *Restore Drill* w nocy o **03:00 UTC**.
-     - `devops-audit.timer` (`setup-audit-timer.sh`) — autonomiczny strażnik uruchamiający `audit-server.sh` **co 15 minut** (0 zapytań AI w rutynowych przebiegach), odświeżający `audit.prom` dla Grafany (69 testów: automatyczny **Auto-Patching APT** `devops_apt_upgradable_packages` dla `Ubuntu:noble-updates` i `Docker CE:noble`, ochrona łańcucha **`DOCKER-USER`**, statystyki **Fail2Ban IPS** `devops_fail2ban_banned_total`, blokady **WAF L7** `devops_waf_blocked_total`, ochrona Zero-Trust i baza SQLite FTS5, telemetria **Cookieless Web Analytics v3 & GSC Sync**, skaner wyjątków 24h `devops_log_critical_24h_total` oraz kryminalistyczny audyt **IoC** `devops_security_ioc_clean` weryfikujący brak logowań hasłem/rootem, brak procesów w `/tmp` i `/dev/shm`, integralność `/etc/cron*`, kont `UID 0` i `authorized_keys`), wykonujący samonaprawę DNS `nscd` w Uptime Kuma i wysyłający natychmiastowe powiadomienie Push (Ntfy.sh) w razie błędów lub alarmów Prometheusa. Ponadto raz dziennie o **08:00 czasu polskiego** wysyła poranny raport z **24-godzinnym Rentgenem (`--since 24h`)** analizowanym krzyżowo przez **dwa darmowe modele w trybie głębokiego myślenia (`Groq/Cerebras GPT-OSS-120B reasoning: HIGH` + `Gemini 3.5 Flash thinking: HIGH`, koszt `$0.00`)**, z automatyczną eskalacją do **`Claude Sonnet 4.6`** wyłącznie w razie wykrycia anomalii/błędów lub flagi `--deep-claude`.
-   - **RTO (Recovery Time Objective):** Poniżej 15 minut zgodnie z runbookiem [`DISASTER_RECOVERY.md`](file:///e:/Projekty/VPS/DISASTER_RECOVERY.md).
-3. **Zarządzanie Runnerami GitHub Actions w Odseparowanej Sieci (`devops_runners_network`):**
-   - Stack obsługuje 3 kontenerowe runnery ARM64 odseparowane sieciowo od usług wewnętrznych:
-     1. `runner-zeslownikiem-unified` (organizacja `zeslownikiem`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`)
-     2. `runner-twojastronawww-unified` (organizacja `TwojaStronaWWW`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww`)
-     3. `runner-gal-anonim-web` (repozytorium `zeslownikiem/gal-anonim-web`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`)
-4. **Bezpieczeństwo, WAF, Analityka WWW i Architektura Bramki AI (AI Router & Multi-Provider RAG Proxy — Poziom 3 RAG + Enterprise HA):**
-   - **7 Kluczy API & 15-Modelowa Kaskada Fallbacku (0,00 PLN / 0 MB wag na VPS):** Klucze `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `CF_AI_API_TOKEN`, `OPENROUTER_API_KEY` oraz `ANTHROPIC_API_KEY` są przechowywane wyłącznie w KeePass (`Databasekpoczatek.kdbx` $\rightarrow$ `VPS - TwojaStronaWWW`) i wstrzykiwane z `/opt/devops-stack/.env`. W ogólnej kaskadzie router odpytuje kolejno: `gemini-3.5-flash` (`MINIMAL`) $\rightarrow$ `gemini-3.5-flash-lite` (`MINIMAL`) $\rightarrow$ `gemini-3.7-flash` (`LOW`) $\rightarrow$ `gemini-3.8-flash` (`LOW`) $\rightarrow$ `gemma-4-31b-it` $\rightarrow$ `openai/gpt-oss-120b` (Groq LPU) $\rightarrow$ `qwen/qwen3.8-27b` (Groq LPU) $\rightarrow$ `gpt-oss-120b` (Cerebras WSE) $\rightarrow$ `qwen-3.8-27b` (Cerebras WSE, 648 tys. RPD) $\rightarrow$ `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (Cloudflare Workers AI) $\rightarrow$ `nvidia/nemotron-3-super-120b-a12b:free` (OpenRouter `:free`) $\rightarrow$ `nvidia/nemotron-3-ultra-550b-a55b:free` (OpenRouter 550B `:free`) $\rightarrow$ `claude-haiku-4-5` (Anthropic, ostatni bezpiecznik Pre-paid $5 z Prompt Cachingiem `-90%`).
-   - **WAF Warstwy 7 + 15-Minutowy IP Penalty Box (`security_blocked`):** Zanim pytanie trafi do modelu AI, strażnik WAF w `chat-router.php` skanuje je pod kątem prób Prompt Injection, Jailbreak, XSS (`<script>`), SQLi (`DROP TABLE`, `UNION SELECT`) oraz Path Traversal (`../etc/passwd`). Wykryty atak jest natychmiast odrzucany kodem `HTTP 403` (0 zużytych tokenów LLM), adres IP agresora trafia na **15 minut do Penalty Box (`banClientIp`)**, a zdarzenie inkrementuje licznik `ai_router_requests_total{outcome="security_blocked"}` powiązany z alertem `AIRouterSecurityAttackDetected`.
-   - **Bezciasteczkowa Analityka Ruchu WWW & SEO (`POST /analytics` & `/collect` — 100% Cookieless RODO / Zero-PII):** Bramka `ai-router` zbiera lekkie beacony analityczne ze stron klienckich (`katosalsahub.pl` itd.) bez użycia ciasteczek i bez zapisywania adresów IP (unikalność dzienna liczona z jednokierunkowego skrótu SHA-256 z dzienną solą). Eksportuje metryki `web_analytics_*` z polskimi etykietami źródeł ruchu (`Google`, `Bezpośrednie`, `Facebook`, `Instagram`), podstron, urządzeń (`Smartfon` vs `Komputer`), krajów (`CF-IPCountry` z flagami) oraz wyszukiwanych haseł w Salsopedii na dedykowany 3. dashboard Grafany (`web-analytics-overview.json`).
-   - **Ochrona przed Ucinaniem Zdań (`MAX_TOKENS`) i Ukrytym Myśleniem (`thoughtsTokenCount` / `reasoning_tokens`):** W modelach Gemini 3.x `maxOutputTokens` obejmuje sumę tokenów myślenia i odpowiedzi. Router wymusza `maxOutputTokens: 2048`, wyłącza narzut myślenia (`thinkingLevel: MINIMAL/LOW`, `reasoning_effort: low`, `disable_reasoning: true`, `reasoning.effort: none`, domyślnie wyłączone *Extended Thinking* w Claude Haiku 4.5) oraz odrzuca odpowiedzi z `finishReason === 'MAX_TOKENS'` (`length` / `max_tokens`), aby nigdy nie zwrócić ani nie zapisać w cache'u uciętego zdania.
-   - **Inteligentny Cache Odpowiedzi RAG (`< 5 ms` / `0` tokenów) + Pre-warming (`scripts/warm-ai-cache.sh`):** Częste pytania są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w czasie `~1.8 ms`, z normalizacją interpunkcji i wielkości liter, automatyczną inwalidacją przy każdej zmianie pliku wiedzy (`filemtime(<site_id>-knowledge.txt)`), TTL 24h (`AI_CACHE_TTL`) oraz automatycznym rozgrzewaniem Quick Prompts podczas wdrożenia (`deploy.yml`). Eksportuje metryki `ai_router_cache_hits_total` i `ai_router_cache_entries`.
-   - **Detektor „Gorącego Leada” i Natychmiastowa Ekstrakcja Namiarów Kontaktowych (Zero-PII na dysku):** Gdy klient poda telefon lub e-mail (`event=contact_lead_captured`), router automatycznie wyciąga i formatuje numer (`📞 TELEFON: +48 ...`) oraz e-mail (`✉️ E-MAIL: ...`), umieszcza je bezpośrednio w tytule i pierwszych liniach powiadomienia Push do Ntfy.sh (wraz z przyciskami akcji 1-Klik `tel:` / `mailto:` oraz historią wcześniejszych pytań) bez logowania PII na dysku. Przy 4. pytaniu klienta w sesji (`count($sanitizedHistory) === 6`) wysyła sygnał `event=hot_lead_detected`.
-   - **Smart Fast-Fail do Groq LPU (`~0.6s`) i Cerebras WSE (`~0.15s`), Cooldown Modeli (`600s`/`180s`) i Wieloprocesowość:** Moduł `ai-stats.php` nakłada cooldown na modele zwracające timeout (`600s`), HTTP `503` (`180s`) i `429` (`60s`), a `chat-router.php` przeskakuje natychmiast do Groq LPU / Cerebras WSE po pierwszym timeoucie 4s lub gdy $\ge 2$ modele Gemini są na cooldownie. Serwer działa z `PHP_CLI_SERVER_WORKERS=4`.
-   - **Ochrona Limitów (IP Rate Limiting + GC) i Standard Frontendu (`_site-template` v2.2):** Identyfikacja klienta przez nagłówek Cloudflare `HTTP_CF_CONNECTING_IP` (limit 5 zapytań/min per IP) oraz automatyczny GC. Na stronach klienckich wymagany jest `<link rel="preconnect" href="https://ai.twojastronawww.pl" crossorigin>` oraz `AbortController` (9s timeout) z lokalnym fallbackiem JS.
-   - **Izolacja Wiedzy (Dynamic RAG & Guardrails) i Biała Lista CORS:** Katalog `data/` montowany `:ro`, walidacja `site_id` (`^[a-z0-9_-]{2,32}$`), pamięć konwersacji (`history` do 8 wiadomości) i biała lista `ALLOWED_ORIGINS`.
-   - **Obserwowalność Zero-PII i Alerting (5s Scrape):** Endpoint `GET /health` dla Uptime Kuma oraz `GET /metrics` dla Prometheusa (odpytywany co **5 sekund**; `ai-stats.php` używa atomowego `LOCK_EX` i bezwzględnie nie loguje treści pytań, IP ani kluczy API). Stan prezentowany jest na 3 dashboardach Grafany (`uptime-kuma-overview.json`, `ai-router-overview.json`, `web-analytics-overview.json`, `uid: prometheus`), chroniony 18 regułami alertów (`config/prometheus/rules/ai-router.yml`) i narzędziami CLI (`scripts/ai-router-report.sh/.ps1`).
-
-
+   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Snapshot 7 wolumenów Dockera + `amms-knowledge.sqlite` z testem `PRAGMA quick_check` i `tar -tzf` (`devops_backup_verified`, `devops_backup_sqlite_verified`), szyfrowaniem AES-256-CBC (`BACKUP_ENCRYPTION_KEY`), retencją **30 dni lokalnie** i **14 dni w Cloudflare R2** (`rclone delete --min-age 14d`). Co noc test `restore-backup.sh --verify-only` (`devops_backup_restore_drill_verified`).
+   - **Backup Stron WWW (`backup-websites-lh.sh`):** Backup z **LH.pl** przez **FTPS TLS** (`ftp:ssl-protect-data true`, `--no-perms`), `mysqldump`, test `tar -tzf` (`devops_backup_websites_verified`, `devops_backup_websites_db_verified`) oraz rotacja 30d lokalnie / 14d w R2.
+   - **Garbage Collection i OCI Keepalive Buffer:** Po `deploy.yml`, `backup-offsite.sh` i `audit-server.sh` czyszczone są obrazy (`docker image prune -f`) i cache (`docker builder prune --filter "until=168h" -f`). Kontener `oci-keepalive-buffer` utrzymuje bufor 4.8 GB RAM w `tmpfs` (`devops_oci_keepalive_buffer_bytes`).
+   - **Harmonogramy Systemd i Poranny Audytor Dual-AI (`HIGH Reasoning` $0.00 + Smart Escalation Claude Sonnet 4.6):**
+     - `devops-backup.timer` — codzienny backup i *Restore Drill* o **03:00 UTC**.
+     - `devops-audit.timer` — uruchamia `audit-server.sh` **co 15 minut**, odświeżając `audit.prom` (78 testów: `devops_apt_upgradable_packages`, `DOCKER-USER`, `devops_fail2ban_banned_total`, `devops_waf_blocked_total`, Zero-Trust, SQLite FTS5, Cookieless Web Analytics v3 & GSC Sync, `devops_log_critical_24h_total`, `devops_security_ioc_clean`). Raz dziennie o **08:00** wysyła raport (`morning-digest.py`) analizowany krzyżowo przez `Groq/Cerebras GPT-OSS-120B (reasoning: HIGH)` + `Gemini 3.5 Flash (thinking: HIGH)` z eskalacją do `Claude Sonnet 4.6`.
+   - **RTO:** Poniżej 15 minut wg [`DISASTER_RECOVERY.md`](file:///e:/Projekty/VPS/DISASTER_RECOVERY.md).
+3. **Zarządzanie Runnerami GitHub Actions (`devops_runners_network`):**
+   - 3 kontenerowe runnery ARM64 odseparowane od usług wewnętrznych:
+     1. `runner-zeslownikiem-unified` (`zeslownikiem`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`)
+     2. `runner-twojastronawww-unified` (`TwojaStronaWWW`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww`)
+     3. `runner-gal-anonim-web` (`zeslownikiem/gal-anonim-web`, etykiety: `self-hosted,linux,arm64,ARM64,vps,unified`)
+4. **Bezpieczeństwo, WAF, Analityka WWW i Architektura Bramki AI (AI Router & Multi-Provider RAG Proxy):**
+   - **7 Kluczy API & 15-Modelowa Kaskada Fallbacku:** Klucze `GEMINI_API_KEY`, `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `MISTRAL_API_KEY`, `CF_AI_API_TOKEN`, `OPENROUTER_API_KEY` oraz `ANTHROPIC_API_KEY`. Kaskada ogólna: `gemini-3.5-flash` (`MINIMAL`) $\rightarrow$ `gemini-3.5-flash-lite` (`MINIMAL`) $\rightarrow$ `gemini-3.7-flash` (`LOW`) $\rightarrow$ `gemini-3.8-flash` (`LOW`) $\rightarrow$ `gemma-4-31b-it` $\rightarrow$ `openai/gpt-oss-120b` (Groq LPU) $\rightarrow$ `qwen/qwen3.8-27b` (Groq LPU) $\rightarrow$ `gpt-oss-120b` (Cerebras WSE) $\rightarrow$ `qwen-3.8-27b` (Cerebras WSE) $\rightarrow$ `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (Workers AI) $\rightarrow$ `nvidia/nemotron-3-super-120b-a12b:free` (OpenRouter) $\rightarrow$ `nvidia/nemotron-3-ultra-550b-a55b:free` (OpenRouter) $\rightarrow$ `claude-haiku-4-5` (Anthropic, Prompt Caching `-90%`). Dla zapytań SQL w Asystencie AMMS (`$isAmmsSite && $isAmmsDbQuery`) priorytet mają modele `codestral-latest` (Mistral) i `cohere/north-mini-code:free`.
+   - **WAF Warstwy 7 + 15-Minutowy IP Penalty Box (`security_blocked`):** Blokuje Prompt Injection, Jailbreak, XSS, SQLi i Path Traversal kodem `HTTP 403` (0 tokenów), banuje IP na **15 minut (`banClientIp`)** i inkrementuje `ai_router_requests_total{outcome="security_blocked"}` (`AIRouterSecurityAttackDetected`).
+   - **Bezciasteczkowa Analityka Ruchu WWW & SEO (`POST /analytics` & `/collect` — 100% Cookieless RODO / Zero-PII):** Zbiera beacony bez ciasteczek i bez zapisu IP (SHA-256 z dzienną solą), eksportując metryki `web_analytics_*` na 3. dashboard Grafany (`web-analytics-overview.json`).
+   - **Ochrona przed Ucinaniem Zdań (`MAX_TOKENS`) i Cache RAG (`< 5 ms`):** Wymusza `maxOutputTokens: 2048`, wyłącza narzut myślenia w czacie klienckim, odrzuca ucięte odpowiedzi (`finishReason === 'MAX_TOKENS'`), serwuje cache z `/app/storage/cache` (`ai_router_cache_hits_total`, `ai_router_cache_entries`) rozgrzewany przez `scripts/warm-ai-cache.sh`.
+   - **Detektor „Gorącego Leada” (Zero-PII na dysku), Cooldown Modeli i Obserwowalność (5s Scrape):** Wyciąga telefon/e-mail (`event=contact_lead_captured` / `event=hot_lead_detected`) do powiadomień 1-Klik Ntfy.sh + osTicket bez zapisu PII na dysku. Cooldown modeli: timeout `600s`, HTTP 503 `180s`, 429 `60s`. Rate limit: 5 zapytań/min per `HTTP_CF_CONNECTING_IP`. Endpointy `GET /health` i `GET /metrics` (`LOCK_EX`).
 
 ---
 
@@ -144,18 +92,17 @@ VPS/
    | Założenie / Teza | Źródło błędu / Ryzyko | Stopień pewności (Niski/Średni/Wysoki) | Mitygacja / Lepszy model |
    |---|---|---|---|
    ```
-3. **Format commitów:** Zawsze stosuj Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`).
+3. **Format commitów:** Stosuj Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `ci:`, `chore:`).
 4. **Weryfikacja zmian:** Zawsze uruchamiaj testy higieny repozytorium (`npm test` lub `npm run check`) oraz weryfikację składni Docker Compose przed zakończeniem prac.
 
 ---
 
 ## Evergreen Web Standards Radar (docs/WEB_STANDARDS_RADAR.md — [REF-01] do [REF-08])
-Przy każdej walidacji, łączeniu projektu (merge/sync z _site-template) oraz aktualizacji projektu Agent AI weryfikuje zgodność z oficjalnymi źródłami przypisów:
-- **[REF-01] Server & .htaccess (h5bp/server-configs-apache):** kompresja mod_brotli + mod_deflate, nagłówki COOP (same-origin-allow-popups), CORP (same-site), CSP, HSTS oraz typy MIME (vif, webp, md, webmanifest).
-- **[REF-02] Kolejność <head> i Nawigacja   ms (viscomi/capo.js & web.dev/baseline):** charset -> iewport -> 	itle -> preconnect -> stylesheet przed meta SEO/JSON-LD oraz deklaratywne <script type="speculationrules"> (prerender z wykluczeniem /api/*).
-- **[REF-03] Vanilla CSS Baseline (rgyleink/open-props & web.dev/baseline):** color-scheme: dark light w :root, scrollbar-gutter: stable na html, @view-transition { navigation: auto; } (dla prefers-reduced-motion: no-preference), 	ext-wrap: balance (nagłówki) i 	ext-wrap: pretty (akapity).
-- **[REF-04] Dostępność WCAG 2.2 (w3c/aria-practices & lphagov/govuk-frontend):** .skip-link, role ARIA (lert, status), pełna obsługa klawiatury i czytników ekranu.
-- **[REF-05] Bezpieczeństwo Aplikacji (OWASP/ASVS & OWASP/CheatSheetSeries):** walidacja nagłówka Sec-Fetch-Site (blokujące cross-site), tokeny CSRF hash_equals, lock(LOCK_EX), @session_write_close(), CURLOPT_FOLLOWLOCATION => false, CURLPROTO_HTTPS.
-- **[REF-06] Polityka Podatności RFC 9116 (securitytxt.org):** plik /.well-known/security.txt z aktywną datą Expires:.
-- **[REF-07] Optymalizacja dla Wyszukiwarek AI – GEO (llmstxt.org):** plik /llms.txt podpięty w <head> (el="alternate" type="text/markdown") i dozwolony w obots.txt (Allow: /llms.txt).
-- **[REF-08] SEO On-Page & Schema.org (schema.org & indexnow.org):** pełny graf @graph JSON-LD, przekierowanie 301 non-www oraz data-nosnippet na widgecie AI.
+- **`[REF-01]` Server & `.htaccess` (`h5bp/server-configs-apache`):** kompresja `mod_brotli` + `mod_deflate`, nagłówki `COOP` (`same-origin-allow-popups`), `CORP` (`same-site`), `CSP`, `HSTS` oraz typy MIME (`avif`, `webp`, `md`, `webmanifest`).
+- **`[REF-02]` Kolejność `<head>` i Nawigacja `0 ms` (`rviscomi/capo.js` & `web.dev/baseline`):** `charset` -> `viewport` -> `title` -> `preconnect` -> `stylesheet` przed meta SEO/JSON-LD oraz deklaratywne `<script type="speculationrules">` (prerender z wykluczeniem `/api/*`).
+- **`[REF-03]` Vanilla CSS Baseline (`argyleink/open-props` & `web.dev/baseline`):** `color-scheme: dark light` w `:root`, `scrollbar-gutter: stable` na `html`, `@view-transition { navigation: auto; }` (dla `prefers-reduced-motion: no-preference`), `text-wrap: balance` (nagłówki) i `text-wrap: pretty` (akapity).
+- **`[REF-04]` Dostępność WCAG 2.2 (`w3c/aria-practices` & `alphagov/govuk-frontend`):** `.skip-link`, role ARIA (`alert`, `status`), pełna obsługa klawiatury i czytników ekranu.
+- **`[REF-05]` Bezpieczeństwo Aplikacji (`OWASP/ASVS` & `OWASP/CheatSheetSeries`):** walidacja nagłówka `Sec-Fetch-Site` (blokujące `cross-site`), tokeny CSRF `hash_equals`, `flock(LOCK_EX)`, `@session_write_close()`, `CURLOPT_FOLLOWLOCATION => false`, `CURLPROTO_HTTPS`.
+- **`[REF-06]` Polityka Podatności RFC 9116 (`securitytxt.org`):** plik `/.well-known/security.txt` z aktywną datą `Expires:`.
+- **`[REF-07]` Optymalizacja dla Wyszukiwarek AI – GEO (`llmstxt.org`):** plik `/llms.txt` podpięty w `<head>` (`rel="alternate" type="text/markdown"`) i dozwolony w `robots.txt` (`Allow: /llms.txt`).
+- **`[REF-08]` SEO On-Page & Schema.org (`schema.org` & `indexnow.org`):** pełny graf `@graph` JSON-LD, przekierowanie `301` non-www oraz `data-nosnippet` na widgecie AI.
