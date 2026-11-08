@@ -28,7 +28,21 @@ export default {
       return env.NTFY_VPC.fetch(upstreamReq);
     }
     if (host === "sejf.twojastronawww.pl") {
-      return env.PRIVATEBIN_VPC.fetch(upstreamReq);
+      const res = await env.PRIVATEBIN_VPC.fetch(upstreamReq);
+      const ct = res.headers.get("content-type") || "";
+      if (request.method === "GET" && ct.includes("text/html")) {
+        return new HTMLRewriter()
+          .on("input#passwordinput", {
+            element(el) {
+              el.setAttribute("autocomplete", "new-password");
+              el.setAttribute("data-lpignore", "true");
+              el.setAttribute("data-1p-ignore", "true");
+              el.setAttribute("data-form-type", "other");
+            }
+          })
+          .transform(res);
+      }
+      return res;
     }
 
     return new Response("Not Found", { status: 404 });
