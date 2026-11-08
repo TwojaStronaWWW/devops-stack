@@ -18,6 +18,24 @@ header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
+// 0. Ochrona przed atakami PHP2Shell / Wrapper Deserialization & CGI Argument Injection (OWASP / CVE-2024-4577)
+foreach (['phar', 'ftp', 'ftps'] as $unsafeStreamWrapper) {
+    if (in_array($unsafeStreamWrapper, stream_get_wrappers(), true)) {
+        @stream_wrapper_unregister($unsafeStreamWrapper);
+    }
+}
+
+$rawQueryString = (string)($_SERVER['QUERY_STRING'] ?? '');
+if ($rawQueryString !== '' && preg_match('/(^|&)(%2d|%ad|-)(d|n|s|w)\b|allow_url_include|auto_prepend_file|auto_append_file|php:\/\/|phar:\/\//i', $rawQueryString)) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Forbidden: Wykryto próbę wstrzyknięcia parametrów wykonawczych PHP (PHP2Shell / CGI Guard).'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $isFromCloudflare = !empty($_SERVER['HTTP_CF_CONNECTING_IP']) || !empty($_SERVER['HTTP_CF_RAY']);
 
@@ -328,7 +346,7 @@ if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
 // WAF / Prompt Injection & Exploit Guard (< 0.5 ms)
 $qLower = mb_strtolower($question);
 $promptInjectionPattern = '/(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)|zignoruj\s+(wszystkie\s+)?(wcze[śs]niejsze|poprzednie)\s+(instrukcje|zasady)|reveal\s+your\s+(system\s+)?prompt|poka[żz]\s+(sw[óo]j\s+)?system\s+prompt|you\s+are\s+now\s+dan\b|developer\s+mode\s+enabled)/iu';
-$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/)/iu';
+$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/|\b(phar|expect|php):\/\/|\b(auto_prepend_file|auto_append_file|allow_url_include)\b)/iu';
 
 if (preg_match($promptInjectionPattern, $qLower) || preg_match($exploitPayloadPattern, $qLower)) {
     $aiSecurityBlocked = true;

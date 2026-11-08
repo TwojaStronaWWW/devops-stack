@@ -71,3 +71,14 @@ scrape_configs:
           service: 'cloudflared'
           component: 'zero-trust-tunnel'
 
+  # 8. Self-Hosted Ntfy Push Server (telemetria prywatnej bramki powiadomień RODO/ISO 27001)
+  - job_name: 'ntfy'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['ntfy:9090']
+        labels:
+          service: 'ntfy'
+          component: 'push-server'
+

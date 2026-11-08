@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'LICENSE',
       '.editorconfig',
       '.gitattributes',
+      '.npmrc',
       '.github/pull_request_template.md',
       '.github/dependabot.yml',
       '.github/workflows/lint-compose.yml',
@@ -178,6 +180,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'router-endpoints.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'llm-cascade.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'lead-notifier.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'web-analytics.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
@@ -203,6 +207,12 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
   function readRouterCombinedPhp() {
     return ['chat-router.php', 'router-endpoints.php', 'llm-cascade.php', 'lead-notifier.php']
+      .map((f) => fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', f), 'utf-8'))
+      .join('\n');
+  }
+
+  function readStatsCombinedPhp() {
+    return ['ai-stats.php', 'web-analytics.php']
       .map((f) => fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', f), 'utf-8'))
       .join('\n');
   }
@@ -277,10 +287,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(kumaScript, /monitorList/);
   });
 
-  it('telemetria AI Routera (ai-stats.php) nie powinna logować treści pytań, IP ani kluczy API (ISO 27001)', () => {
+  it('telemetria AI Routera (ai-stats.php + web-analytics.php) nie powinna logować treści pytań, IP ani kluczy API (ISO 27001)', () => {
     const statsPath = path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php');
     assert.ok(fs.existsSync(statsPath), 'Brak services/ai-router/src/ai-stats.php');
-    const stats = fs.readFileSync(statsPath, 'utf-8');
+    const stats = readStatsCombinedPhp();
     assert.strictEqual(stats.includes('AIzaSy'), false, 'Klucz API w ai-stats.php');
     assert.strictEqual(/REMOTE_ADDR|CF_CONNECTING_IP|X_FORWARDED_FOR/.test(stats), false, 'ai-stats.php nie może operować na adresach IP');
     assert.match(stats, /function aiRenderMetrics/);
@@ -413,12 +423,17 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     }
   });
 
-  it('narzędzia raportowe AI Routera (ai-router-report.sh/.ps1) powinny istnieć', () => {
+  it('narzędzia raportowe AI Routera (ai-router-report.sh/.ps1) oraz lokalnego audytu diffu (ai-review-staged.sh/.ps1) powinny istnieć', () => {
     const sh = path.join(ROOT_DIR, 'scripts', 'ai-router-report.sh');
     const ps1 = path.join(ROOT_DIR, 'scripts', 'ai-router-report.ps1');
+    const revSh = path.join(ROOT_DIR, 'scripts', 'ai-review-staged.sh');
+    const revPs1 = path.join(ROOT_DIR, 'scripts', 'ai-review-staged.ps1');
     assert.ok(fs.existsSync(sh), 'Brak scripts/ai-router-report.sh');
     assert.ok(fs.existsSync(ps1), 'Brak scripts/ai-router-report.ps1');
+    assert.ok(fs.existsSync(revSh), 'Brak scripts/ai-review-staged.sh');
+    assert.ok(fs.existsSync(revPs1), 'Brak scripts/ai-review-staged.ps1');
     assert.match(fs.readFileSync(sh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
+    assert.match(fs.readFileSync(revSh, 'utf-8').split(/\r?\n/)[0], /^#!\/(usr\/bin\/env bash|bin\/bash)\s*$/);
   });
 
   it('utwardzenia bezpieczeństwa (Grafana PoLP Viewer, FTPS TLS, szyfrowanie AES-256 backupów, GC rate-limit, .env.bak*) powinny być aktywne', () => {
@@ -458,7 +473,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
   });
 
   it('ulepszenia Enterprise (Cache RAG <5ms, Detektor Leadów i Kontaktów Ntfy, izolacja sieci runnerów, weryfikacja tar -tzf + SQLite + MySQL, timer audytu i backupów 24/7) powinny być wdrożone', () => {
-    const statsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'), 'utf-8');
+    const statsPhp = readStatsCombinedPhp();
     assert.match(statsPhp, /ai_router_cache_hits_total/);
     assert.match(statsPhp, /ai_router_cache_entries/);
     assert.match(statsPhp, /ai_router_leads_total/);
@@ -634,6 +649,48 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'open-amms-assistant.ps1')), 'Brak scripts/open-amms-assistant.ps1');
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'open-amms-assistant.cmd')), 'Brak scripts/open-amms-assistant.cmd');
+  });
+
+  it('4 nowe moduły Enterprise (Self-Hosted Ntfy, PrivateBin Zero-Knowledge Vault, Generator Audytów B2B Przed i Po, Radar Zmian Zewnętrznych) powinny być kompletnie skonfigurowane i przechodzić self-test', () => {
+    // 1. Opcja 1: Self-Hosted Ntfy (RODO / ISO 27001)
+    const ntfyCfgPath = path.join(ROOT_DIR, 'config', 'ntfy', 'server.yml');
+    assert.ok(fs.existsSync(ntfyCfgPath), 'Brak config/ntfy/server.yml');
+    const ntfyCfg = fs.readFileSync(ntfyCfgPath, 'utf-8');
+    assert.match(ntfyCfg, /auth-default-access:\s*"deny-all"/);
+    assert.match(ntfyCfg, /enable-signup:\s*false/);
+    assert.match(ntfyCfg, /enable-metrics:\s*true/);
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-selfhosted-ntfy.sh')), 'Brak scripts/setup-selfhosted-ntfy.sh');
+
+    const leadPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'lead-notifier.php'), 'utf-8');
+    assert.match(leadPhp, /NTFY_BASE_URL/);
+    assert.match(leadPhp, /NTFY_TOKEN/);
+
+    // 2. Opcja 2: PrivateBin Zero-Knowledge Vault ("Burn After Reading")
+    const pbinCfgPath = path.join(ROOT_DIR, 'config', 'privatebin', 'conf.php');
+    assert.ok(fs.existsSync(pbinCfgPath), 'Brak config/privatebin/conf.php');
+    const pbinCfg = fs.readFileSync(pbinCfgPath, 'utf-8');
+    assert.match(pbinCfg, /burnafterreadingselected\s*=\s*true/);
+    assert.match(pbinCfg, /discussion\s*=\s*false/);
+    assert.match(pbinCfg, /fileupload\s*=\s*false/);
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'create-secret-link.ps1')), 'Brak scripts/create-secret-link.ps1');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'create-secret-link.sh')), 'Brak scripts/create-secret-link.sh');
+
+    // 3. Opcja 3: Generator Audytów Sprzedażowych B2B "Przed i Po"
+    const auditGenJs = path.join(ROOT_DIR, 'scripts', 'generate-client-audit.js');
+    assert.ok(fs.existsSync(auditGenJs), 'Brak scripts/generate-client-audit.js');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'generate-client-audit.ps1')), 'Brak scripts/generate-client-audit.ps1');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'generate-client-audit.sh')), 'Brak scripts/generate-client-audit.sh');
+    const selfTestRes = spawnSync(process.execPath, [auditGenJs, '--self-test'], { encoding: 'utf-8' });
+    assert.strictEqual(selfTestRes.status, 0, `generate-client-audit.js --self-test nie powiódł się: ${selfTestRes.stderr || selfTestRes.stdout}`);
+    assert.match(selfTestRes.stdout, /SELF_TEST_OK/);
+
+    // 4. Opcja 4: Radar Zmian na Stronach Zewnętrznych (Change Detection Radar)
+    const radarTargetsPath = path.join(ROOT_DIR, 'config', 'change-radar', 'targets.json');
+    assert.ok(fs.existsSync(radarTargetsPath), 'Brak config/change-radar/targets.json');
+    const radarTargets = JSON.parse(fs.readFileSync(radarTargetsPath, 'utf-8'));
+    assert.ok(Array.isArray(radarTargets.targets) && radarTargets.targets.length >= 6, 'Za mało zdefiniowanych celów w config/change-radar/targets.json');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'watch-external-changes.py')), 'Brak scripts/watch-external-changes.py');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'sync-change-radar.sh')), 'Brak scripts/sync-change-radar.sh');
   });
 });
 

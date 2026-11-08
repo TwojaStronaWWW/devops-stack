@@ -1,0 +1,34 @@
+# ==============================================================================
+# Ntfy Self-Hosted Push Server — TwojaStronaWWW DevOps Stack (ISO 27001 / RODO)
+# Architektura Zero-Trust: 100% prywatny serwer powiadomień Push na ARM64 (OCI)
+# ==============================================================================
+
+# Publiczny adres za tunelem Cloudflare Zero Trust
+base-url: "https://push.twojastronawww.pl"
+listen-http: ":8080"
+behind-proxy: true
+
+# Baza wiadomości w pamięci podręcznej SQLite (retencja 72h dla urządzeń offline)
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "72h"
+
+# Kontrola dostępu Zero-Trust (ACL: deny-all domyślnie blokuje każdy odczyt i zapis bez tokenu)
+auth-file: "/var/lib/ntfy/user.db"
+auth-default-access: "deny-all"
+enable-login: true
+require-login: true
+enable-signup: false
+
+# Eksporter metryk dla Prometheusa (wewnętrzna sieć devops_internal_network)
+enable-metrics: true
+metrics-listen-http: ":9090"
+
+# Ochrona Rate-Limiting (Anti-Abuse / DoS)
+visitor-request-limit-burst: 30
+visitor-request-limit-replenish: "5s"
+
+# Limity załączników (automatyczne czyszczenie po 24h)
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+attachment-total-size-limit: "100M"
+attachment-file-size-limit: "15M"
+attachment-expiry-duration: "24h"

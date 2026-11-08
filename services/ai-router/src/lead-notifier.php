@@ -103,6 +103,12 @@ function aiDispatchLeadNotifications(
     $contactChannel  = (string)($leadInfo['contactChannel'] ?? 'none');
 
     $ntfyTopic = trim((string)(getenv('NTFY_TOPIC') ?: ''));
+    $ntfyBaseUrl = rtrim(trim((string)(getenv('NTFY_BASE_URL') ?: 'https://ntfy.sh')), '/');
+    if ($ntfyBaseUrl === '') {
+        $ntfyBaseUrl = 'https://ntfy.sh';
+    }
+    $ntfyToken = trim((string)(getenv('NTFY_TOKEN') ?: ''));
+    $isInternalNtfyHttp = (bool)preg_match('#^http://(ntfy|127\.0\.0\.1)(:\d+)?$#i', $ntfyBaseUrl);
     $leadWebhookUrl = trim((string)(getenv('LEAD_WEBHOOK_URL') ?: ''));
     $osTicketApiKey = trim((string)(getenv('OSTICKET_API_KEY') ?: ''));
     $webhookHeaders = $osTicketApiKey !== '' ? ["X-API-Key: {$osTicketApiKey}"] : [];
@@ -158,12 +164,15 @@ function aiDispatchLeadNotifications(
             if (!empty($ntfyActions)) {
                 $ntfyHeaders[] = 'Actions: ' . implode('; ', $ntfyActions);
             }
+            if ($ntfyToken !== '') {
+                $ntfyHeaders[] = 'Authorization: Bearer ' . $ntfyToken;
+            }
 
             $ntfyBody = implode("\n", $leadLines);
             $ntfyDelivered = false;
             $leadHttpCode = 0;
             for ($attempt = 1; $attempt <= 2; $attempt++) {
-                $chLead = curl_init("https://ntfy.sh/{$ntfyTopic}");
+                $chLead = curl_init("{$ntfyBaseUrl}/{$ntfyTopic}");
                 $leadCurlOpts = [
                     CURLOPT_POST           => true,
                     CURLOPT_POSTFIELDS     => $ntfyBody,
@@ -177,7 +186,9 @@ function aiDispatchLeadNotifications(
                     CURLOPT_SSL_VERIFYHOST => 2,
                 ];
                 if (defined('CURLPROTO_HTTPS')) {
-                    $leadCurlOpts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+                    $leadCurlOpts[CURLOPT_PROTOCOLS] = ($isInternalNtfyHttp && defined('CURLPROTO_HTTP'))
+                        ? (CURLPROTO_HTTP | CURLPROTO_HTTPS)
+                        : CURLPROTO_HTTPS;
                     $leadCurlOpts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
                 }
                 curl_setopt_array($chLead, $leadCurlOpts);
@@ -233,16 +244,21 @@ function aiDispatchLeadNotifications(
                 }
             }
 
-            $chNtfy = curl_init("https://ntfy.sh/{$ntfyTopic}");
+            $hotHeaders = [
+                "Title: Goracy Lead na Czatbocie ({$aiSite})",
+                'Priority: high',
+                'Tags: speech_balloon,fire',
+                'Actions: view, Otworz Helpdesk, https://hd.twojastronawww.pl/scp/'
+            ];
+            if ($ntfyToken !== '') {
+                $hotHeaders[] = 'Authorization: Bearer ' . $ntfyToken;
+            }
+
+            $chNtfy = curl_init("{$ntfyBaseUrl}/{$ntfyTopic}");
             $hotCurlOpts = [
                 CURLOPT_POST           => true,
                 CURLOPT_POSTFIELDS     => implode("\n", $hotLines),
-                CURLOPT_HTTPHEADER     => [
-                    "Title: Goracy Lead na Czatbocie ({$aiSite})",
-                    'Priority: high',
-                    'Tags: speech_balloon,fire',
-                    'Actions: view, Otworz Helpdesk, https://hd.twojastronawww.pl/scp/'
-                ],
+                CURLOPT_HTTPHEADER     => $hotHeaders,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => 3,
                 CURLOPT_CONNECTTIMEOUT => 2,
@@ -252,7 +268,9 @@ function aiDispatchLeadNotifications(
                 CURLOPT_SSL_VERIFYHOST => 2,
             ];
             if (defined('CURLPROTO_HTTPS')) {
-                $hotCurlOpts[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+                $hotCurlOpts[CURLOPT_PROTOCOLS] = ($isInternalNtfyHttp && defined('CURLPROTO_HTTP'))
+                    ? (CURLPROTO_HTTP | CURLPROTO_HTTPS)
+                    : CURLPROTO_HTTPS;
                 $hotCurlOpts[CURLOPT_REDIR_PROTOCOLS] = CURLPROTO_HTTPS;
             }
             curl_setopt_array($chNtfy, $hotCurlOpts);

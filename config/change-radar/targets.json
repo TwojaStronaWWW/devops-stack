@@ -1,0 +1,112 @@
+{
+  "version": "1.0.0",
+  "description": "Lightweight Change Detection Radar — Monitorowane strony zewnętrzne (HIS/P1/NFZ/KSeF, Hosting/Domeny LH.pl, Dotacje NGO Katowice)",
+  "categories": {
+    "his_med": {
+      "label": "Systemy medyczne AMMS / P1 / NFZ / KSeF",
+      "priority": "high",
+      "tags": "hospital,medical_symbol,satellite"
+    },
+    "hosting_domains": {
+      "label": "Koszty utrzymania infrastruktury TwojaStronaWWW (LH.pl)",
+      "priority": "default",
+      "tags": "moneybag,globe_with_meridians"
+    },
+    "ngo_katowice": {
+      "label": "Fundacja Kato Salsa Hub — Dotacje i konkursy NGO Katowice",
+      "priority": "default",
+      "tags": "classical_building,dancer"
+    }
+  },
+  "targets": [
+    {
+      "id": "cez-ezdrowie-komunikaty",
+      "name": "Komunikaty techniczne CeZ P1 / e-Recepta / EDM",
+      "category": "his_med",
+      "url": "https://ezdrowie.gov.pl/portal/home/komunikaty",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<article\\b[^>]*>(.*?)</article>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)csrf[_-]?token[^\\n]*",
+        "(?i)__RequestVerificationToken[^\\n]*",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(licznik|odwiedzin|wyświetleń|views|online)\\s*[:=]?\\s*\\d+",
+        "(?i)session[_-]?id\\s*[:=][^\\s]+"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nfz-slaski-komunikaty",
+      "name": "Śląski OW NFZ — komunikaty dla świadczeniodawców",
+      "category": "his_med",
+      "url": "https://www.nfz-katowice.pl/index.php/komunikaty/komunikaty-dla-swiadczeniodawcow",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<div[^>]+id=[\"']?content[\"']?[^>]*>(.*?)</div>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)csrf[_-]?token[^\\n]*",
+        "\\b[0-9a-f]{32}\\b",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(licznik|odwiedzin|wyświetleń|odsłon)\\s*[:=]?\\s*\\d+"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "mf-ksef-komunikaty",
+      "name": "Ministerstwo Finansów — komunikaty KSeF",
+      "category": "his_med",
+      "url": "https://ksef.podatki.gov.pl/komunikaty/",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<article\\b[^>]*>(.*?)</article>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)csrf[_-]?token[^\\n]*",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(nonce|buildId|deploymentId)\\s*[:=][^\\n]+"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "lh-pl-domeny-cennik",
+      "name": "Cennik rejestracji i odnowień domen LH.pl",
+      "category": "hosting_domains",
+      "url": "https://www.lh.pl/domeny/cennik",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<table\\b[^>]*>(.*?)</table>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)csrf[_-]?token[^\\n]*",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(session|phpsessid|cf_ray)[^\\n]*"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "lh-pl-hosting",
+      "name": "Parametry i ceny pakietów hostingowych LH.pl",
+      "category": "hosting_domains",
+      "url": "https://www.lh.pl/hosting",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<section\\b[^>]*>(.*?)</section>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)csrf[_-]?token[^\\n]*",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(opinie|klientów|ocena)\\s*\\d+[,.]\\d+"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "katowice-ngo-konkursy",
+      "name": "Urząd Miasta Katowice — ogłoszenia i dotacje dla NGO",
+      "category": "ngo_katowice",
+      "url": "https://www.katowice.eu/dla-mieszkanca/zaangazuj-sie/organizacje-pozarzadowe",
+      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<div[^>]+class=[\"'][^\"']*content[^\"']*[\"'][^>]*>(.*?)</div>",
+      "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
+      "ignore_patterns": [
+        "(?i)__VIEWSTATE[^\\n]*",
+        "(?i)__EVENTVALIDATION[^\\n]*",
+        "(?i)RequestDigest[^\\n]*",
+        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
+        "(?i)(licznik|odwiedzin|wyświetleń)\\s*[:=]?\\s*\\d+"
+      ],
+      "enabled": true
+    }
+  ]
+}

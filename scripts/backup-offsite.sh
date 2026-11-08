@@ -23,7 +23,10 @@ TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 R2_RETENTION_DAYS="${R2_RETENTION_DAYS:-14}"
 NTFY_TOPIC="${NTFY_TOPIC:-}"
-NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
+NTFY_BASE_URL="${NTFY_BASE_URL:-https://ntfy.sh}"
+NTFY_BASE_URL="${NTFY_BASE_URL%/}"
+NTFY_TOKEN="${NTFY_TOKEN:-}"
+NTFY_URL="${NTFY_URL:-${NTFY_BASE_URL}/${NTFY_TOPIC}}"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
 
@@ -39,6 +42,8 @@ VOLUMES_TO_BACKUP=(
     "grafana_data"
     "prometheus_data"
     "ai_router_storage"
+    "ntfy_data"
+    "privatebin_data"
     "runner_zeslownikiem_data"
     "runner_twojastronawww_data"
     "runner_gal_anonim_web_data"
@@ -57,7 +62,13 @@ send_notification() {
         return 0
     fi
 
+    local auth_args=()
+    if [[ -n "${NTFY_TOKEN}" ]]; then
+        auth_args=(-H "Authorization: Bearer ${NTFY_TOKEN}")
+    fi
+
     curl -s \
+        "${auth_args[@]}" \
         -H "Title: ${title}" \
         -H "Priority: ${priority}" \
         -H "Tags: ${tags}" \

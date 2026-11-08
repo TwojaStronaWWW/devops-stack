@@ -54,10 +54,10 @@ if (Test-Path $KeyPath) {
     }
 }
 
-# Sprawdzenie czy porty Grafany (3000), Uptime Kuma (3001) oraz Asystenta AMMS (8085) są już otwarte lokalnie
-if (-not (Test-PortOpen "127.0.0.1" 3000) -or -not (Test-PortOpen "127.0.0.1" 3001) -or -not (Test-PortOpen "127.0.0.1" 8085)) {
-    Write-Host ">> Uruchamianie cichego tunelu SSH w tle do $HostIp (3000, 3001, 8888, 9090, 8085)..." -ForegroundColor Yellow
-    $sshArgs = "-N -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 -L 8888:127.0.0.1:8888 -L 9090:127.0.0.1:9090 -L 8085:127.0.0.1:8085 -i `"$KeyPath`" $User@$HostIp"
+# Sprawdzenie czy porty Grafany (3000), Uptime Kuma (3001), Asystenta AMMS (8085), Ntfy (8086) oraz PrivateBin (8087) są już otwarte lokalnie
+if (-not (Test-PortOpen "127.0.0.1" 3000) -or -not (Test-PortOpen "127.0.0.1" 3001) -or -not (Test-PortOpen "127.0.0.1" 8085) -or -not (Test-PortOpen "127.0.0.1" 8086) -or -not (Test-PortOpen "127.0.0.1" 8087)) {
+    Write-Host ">> Uruchamianie cichego tunelu SSH w tle do $HostIp (3000, 3001, 8888, 9090, 8085, 8086, 8087)..." -ForegroundColor Yellow
+    $sshArgs = "-N -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -L 3000:127.0.0.1:3000 -L 3001:127.0.0.1:3001 -L 8888:127.0.0.1:8888 -L 9090:127.0.0.1:9090 -L 8085:127.0.0.1:8085 -L 8086:127.0.0.1:8086 -L 8087:127.0.0.1:8087 -i `"$KeyPath`" $User@$HostIp"
     Start-Process -FilePath "ssh" -ArgumentList $sshArgs -WindowStyle Hidden
     
     # Odczekaj na zainicjowanie połączenia (max 4 sekundy)
@@ -67,8 +67,22 @@ if (-not (Test-PortOpen "127.0.0.1" 3000) -or -not (Test-PortOpen "127.0.0.1" 30
         $attempts++
     }
 } else {
-    Write-Host ">> Tunel SSH (w tym port 8085 dla Asystenta AMMS) jest już aktywny w tle." -ForegroundColor Green
+    Write-Host ">> Tunel SSH (w tym porty 8085 AMMS, 8086 Ntfy Push, 8087 PrivateBin Sejf) jest już aktywny w tle." -ForegroundColor Green
 }
+
+Write-Host ""
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host " AKTYWNE PORTY TUNELU SSH ZERO TRUST (127.0.0.1 -> VPS):" -ForegroundColor Cyan
+Write-Host "----------------------------------------------------------------------" -ForegroundColor DarkGray
+Write-Host "  [3000] Grafana Dashboards      : http://localhost:3000" -ForegroundColor White
+Write-Host "  [3001] Uptime Kuma             : http://localhost:3001/dashboard" -ForegroundColor White
+Write-Host "  [8888] Dozzle (Logi Live)      : http://localhost:8888" -ForegroundColor White
+Write-Host "  [9090] Prometheus              : http://localhost:9090" -ForegroundColor White
+Write-Host "  [8085] AI Router & AMMS Teams  : http://localhost:8085/amms" -ForegroundColor White
+Write-Host "  [8086] Self-Hosted Ntfy Push   : http://127.0.0.1:8086" -ForegroundColor Green
+Write-Host "  [8087] PrivateBin Sejf Haseł   : http://127.0.0.1:8087" -ForegroundColor Green
+Write-Host "======================================================================" -ForegroundColor Cyan
+Write-Host ""
 
 $TabsInOrder = @(
     # 1. WSZYSTKIE DASHBOARDY GRAFANY (pierwszy: Działanie stron internetowych & VPS)

@@ -30,29 +30,35 @@ VPS/
 ├── .github/workflows/             # lint-compose.yml, deploy.yml (SSH + nscd flush + audyt), external-watchdog.yml, ai-security-review.yml
 ├── .githooks/                     # pre-commit (ochrona sekretów .env/.env.bak*), commit-msg (Conventional Commits)
 ├── compose/
-│   ├── docker-compose.yml         # devops_internal_network: Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router (127.0.0.1:8085:8080), GitHub Exporter, OCI Keepalive Buffer
+│   ├── docker-compose.yml         # devops_internal_network: Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router (8085), Ntfy (8086), PrivateBin (8087), GitHub Exporter
 │   ├── runners.yml                # Kontenerowe GitHub Actions Runnery ARM64 (devops_runners_network)
 │   └── extensions.yml             # Tunel krawędziowy Cloudflare Zero Trust (cloudflared --metrics 0.0.0.0:2000)
 ├── config/
 │   ├── grafana/                   # Provisioning źródeł (uid: prometheus) i 3 dashboardów (uptime-kuma-overview, ai-router-overview, web-analytics-overview)
-│   ├── node-exporter/             # Prometheus Textfile Collector (*.prom: backupy, Fail2ban IPS, IoC, audyt)
+│   ├── ntfy/ & privatebin/        # Konfiguracje Zero-Trust dla własnego serwera Push (server.yml) oraz sejfu haseł (conf.php)
+│   ├── change-radar/              # Cele monitoringu zmian zewnętrznych (targets.json: CeZ P1, KSeF, NFZ, LH.pl, NGO Katowice)
+│   ├── node-exporter/             # Prometheus Textfile Collector (*.prom: backupy, Fail2ban IPS, IoC, audyt, change_radar)
 │   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 21 reguł alertów (rules/ai-router.yml)
 ├── docs/                          # AI_ROUTER_RAPORT.md, CLOUDFLARE_STAGING_GUIDE.md
 ├── scripts/
-│   ├── 01-harden-os.sh / 02-install-docker.sh
-│   ├── audit-server.sh            # 5-warstwowy audyt (78 testów: IoC/SUID/IPS/WAF, APT, DOCKER-USER, Restore Drill) -> audit.prom
-│   ├── morning-digest.py          # Poranny raport 08:00 (Dual-AI HIGH Reasoning $0.00 + eskalacja Claude Sonnet 4.6 + E-mail)
+│   ├── 01-harden-os.sh / 02-install-docker.sh / optimize-wsl-shell.sh
+│   ├── audit-server.sh            # 5-warstwowy audyt (IoC/SUID/IPS/WAF, APT, DOCKER-USER, sshole, Restore Drill) -> audit.prom
+│   ├── run-morning-digest.sh      # Orkiestracja Ntfy.sh + Porannego Raportu 06:00 (delegacja do morning-digest.py)
+│   ├── morning-digest.py          # Poranny raport 06:00 (Rada 3 AI HIGH Reasoning $0.00 + Arbiter Antigravity + E-mail)
+│   ├── generate-client-audit.js   # Generator audytów sprzedażowych B2B "Przed i Po" (HTML/PDF A4) dla klientów TwojaStronaWWW (+ .ps1/.sh)
+│   ├── watch-external-changes.py  # Lekki Radar Zmian na Stronach Zewnętrznych (CeZ/KSeF/NFZ/LH.pl/NGO) + sync-change-radar.sh
+│   ├── setup-selfhosted-ntfy.sh / create-secret-link.ps1/.sh
 │   ├── backup-offsite.sh / backup-volumes.sh / backup-websites-lh.sh / restore-backup.sh
 │   ├── setup-audit-timer.sh (co 15 min) / setup-backup-timer.sh (03:00 UTC)
 │   ├── setup-kuma.js / setup-ntfy.js / sync-gsc-keywords.sh / sync-p1-status.sh / warm-ai-cache.sh
-│   ├── open-dashboard.cmd/.ps1 / open-amms-assistant.cmd/.ps1 / verify-remote.ps1/.cmd / ai-router-report.sh/.ps1
+│   ├── open-dashboard.cmd/.ps1 / open-amms-assistant.cmd/.ps1 / verify-remote.ps1/.cmd / ai-router-report.sh/.ps1 / ai-review-staged.sh/.ps1
 │   └── oracle-arm-hunter.sh / preview-tunnel.ps1/.sh / runners/
 ├── services/ai-router/            # Mikro-router AI, AMMS RAG & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, 4 workery PHP)
-│   ├── src/                       # chat-router.php, router-endpoints.php, llm-cascade.php, lead-notifier.php, ai-stats.php, amms-rag-search.php, amms-teams.html, p1-radar.html, widget.js
+│   ├── src/                       # chat-router.php, router-endpoints.php, llm-cascade.php, lead-notifier.php, ai-stats.php, web-analytics.php, amms-rag-search.php, amms-teams.html, p1-radar.html, widget.js
 │   ├── data/                      # Bazy wiedzy RAG :ro (*-knowledge.txt + amms-knowledge.sqlite)
 │   ├── storage/                   # Wolumen ai_router_storage (rate_limits, cache RAG, ai_stats.json)
 │   └── public-test/               # Tester frontendu (index.html, app.js, style.css)
-├── tests/unit/                    # repo-hygiene.test.js (26 testów) + security-regression.test.js (16 testów = 42 testy)
+├── tests/unit/                    # repo-hygiene.test.js (27 testów) + security-regression.test.js (19 testów = 46 testów)
 └── DISASTER_RECOVERY.md / README.md / SECURITY.md
 ```
 

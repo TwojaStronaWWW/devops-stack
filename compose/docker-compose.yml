@@ -343,6 +343,8 @@ services:
       - MODEL_DAILY_LIMITS=${MODEL_DAILY_LIMITS:-}
       - AI_CACHE_TTL=${AI_CACHE_TTL:-86400}
       - NTFY_TOPIC=${NTFY_TOPIC:-}
+      - NTFY_BASE_URL=${NTFY_BASE_URL:-https://ntfy.sh}
+      - NTFY_TOKEN=${NTFY_TOKEN:-}
       - LEAD_WEBHOOK_URL=${LEAD_WEBHOOK_URL:-}
       - OSTICKET_API_KEY=${OSTICKET_API_KEY:-}
       - PHP_CLI_SERVER_WORKERS=4
@@ -358,6 +360,88 @@ services:
           memory: 64M
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Ntfy: Własny, prywatny serwer powiadomień Push (100% RODO / Zero-Trust)
+  # ============================================================================
+  ntfy:
+    image: binwiederhier/ntfy:v2.11.0
+    container_name: ntfy
+    labels:
+      dev.dozzle.name: "ntfy • Prywatny Serwer Push"
+      org.opencontainers.image.description: "Własny serwer powiadomień Push RODO/ISO 27001 dla leadów i alertów (ntfy)"
+    restart: unless-stopped
+    command:
+      - serve
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal_network
+    ports:
+      - "127.0.0.1:8086:8080"
+    volumes:
+      - ../config/ntfy/server.yml:/etc/ntfy/server.yml:ro
+      - ntfy_data:/var/lib/ntfy
+      - ntfy_cache:/var/cache/ntfy
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 128M
+        reservations:
+          memory: 32M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8080/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # PrivateBin: Jednorazowy Sejf Haseł Zero-Knowledge ("Burn After Reading")
+  # ============================================================================
+  privatebin:
+    image: privatebin/nginx-fpm-alpine:1.7.4
+    container_name: privatebin
+    labels:
+      dev.dozzle.name: "privatebin • Sejf Haseł Zero-Knowledge"
+      org.opencontainers.image.description: "Jednorazowy sejf do bezpiecznego przekazywania haseł klientom AES-256-GCM (PrivateBin)"
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - internal_network
+    ports:
+      - "127.0.0.1:8087:8080"
+    tmpfs:
+      - /tmp:size=32M,mode=1777
+      - /var/lib/nginx/tmp:size=16M,mode=0700,uid=82,gid=82
+      - /run:size=8M,mode=0755,uid=82,gid=82
+    volumes:
+      - ../config/privatebin/conf.php:/srv/cfg/conf.php:ro
+      - privatebin_data:/srv/data
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 128M
+        reservations:
+          memory: 32M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -383,3 +467,9 @@ volumes:
     name: grafana_data
   ai_router_storage:
     name: ai_router_storage
+  ntfy_data:
+    name: ntfy_data
+  ntfy_cache:
+    name: ntfy_cache
+  privatebin_data:
+    name: privatebin_data
