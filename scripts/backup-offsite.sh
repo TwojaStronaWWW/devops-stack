@@ -23,9 +23,15 @@ TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 R2_RETENTION_DAYS="${R2_RETENTION_DAYS:-14}"
 NTFY_TOPIC="${NTFY_TOPIC:-}"
-NTFY_BASE_URL="${NTFY_BASE_URL:-https://ntfy.sh}"
-NTFY_BASE_URL="${NTFY_BASE_URL%/}"
 NTFY_TOKEN="${NTFY_TOKEN:-}"
+if [[ -z "${NTFY_BASE_URL:-}" || "${NTFY_BASE_URL:-}" == "http://ntfy:8080" ]]; then
+    if [[ -n "${NTFY_TOKEN}" ]]; then
+        NTFY_BASE_URL="http://127.0.0.1:8086"
+    else
+        NTFY_BASE_URL="https://ntfy.sh"
+    fi
+fi
+NTFY_BASE_URL="${NTFY_BASE_URL%/}"
 NTFY_URL="${NTFY_URL:-${NTFY_BASE_URL}/${NTFY_TOPIC}}"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"

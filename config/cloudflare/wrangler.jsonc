@@ -1,0 +1,27 @@
+{
+  "name": "tsw-zero-trust-tunnel-router",
+  "main": "worker.js",
+  "compatibility_date": "2026-03-01",
+  "account_id": "98c71cd2e0baefef741a3732e9a0b0de",
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "push.twojastronawww.pl/*",
+      "zone_id": "3d5f1e73c10df6eeff655f83dfa26827"
+    },
+    {
+      "pattern": "sejf.twojastronawww.pl/*",
+      "zone_id": "3d5f1e73c10df6eeff655f83dfa26827"
+    }
+  ],
+  "vpc_services": [
+    {
+      "binding": "NTFY_VPC",
+      "service_id": "01a1bb5a-2614-7420-a188-e701792bf465"
+    },
+    {
+      "binding": "PRIVATEBIN_VPC",
+      "service_id": "01a1bb5a-34b7-7001-8115-3d8b8571f4b6"
+    }
+  ]
+}

@@ -7,8 +7,14 @@
 if [[ -f "${ENV_FILE:-}" ]]; then
     NTFY_AUDIT_TOPIC="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
     NTFY_BASE_URL="$(grep -E '^NTFY_BASE_URL=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' | sed 's:/*$::' || echo '')"
-    NTFY_BASE_URL="${NTFY_BASE_URL:-https://ntfy.sh}"
     NTFY_TOKEN="$(grep -E '^NTFY_TOKEN=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+    if [[ -z "${NTFY_BASE_URL}" || "${NTFY_BASE_URL}" == "http://ntfy:8080" ]]; then
+        if [[ -n "${NTFY_TOKEN}" ]]; then
+            NTFY_BASE_URL="http://127.0.0.1:8086"
+        else
+            NTFY_BASE_URL="https://ntfy.sh"
+        fi
+    fi
     NTFY_AUTH_ARGS=()
     if [[ -n "${NTFY_TOKEN}" ]]; then
         NTFY_AUTH_ARGS=(-H "Authorization: Bearer ${NTFY_TOKEN}")
