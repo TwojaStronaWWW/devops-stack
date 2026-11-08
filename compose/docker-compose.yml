@@ -424,10 +424,6 @@ services:
       - internal_network
     ports:
       - "127.0.0.1:8087:8080"
-    tmpfs:
-      - /tmp:size=32M,mode=1777
-      - /var/lib/nginx/tmp:size=16M,mode=1777
-      - /run:size=8M,mode=1777
     volumes:
       - ../config/privatebin/conf.php:/srv/cfg/conf.php:ro
       - privatebin_data:/srv/data

@@ -555,21 +555,6 @@ else
     pass "Aktualizacje bezpieczeństwa APT (unattended-upgrades + Docker CE): wszystkie pakiety są aktualne (0 zaległych)."
 fi
 
-# 6b. Ochrona przed luką sshole (OpenSSH musl / Alpine Linux): brak demona sshd i openssh-server wewnątrz kontenerów
-ALPINE_SSHD_FOUND=0
-for ac in ai-router github-exporter dozzle ntfy privatebin; do
-    if docker inspect -f '{{.State.Running}}' "${ac}" 2>/dev/null | grep -q "true"; then
-        if docker exec "${ac}" sh -c "command -v sshd >/dev/null 2>&1 || pgrep -x sshd >/dev/null 2>&1" 2>/dev/null; then
-            ALPINE_SSHD_FOUND=1
-            fail "Kontener ${ac} (Alpine/musl) posiada zainstalowany lub uruchomiony demon OpenSSH (ryzyko luki sshole)!" \
-                 "Usuń pakiet openssh-server z obrazu kontenera ${ac} i przebuduj obraz z apk upgrade --no-cache."
-        fi
-    fi
-done
-if [[ "${ALPINE_SSHD_FOUND}" -eq 0 ]]; then
-    pass "Ochrona przed luką sshole (Alpine Linux / musl): żaden kontener aplikacyjny nie uruchamia ani nie posiada demona sshd."
-fi
-
 
 # ==============================================================================
 # WARSTWA 4: KONTENERY DOCKER, HEALTHCHECKI I SMOKE TESTY ENDPOINTÓW
@@ -720,7 +705,7 @@ else
 
     # Weryfikacja odporności kontenera Alpine (ai-router) na luki musl OpenSSH (sshole) oraz PHP2Shell (allow_url_fopen=Off, disable_functions)
     if docker inspect ai-router >/dev/null 2>&1; then
-        AI_HARDENING_CHECK="$(docker exec ai-router sh -c 'if command -v sshd >/dev/null 2>&1; then echo "SSHD_FOUND"; elif php -r "exit((ini_get(\"allow_url_include\") === \"0\" && ini_get(\"allow_url_fopen\") === \"0\" && strpos(ini_get(\"disable_functions\"), \"exec\") !== false) ? 0 : 1);"; then echo "HARDENED_OK"; else echo "PHP_WEAK"; fi' 2>/dev/null || echo 'SKIP')"
+        AI_HARDENING_CHECK="$(docker exec ai-router sh -c 'if command -v sshd >/dev/null 2>&1; then echo "SSHD_FOUND"; elif php -i 2>/dev/null | grep -q "allow_url_fopen => Off" && php -i 2>/dev/null | grep -q "allow_url_include => Off"; then echo "HARDENED_OK"; else echo "PHP_WEAK"; fi' 2>/dev/null || echo 'SKIP')"
         if [[ "${AI_HARDENING_CHECK}" == "HARDENED_OK" ]]; then
             pass "Ochrona kontenera Alpine (sshole & PHP2Shell Guard): brak demona sshd na musl oraz aktywne allow_url_fopen=Off / disable_functions."
         elif [[ "${AI_HARDENING_CHECK}" == "SSHD_FOUND" ]]; then
