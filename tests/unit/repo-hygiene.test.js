@@ -182,6 +182,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'lead-notifier.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'web-analytics.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'web-analytics-labels.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-rag-search.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'),
@@ -212,7 +213,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
   }
 
   function readStatsCombinedPhp() {
-    return ['ai-stats.php', 'web-analytics.php']
+    return ['ai-stats.php', 'web-analytics.php', 'web-analytics-labels.php']
       .map((f) => fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', f), 'utf-8'))
       .join('\n');
   }
@@ -474,7 +475,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(secReviewYml, /services\/ai-router\/\*\*/);
     assert.match(secReviewYml, /scripts\/\*\*/);
 
-    const syncP1Sh = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'sync-p1-status.sh'), 'utf-8');
+    const syncP1Sh = [
+      fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'sync-p1-status.sh'), 'utf-8'),
+      fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'p1-status-engine.py'), 'utf-8'),
+    ].join('\n');
     assert.match(syncP1Sh, /def write_file_atomic/);
     assert.match(syncP1Sh, /ssl_verified_ctx = ssl\.create_default_context\(\)/);
   });
