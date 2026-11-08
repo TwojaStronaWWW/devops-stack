@@ -1,7 +1,7 @@
-# BAZA WIEDZY: DANCEPULS.KATOSALSAHUB.PL (Radar Imprez, Potańcówek i Warsztatów Tanecznych — Katowice & Śląsk)
+# BAZA WIEDZY: KATOSALSAHUB.PL/DANCEPULS/ (Radar Imprez, Potańcówek i Warsztatów Tanecznych — Katowice & Śląsk)
 
 ## Czym jest DancePuls?
-DancePuls (https://dancepuls.katosalsahub.pl/) to automatycznie aktualizowany radar, agregator i kalendarz wydarzeń tanecznych w Katowicach oraz całej aglomeracji górnośląskiej (GZM).
+DancePuls (https://katosalsahub.pl/dancepuls/) to automatycznie aktualizowany radar, agregator i kalendarz wydarzeń tanecznych w Katowicach oraz całej aglomeracji górnośląskiej (GZM).
 - Obejmuje style: **Salsa Kubańska (Casino, Rueda, Timba), Salsa Liniowa (LA On1 / NY On2), Bachata Sensual & Dominican, Kizomba, Urbankiz oraz Brazilian Zouk**.
 - Serwis jest częścią ekosystemu społecznościowego **Kato Salsa Hub** (https://katosalsahub.pl/).
 

@@ -619,12 +619,6 @@ else
             C_STATE="$(docker inspect -f '{{.State.Status}}' "${CNAME}" 2>/dev/null || echo 'unknown')"
             if [[ "${C_STATE}" != "running" ]]; then
                 # Auto-Heal zatrzymanego kontenera (np. po wyścigu portów przy restarcie dockerd)
-                if [[ "${CNAME}" == "grafana" ]] && docker inspect medicusnoster-serve >/dev/null 2>&1; then
-                    if ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' medicusnoster-serve 2>/dev/null | grep -q '^PORT='; then
-                        docker rm -f medicusnoster-serve >/dev/null 2>&1 || true
-                        docker run -d --name medicusnoster-serve --restart unless-stopped --network host -e PORT=4001 -v /opt/medicusnoster-preview:/app:ro -w /app node:22-alpine node scripts/serve.js >/dev/null 2>&1 || true
-                    fi
-                fi
                 if [[ -f "${ENV_FILE}" ]]; then
                     (
                         flock -n 9 || exit 0

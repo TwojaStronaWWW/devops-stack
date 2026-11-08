@@ -54,7 +54,7 @@
     1. **Grafik Szkół (130 kursów tygodniowo):** La Clave (47 kursów), Good Mood (41 kursów na Paderewskiego 35 i Gliwickiej 44), Mil Pasos (40 kursów na Kamiennej 4) oraz Evolution/KIZLAB/KSH (2 pozycje).
     2. **Ustandaryzowaną 5-stopniową skalę poziomów KSH:** `P0` (Od zera / Start, 0–2 mies.), `P1` (Podstawowy, 2–5 mies.), `P2` (Podstawowy+ / P2–P3, 6–9 mies.), `S1` (Średniozaawansowany i Zaawansowany / P4–P5 / S3, 9–12+ mies.) oraz `OPEN` (Open / Solo / Praktis).
     3. **Kalendarz Imprez DancePuls** (filtrowany po Katowicach, całym Śląsku i Krakowie) oraz **Interaktywną Mapę Szkół i Parkietów KSH**.
-- **DancePuls (`https://dancepuls.katosalsahub.pl/`):**
+- **DancePuls (`https://katosalsahub.pl/dancepuls/`):**
   - Oficjalny agregator i kalendarz wydarzeń tanecznych powiązany z Kato Salsa Hub. Zbiera aktualne imprezy (sociale), warsztaty weekendowe i festiwale Salsy, Bachaty i Kizomby w województwie śląskim i Krakowie.
 
 ## 4. Informacje dla początkujących (Kursy P0, strój, karty sportowe)
