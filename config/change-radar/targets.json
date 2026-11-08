@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "description": "Lightweight Change Detection Radar — Monitorowane strony zewnętrzne (HIS/P1/NFZ/KSeF, Hosting/Domeny LH.pl, Dotacje NGO Katowice)",
+  "version": "2.0.0",
+  "description": "Lightweight Change Detection Radar v2.0 — Strukturalne endpointy (Next.js __NEXT_DATA__ JSON, RSS XML, BIP & HTML)",
   "categories": {
     "his_med": {
       "label": "Systemy medyczne AMMS / P1 / NFZ / KSeF",
@@ -23,8 +23,9 @@
       "id": "cez-ezdrowie-komunikaty",
       "name": "Komunikaty techniczne CeZ P1 / e-Recepta / EDM",
       "category": "his_med",
-      "url": "https://ezdrowie.gov.pl/portal/home/komunikaty",
-      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<article\\b[^>]*>(.*?)</article>",
+      "mode": "html",
+      "url": "https://ezdrowie.gov.pl/",
+      "extract_regex": "(?is)<p\\s+class=[\"']articleAddData[\"'][^>]*>(.*?)</p>\\s*<h3\\s+class=[\"']articleTitle[\"'][^>]*>(.*?)</h3>\\s*<p\\s+class=[\"']articleText[\"'][^>]*>(.*?)</p>",
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)csrf[_-]?token[^\\n]*",
@@ -37,39 +38,45 @@
     },
     {
       "id": "nfz-slaski-komunikaty",
-      "name": "Śląski OW NFZ — komunikaty dla świadczeniodawców",
+      "name": "Śląski OW NFZ — komunikaty dla świadczeniodawców (RSS XML)",
       "category": "his_med",
-      "url": "https://www.nfz-katowice.pl/index.php/komunikaty/komunikaty-dla-swiadczeniodawcow",
-      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<div[^>]+id=[\"']?content[\"']?[^>]*>(.*?)</div>",
+      "mode": "rss",
+      "max_items": 30,
+      "url": "https://www.nfz-katowice.pl/index.php/dla-swiadczeniodawcy/komunikaty-dla-swiadczeniodawcow?format=feed&type=rss",
+      "extract_regex": "(?is)<item\\b[^>]*>(.*?)</item>",
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)csrf[_-]?token[^\\n]*",
         "\\b[0-9a-f]{32}\\b",
-        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
         "(?i)(licznik|odwiedzin|wyświetleń|odsłon)\\s*[:=]?\\s*\\d+"
       ],
       "enabled": true
     },
     {
       "id": "mf-ksef-komunikaty",
-      "name": "Ministerstwo Finansów — komunikaty KSeF",
+      "name": "Ministerstwo Finansów — komunikaty techniczne KSeF 2.0 (__NEXT_DATA__ JSON)",
       "category": "his_med",
-      "url": "https://ksef.podatki.gov.pl/komunikaty/",
+      "mode": "next_data",
+      "json_path": "props.pageProps.response.content.contentItems.0.content.properties",
+      "json_fields": ["createDate", "name", "route.path"],
+      "max_items": 40,
+      "url": "https://ksef.podatki.gov.pl/komunikaty-techniczne/",
       "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<article\\b[^>]*>(.*?)</article>",
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)csrf[_-]?token[^\\n]*",
-        "\\b\\d{2}:\\d{2}:\\d{2}\\b",
         "(?i)(nonce|buildId|deploymentId)\\s*[:=][^\\n]+"
       ],
       "enabled": true
     },
     {
       "id": "lh-pl-domeny-cennik",
-      "name": "Cennik rejestracji i odnowień domen LH.pl",
+      "name": "Cennik rejestracji i odnowień głównych domen LH.pl (.pl / .eu / .com)",
       "category": "hosting_domains",
+      "mode": "html",
       "url": "https://www.lh.pl/domeny/cennik",
-      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<table\\b[^>]*>(.*?)</table>",
+      "extract_regex": "(?is)<table\\b[^>]*>(.*?)</table>",
+      "max_matches": 1,
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)csrf[_-]?token[^\\n]*",
@@ -80,10 +87,11 @@
     },
     {
       "id": "lh-pl-hosting",
-      "name": "Parametry i ceny pakietów hostingowych LH.pl",
+      "name": "Parametry i ceny pakietów hostingowych LH.pl (Orange / Kiwi / Mango / Apple)",
       "category": "hosting_domains",
+      "mode": "html",
       "url": "https://www.lh.pl/hosting",
-      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<section\\b[^>]*>(.*?)</section>",
+      "extract_regex": "(?is)<div\\s+class=[\"']card-header\\s+header-fruit[\"'][^>]*>(.*?)<div\\s+class=[\"']card-body",
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)csrf[_-]?token[^\\n]*",
@@ -94,10 +102,11 @@
     },
     {
       "id": "katowice-ngo-konkursy",
-      "name": "Urząd Miasta Katowice — ogłoszenia i dotacje dla NGO",
+      "name": "BIP Urząd Miasta Katowice — ogłoszenia, dotacje i małe granty dla NGO",
       "category": "ngo_katowice",
-      "url": "https://www.katowice.eu/dla-mieszkanca/zaangazuj-sie/organizacje-pozarzadowe",
-      "extract_regex": "(?is)<main\\b[^>]*>(.*?)</main>|<div[^>]+class=[\"'][^\"']*content[^\"']*[\"'][^>]*>(.*?)</div>",
+      "mode": "html",
+      "url": "https://bip.katowice.eu/Ogloszenia/TablicaOgloszen/default.aspx?idt=542&menu=850&menu=855",
+      "extract_regex": "(?is)<div\\s+class=[\"']tekstboks[\"'][^>]*>(.*?)</div>",
       "strip_selectors": ["script", "style", "noscript", "svg", "nav", "footer", "header", "aside"],
       "ignore_patterns": [
         "(?i)__VIEWSTATE[^\\n]*",

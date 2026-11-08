@@ -359,6 +359,13 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     for (const pOpt of ['auto', 'today', 'yesterday', 'total']) {
       assert.ok(periodOptionValues.includes(pOpt), `Brak opcji '${pOpt}' w przełączniku $period dashboardu web-analytics-overview.json`);
     }
+    const uvPanel = webDash.panels.find((p) => p.id === 301);
+    assert.ok(uvPanel, 'Brak panelu 301 (Unikalni Odwiedzający) w web-analytics-overview.json');
+    assert.strictEqual(
+      uvPanel.targets[0].expr.includes('web_analytics_unique_visitors_today'),
+      false,
+      'Panel 301 nie może łączyć operatorem OR metryki bez etykiety effective_label (powoduje to zduplikowany kafelek Value)'
+    );
     const webExprs = JSON.stringify(webDash.panels);
     for (const metric of [
       'web_analytics_period_unique_visitors',
@@ -684,13 +691,19 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.strictEqual(selfTestRes.status, 0, `generate-client-audit.js --self-test nie powiódł się: ${selfTestRes.stderr || selfTestRes.stdout}`);
     assert.match(selfTestRes.stdout, /SELF_TEST_OK/);
 
-    // 4. Opcja 4: Radar Zmian na Stronach Zewnętrznych (Change Detection Radar)
+    // 4. Opcja 4: Radar Zmian na Stronach Zewnętrznych (Change Detection Radar + Endpoint Discovery)
     const radarTargetsPath = path.join(ROOT_DIR, 'config', 'change-radar', 'targets.json');
     assert.ok(fs.existsSync(radarTargetsPath), 'Brak config/change-radar/targets.json');
     const radarTargets = JSON.parse(fs.readFileSync(radarTargetsPath, 'utf-8'));
     assert.ok(Array.isArray(radarTargets.targets) && radarTargets.targets.length >= 6, 'Za mało zdefiniowanych celów w config/change-radar/targets.json');
-    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'watch-external-changes.py')), 'Brak scripts/watch-external-changes.py');
+    const watchPyPath = path.join(ROOT_DIR, 'scripts', 'watch-external-changes.py');
+    const discoverPyPath = path.join(ROOT_DIR, 'scripts', 'discover-endpoints.py');
+    assert.ok(fs.existsSync(watchPyPath), 'Brak scripts/watch-external-changes.py');
+    assert.ok(fs.existsSync(discoverPyPath), 'Brak scripts/discover-endpoints.py');
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'sync-change-radar.sh')), 'Brak scripts/sync-change-radar.sh');
+    const watchPyContent = fs.readFileSync(watchPyPath, 'utf-8');
+    assert.match(watchPyContent, /__NEXT_DATA__/);
+    assert.match(watchPyContent, /mode == "rss"/);
   });
 });
 

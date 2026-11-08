@@ -3,15 +3,20 @@
 watch-external-changes.py
 Lightweight Change Detection Radar (CeZ P1/e-Zdrowie, KSeF, NFZ, LH.pl, NGO Katowice).
 
-Architektura:
-- 100% Python Standard Library (urllib.request, ssl, hashlib, difflib, json, re, html.parser, os, sys, time)
+Architektura v2.0 (Structured Endpoints + HTML Fallback):
+- 100% Python Standard Library (urllib.request, ssl, hashlib, difflib, json, re, html.parser, xml.etree.ElementTree, os, sys, time)
 - Bezpieczne pobieranie HTTPS z weryfikacją certyfikatu TLS (ssl.create_default_context()),
   limitem rozmiaru odpowiedzi 2 MB (MAX_BYTES = 2_097_152) oraz timeoutem 12s.
-- Ekstrakcja i normalizacja czystego tekstu z HTML (usunięcie <script>, <style>, <noscript>, <svg>,
-  komentarzy HTML oraz dynamicznych tokenów CSRF / znaczników czasu).
+- Natywne tryby ekstrakcji ukrytych endpointów (mode):
+  1. "next_data" — ekstrakcja drzewa JSON z <script id="__NEXT_DATA__" type="application/json"> (np. KSeF 2.0)
+  2. "json"      — bezpośrednie endpointy REST API / XHR JSON (nawigacja po json_path + json_fields)
+  3. "rss"       — kanały syndykacji RSS 2.0 / Atom XML (<item> / <entry> -> pubDate | title | link, np. NFZ)
+  4. "json_ld"   — ekstrakcja obiektów Schema.org z <script type="application/ld+json">
+  5. "html"      — klasyczna normalizacja czystego tekstu z HTML (usunięcie <script>, <style>, <noscript>, <svg>,
+                   komentarzy HTML, obsługa extract_regex + max_matches oraz filtracja dynamicznych tokenów CSRF/czasu).
 - Atomowy zapis stanu (STATE_FILE) oraz metryk Prometheus Textfile Collector (PROM_FILE)
   metodą .tmp -> os.replace.
-- Obsługa flagi --self-test (weryfikacja w pamięci bez zapytań sieciowych -> SELF_TEST_OK).
+- Obsługa flagi --self-test (weryfikacja w pamięci wszystkich trybów bez zapytań sieciowych -> SELF_TEST_OK).
 """
 
 import difflib
@@ -27,13 +32,14 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 
 MAX_BYTES = 2 * 1024 * 1024  # Limit 2 MB
 DEFAULT_TIMEOUT = 12.0       # Timeout 12 sekund
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 "
-    "TwojaStronaWWW-ChangeRadar/1.0"
+    "TwojaStronaWWW-ChangeRadar/2.0"
 )
 
 ALWAYS_STRIP_TAGS = {"script", "style", "noscript", "svg", "template", "iframe", "head"}
@@ -129,26 +135,194 @@ def _strip_html_comments_and_noise_tags(raw_html):
     return cleaned
 
 
+def _resolve_json_path(data, path_expr):
+    """Nawiguje po strukturze dict/list używając ścieżki kropkowej (np. 'props.pageProps.items.0.data')."""
+    if not path_expr:
+        return data
+    cur = data
+    for part in str(path_expr).split("."):
+        part = part.strip()
+        if not part:
+            continue
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list) and part.isdigit():
+            idx = int(part)
+            cur = cur[idx] if 0 <= idx < len(cur) else None
+        else:
+            return None
+        if cur is None:
+            return None
+    return cur
+
+
+def _format_json_items_to_lines(node, json_fields=None, max_items=100):
+    """Zamienia tablicę obiektów JSON lub słownik na deterministyczne linie tekstu."""
+    lines = []
+    items = node if isinstance(node, list) else ([node] if node is not None else [])
+    for item in items[:max_items]:
+        if isinstance(item, dict):
+            if json_fields:
+                parts = []
+                for fld in json_fields:
+                    val = _resolve_json_path(item, fld)
+                    if val is not None:
+                        s_val = re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", str(val)))).strip()
+                        if s_val:
+                            parts.append(s_val)
+                if parts:
+                    lines.append(" | ".join(parts))
+            else:
+                flat = json.dumps(item, ensure_ascii=False, sort_keys=True)
+                lines.append(re.sub(r"\s+", " ", flat).strip())
+        elif item is not None:
+            s_val = re.sub(r"\s+", " ", str(item)).strip()
+            if s_val:
+                lines.append(s_val)
+    return lines
+
+
+def _extract_structured_lines(raw_payload, target_cfg):
+    """
+    Przetwarza tryby strukturalne (next_data, json, rss, json_ld).
+    Zwraca listę linii lub None, jeśli należy użyć standardowego parsera HTML.
+    """
+    mode = str(target_cfg.get("mode") or "html").strip().lower()
+    json_path = target_cfg.get("json_path")
+    json_fields = target_cfg.get("json_fields")
+    max_items = int(target_cfg.get("max_items") or 80)
+
+    if mode == "next_data":
+        m = re.search(
+            r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+            raw_payload,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if m:
+            try:
+                parsed = json.loads(m.group(1))
+                target_node = _resolve_json_path(parsed, json_path)
+                lines = _format_json_items_to_lines(target_node, json_fields=json_fields, max_items=max_items)
+                if lines:
+                    return lines
+            except Exception:
+                pass
+        return None
+
+    if mode == "json":
+        try:
+            parsed = json.loads(raw_payload)
+            target_node = _resolve_json_path(parsed, json_path)
+            lines = _format_json_items_to_lines(target_node, json_fields=json_fields, max_items=max_items)
+            if lines:
+                return lines
+        except Exception:
+            pass
+        return None
+
+    if mode == "json_ld":
+        scripts = re.findall(
+            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+            raw_payload,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        out_lines = []
+        for raw_sc in scripts:
+            try:
+                parsed = json.loads(raw_sc.strip())
+                target_node = _resolve_json_path(parsed, json_path) if json_path else parsed
+                if isinstance(target_node, dict) and "@graph" in target_node and not json_path:
+                    target_node = target_node["@graph"]
+                out_lines.extend(_format_json_items_to_lines(target_node, json_fields=json_fields, max_items=max_items))
+            except Exception:
+                pass
+        return out_lines if out_lines else None
+
+    if mode == "rss":
+        try:
+            xml_clean = raw_payload.lstrip("\ufeff \t\r\n")
+            root = ET.fromstring(xml_clean)
+            out_lines = []
+            # Obsługa RSS 2.0 (<item>) oraz Atom (<entry>)
+            for elem in root.iter():
+                tag_local = elem.tag.split("}")[-1].lower()
+                if tag_local not in ("item", "entry"):
+                    continue
+                title = ""
+                pub_date = ""
+                link = ""
+                for child in elem:
+                    ctag = child.tag.split("}")[-1].lower()
+                    ctext = (child.text or "").strip()
+                    if ctag == "title" and not title:
+                        title = html.unescape(re.sub(r"<[^>]+>", " ", ctext)).strip()
+                    elif ctag in ("pubdate", "published", "updated", "date") and not pub_date:
+                        pub_date = ctext
+                    elif ctag == "link" and not link:
+                        link = ctext or (child.attrib.get("href") or "").strip()
+                parts = [p for p in (pub_date, title, link) if p]
+                if parts:
+                    out_lines.append(re.sub(r"\s+", " ", " | ".join(parts)).strip())
+                if len(out_lines) >= max_items:
+                    break
+            if out_lines:
+                return out_lines
+        except Exception:
+            pass
+        return None
+
+    return None
+
+
 def extract_normalized_lines(raw_html, target_cfg=None):
     """
-    Wyodrębnia czysty, znormalizowany tekst z dokumentu HTML:
-    1. Usuwa <script>, <style>, <noscript>, <svg> oraz komentarze HTML.
-    2. Jeśli podano extract_regex i dopasowanie zwraca treść, ekstrahuje sekcję docelową
-       (z bezpiecznym fallbackiem do pełnego dokumentu).
-    3. Odfiltrowuje dynamiczne znaczniki czasu, tokeny CSRF i wzorce z ignore_patterns.
-    4. Zwraca listę znormalizowanych linii tekstu oraz skrót SHA-256.
+    Wyodrębnia czysty, znormalizowany tekst ze źródła (JSON / __NEXT_DATA__ / RSS XML / HTML):
+    1. Jeśli skonfigurowano mode in ('next_data', 'json', 'rss', 'json_ld'), ekstrahuje dane strukturalne
+       z bezpiecznym fallbackiem do parsera HTML.
+    2. Dla HTML usuwa <script>, <style>, <noscript>, <svg> oraz komentarze HTML.
+    3. Jeśli podano extract_regex i dopasowanie zwraca treść, ekstrahuje sekcję docelową
+       (z obsługą max_matches oraz bezpiecznym fallbackiem do pełnego dokumentu).
+    4. Odfiltrowuje dynamiczne znaczniki czasu, tokeny CSRF i wzorce z ignore_patterns.
+    5. Zwraca listę znormalizowanych linii tekstu oraz skrót SHA-256.
     """
     target_cfg = target_cfg or {}
     if not raw_html:
         return [], hashlib.sha256(b"").hexdigest()
 
+    compiled_ignores = []
+    for pat in DEFAULT_IGNORE_PATTERNS + list(target_cfg.get("ignore_patterns") or []):
+        try:
+            compiled_ignores.append(re.compile(pat))
+        except re.error:
+            pass
+
+    structured_lines = _extract_structured_lines(raw_html, target_cfg)
+    if structured_lines:
+        normalized_struct = []
+        prev_line = None
+        for raw_line in structured_lines:
+            line = raw_line
+            for creg in compiled_ignores:
+                line = creg.sub("", line)
+            line = re.sub(r"[ \t\r\f\v]+", " ", line).strip()
+            if not line or line == prev_line:
+                continue
+            normalized_struct.append(line)
+            prev_line = line
+        if normalized_struct:
+            payload = "\n".join(normalized_struct).encode("utf-8")
+            return normalized_struct, hashlib.sha256(payload).hexdigest()
+
     pre_cleaned = _strip_html_comments_and_noise_tags(raw_html)
     candidate_html = pre_cleaned
 
     extract_regex = target_cfg.get("extract_regex")
+    max_matches = int(target_cfg.get("max_matches") or 0)
     if extract_regex:
         try:
             matches = list(re.finditer(extract_regex, pre_cleaned))
+            if max_matches > 0:
+                matches = matches[:max_matches]
             if matches:
                 extracted_parts = []
                 for m in matches:
@@ -180,13 +354,6 @@ def extract_normalized_lines(raw_html, target_cfg=None):
             text = re.sub(r"(?is)<[^>]+>", "\n", pre_cleaned)
 
     text = html.unescape(text)
-
-    compiled_ignores = []
-    for pat in DEFAULT_IGNORE_PATTERNS + list(target_cfg.get("ignore_patterns") or []):
-        try:
-            compiled_ignores.append(re.compile(pat))
-        except re.error:
-            pass
 
     normalized_lines = []
     prev_line = None
@@ -232,21 +399,40 @@ def compute_diff_summary(old_lines, new_lines, max_lines=15):
     return meaningful
 
 
-def fetch_url_safely(url, timeout=DEFAULT_TIMEOUT, max_bytes=MAX_BYTES):
+def fetch_url_safely(url, timeout=DEFAULT_TIMEOUT, max_bytes=MAX_BYTES, target_cfg=None):
     """
-    Pobiera stronę z weryfikacją certyfikatu TLS (ssl.create_default_context()),
-    nagłówkiem User-Agent, limitem rozmiaru max 2 MB i timeoutem 12s.
+    Pobiera zasób HTTP/HTTPS z weryfikacją certyfikatu TLS (ssl.create_default_context()),
+    nagłówkiem User-Agent, opcjonalnymi nagłówkami/metodą z target_cfg, limitem max 2 MB i timeoutem 12s.
     """
+    target_cfg = target_cfg or {}
     ctx = ssl.create_default_context()
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
+        "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+    }
+    custom_headers = target_cfg.get("headers")
+    if isinstance(custom_headers, dict):
+        for hk, hv in custom_headers.items():
+            if hk and hv is not None:
+                headers[str(hk)] = str(hv)
+
+    method = str(target_cfg.get("method") or "GET").strip().upper()
+    post_body = target_cfg.get("post_body")
+    data_bytes = None
+    if post_body is not None:
+        if isinstance(post_body, (dict, list)):
+            data_bytes = json.dumps(post_body).encode("utf-8")
+            headers.setdefault("Content-Type", "application/json")
+        else:
+            data_bytes = str(post_body).encode("utf-8")
+
     req = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "no-cache",
-        },
-        method="GET",
+        data=data_bytes,
+        headers=headers,
+        method=method,
     )
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
         status = getattr(resp, "status", 200)
@@ -331,8 +517,8 @@ def run_self_test():
     """
     Testuje w pamięci (bez zapytań sieciowych):
     1. Parser HTML, usuwanie <script>, <style>, <noscript>, <svg>, komentarzy HTML i tokenów CSRF/czasu.
-    2. Normalizację tekstu i wyliczanie SHA-256.
-    3. Wykrywanie diffu (difflib.unified_diff, max 15 linii).
+    2. Ekstrakcję strukturalną ukrytych endpointów: __NEXT_DATA__ (next_data), czystego JSON API (json) oraz RSS XML (rss).
+    3. Normalizację tekstu, wyliczanie SHA-256 i wykrywanie diffu (difflib.unified_diff, max 15 linii).
     4. Generowanie i atomowy zapis metryk Prometheus (.prom).
     """
     sample_html_v1 = """
@@ -403,6 +589,39 @@ def run_self_test():
     assert any(d.startswith("-") and "Komunikat nr 1" in d for d in diff), "Brak usuniętej linii w diffie"
     assert any(d.startswith("+") and "Komunikat nr 2" in d for d in diff), "Brak dodanej linii w diffie"
     assert len(diff) <= 15, "Przekroczono limit 15 linii diffu"
+
+    # Test trybu next_data (np. KSeF 2.0 Next.js)
+    sample_next_html = """
+    <html><head></head><body>
+    <script id="__NEXT_DATA__" type="application/json">
+    {"props":{"pageProps":{"response":{"items":[
+      {"createDate":"2026-10-13","name":"Aktualizacja API KSeF 2.0","route":{"path":"/komunikaty/1"}}
+    ]}}}}
+    </script>
+    </body></html>
+    """
+    next_lines, _ = extract_normalized_lines(
+        sample_next_html,
+        {
+            "mode": "next_data",
+            "json_path": "props.pageProps.response.items",
+            "json_fields": ["createDate", "name", "route.path"],
+        },
+    )
+    assert len(next_lines) == 1 and "Aktualizacja API KSeF 2.0" in next_lines[0], "Błąd ekstrakcji mode=next_data"
+
+    # Test trybu rss (np. Śląski OW NFZ)
+    sample_rss = """<?xml version="1.0" encoding="utf-8"?>
+    <rss version="2.0"><channel>
+      <item>
+        <title>Komunikat 55/2026 AOS</title>
+        <link>https://www.nfz-katowice.pl/komunikat-55</link>
+        <pubDate>Thu, 05 Nov 2026 08:00:00 +0000</pubDate>
+      </item>
+    </channel></rss>
+    """
+    rss_lines, _ = extract_normalized_lines(sample_rss, {"mode": "rss"})
+    assert len(rss_lines) == 1 and "Komunikat 55/2026 AOS" in rss_lines[0], "Błąd ekstrakcji mode=rss"
 
     now_ts = int(time.time())
     prom_text = build_prometheus_metrics(
@@ -523,7 +742,12 @@ def main():
         last_change_ts = int(prev_entry.get("last_change_ts") or 0)
 
         try:
-            http_status, raw_html = fetch_url_safely(turl, timeout=DEFAULT_TIMEOUT, max_bytes=MAX_BYTES)
+            http_status, raw_html = fetch_url_safely(
+                turl,
+                timeout=DEFAULT_TIMEOUT,
+                max_bytes=MAX_BYTES,
+                target_cfg=target,
+            )
             is_up = 1 if (200 <= int(http_status) < 400 and raw_html) else 0
         except Exception:
             http_status = 0
