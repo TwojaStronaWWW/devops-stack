@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 1.1 Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 1.2 Ochrona przed wyciekiem prywatnych kluczy i sekretów (.env, *.pem, *.key)
         run: |
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 2.1 Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 2.2 Setup environment variables mock
         run: cp .env.example .env
