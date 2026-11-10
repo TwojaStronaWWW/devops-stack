@@ -9,7 +9,7 @@ RUN apk upgrade --no-cache && \
     apk add --no-cache curl ca-certificates && \
     php -r 'if (!in_array("sqlite", PDO::getAvailableDrivers(), true)) { fwrite(STDERR, "Missing pdo_sqlite\n"); exit(1); }' && \
     mkdir -p /app/src /app/data /app/storage/rate_limits /usr/local/etc/php/conf.d && \
-    printf "expose_php = Off\ndisplay_errors = Off\ndisplay_startup_errors = Off\nlog_errors = On\nallow_url_fopen = Off\nallow_url_include = Off\nfile_uploads = Off\nopen_basedir = /app:/tmp\ndisable_functions = exec,passthru,shell_exec,system,proc_open,popen,curl_multi_exec,parse_ini_file,show_source,pcntl_exec\n" > /usr/local/etc/php/conf.d/99-security-hardening.ini && \
+    printf "expose_php = Off\ndisplay_errors = Off\ndisplay_startup_errors = Off\nlog_errors = On\nallow_url_fopen = Off\nallow_url_include = Off\nfile_uploads = Off\npost_max_size = 128K\nmemory_limit = 64M\nmax_input_nesting_level = 16\nmax_execution_time = 30\nopen_basedir = /app:/tmp\ndisable_functions = exec,passthru,shell_exec,system,proc_open,popen,curl_multi_exec,parse_ini_file,show_source,pcntl_exec\n" > /usr/local/etc/php/conf.d/99-security-hardening.ini && \
     chown -R nobody:nobody /app
 
 WORKDIR /app

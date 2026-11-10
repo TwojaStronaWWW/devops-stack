@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/sites-registry.php';
+
 /**
  * AI Router Endpoints & Client IP Utilities — TwojaStronaWWW DevOps Stack
  *
@@ -94,7 +96,7 @@ function banClientIp(string $rateFile, int $seconds, string $reason): void {
     $fp = @fopen($rateFile, 'c+');
     if ($fp && flock($fp, LOCK_EX)) {
         $content = stream_get_contents($fp);
-        $data = $content ? json_decode($content, true) : [];
+        $data = $content ? json_decode($content, true, 16) : [];
         if (!is_array($data)) {
             $data = [];
         }
@@ -112,9 +114,50 @@ function banClientIp(string $rateFile, int $seconds, string $reason): void {
 }
 
 /**
- * Obsługuje wczesne endpointy GET (/widget.js, /radar-data, /radar, /amms, /docs-pdf/*, /amms-page, /metrics, /health)
+ * Obsługuje wczesne endpointy GET (/widget.js, /.well-known/security.txt, /robots.txt, /radar-data, /radar, /amms, /docs-pdf/*, /amms-page, /metrics, /health)
  */
 function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): void {
+    // [REF-06] Polityka ujawniania podatności RFC 9116 (GET /.well-known/security.txt)
+    if ($requestUri === '/.well-known/security.txt' || $requestUri === '/security.txt') {
+        $reqMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($reqMethod !== 'GET' && $reqMethod !== 'HEAD') {
+            header('Content-Type: text/plain; charset=UTF-8');
+            http_response_code(405);
+            echo "Method Not Allowed\n";
+            exit;
+        }
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: public, max-age=86400');
+        http_response_code(200);
+        echo "Contact: mailto:kontakt@twojastronawww.pl\n"
+           . "Expires: 2027-12-31T23:59:00.000Z\n"
+           . "Preferred-Languages: pl, en\n"
+           . "Canonical: https://ai.twojastronawww.pl/.well-known/security.txt\n";
+        exit;
+    }
+
+    // Reguły indeksowania robotów dla bramki API (GET /robots.txt)
+    if ($requestUri === '/robots.txt') {
+        $reqMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($reqMethod !== 'GET' && $reqMethod !== 'HEAD') {
+            header('Content-Type: text/plain; charset=UTF-8');
+            http_response_code(405);
+            echo "Method Not Allowed\n";
+            exit;
+        }
+        header('Content-Type: text/plain; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: public, max-age=86400');
+        http_response_code(200);
+        echo "User-agent: *\n"
+           . "Disallow: /amms\n"
+           . "Disallow: /metrics\n"
+           . "Disallow: /radar-data\n"
+           . "Allow: /widget.js\n";
+        exit;
+    }
+
     // Serwowanie uniwersalnego widgetu JS (Single Source of Truth v4.0: /widget.js UMD oraz /ai-widget.js ESM)
     if ($requestUri === '/widget.js' || $requestUri === '/ai-widget.js') {
         header('Content-Type: application/javascript; charset=UTF-8');
@@ -127,6 +170,9 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
             if ($requestUri === '/ai-widget.js') {
                 echo "\nexport const QUICK_PROMPTS_MAP = globalThis.QUICK_PROMPTS_MAP;\n";
                 echo "export const THEME_PRESETS = globalThis.THEME_PRESETS;\n";
+                echo "export const MAX_CACHE_ENTRIES = globalThis.MAX_CACHE_ENTRIES;\n";
+                echo "export const escapeHtml = globalThis.escapeHtml;\n";
+                echo "export const isOwnerAnalyticsIgnored = globalThis.isOwnerAnalyticsIgnored;\n";
                 echo "export const normalizeCacheQuery = globalThis.normalizeCacheQuery;\n";
                 echo "export const normalizeSearchText = globalThis.normalizeSearchText;\n";
                 echo "export const computeKnowledgeVersion = globalThis.computeKnowledgeVersion;\n";
@@ -173,7 +219,7 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
             exit;
         }
         $rawRadar = @file_get_contents($radarJsonPath);
-        $decodedRadar = $rawRadar ? json_decode($rawRadar, true) : null;
+        $decodedRadar = $rawRadar ? json_decode($rawRadar, true, 32) : null;
         if (!is_array($decodedRadar)) {
             http_response_code(503);
             echo json_encode(['success' => false, 'error' => 'Trwa odświeżanie pliku telemetrii P1.'], JSON_UNESCAPED_UNICODE);
@@ -344,8 +390,19 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
         return;
     }
 
-    $rawBeacon = file_get_contents('php://input', false, null, 0, 65536);
-    $beacon = $rawBeacon ? json_decode($rawBeacon, true) : null;
+    if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 65536) {
+        http_response_code(413);
+        echo json_encode(['success' => false, 'error' => 'Payload Too Large: Max 64 KB']);
+        exit;
+    }
+
+    $rawBeacon = file_get_contents('php://input', false, null, 0, 65537);
+    if (is_string($rawBeacon) && strlen($rawBeacon) > 65536) {
+        http_response_code(413);
+        echo json_encode(['success' => false, 'error' => 'Payload Too Large: Max 64 KB']);
+        exit;
+    }
+    $beacon = $rawBeacon ? json_decode($rawBeacon, true, 16) : null;
     if (!is_array($beacon)) {
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Bad Request: Invalid JSON']);
@@ -360,7 +417,7 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
         exit;
     }
 
-    $allowedAnalyticsSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1'];
+    $allowedAnalyticsSites = aiGetAllowedAnalyticsSites();
     $bSite = strtolower(trim((string)($beacon['site_id'] ?? '')));
     if (!preg_match('/^[a-z0-9_-]{2,32}$/', $bSite) || !in_array($bSite, $allowedAnalyticsSites, true)) {
         http_response_code(400);
@@ -388,7 +445,7 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
     if ($bFp) {
         if (flock($bFp, LOCK_EX)) {
             $bRaw = stream_get_contents($bFp);
-            $bData = $bRaw ? json_decode($bRaw, true) : [];
+            $bData = $bRaw ? json_decode($bRaw, true, 16) : [];
             if (!is_array($bData)) {
                 $bData = [];
             }
@@ -473,7 +530,7 @@ function aiHandleAnalyticsEndpoint(string $requestUri, bool $isFromCloudflare): 
             $bSource = 'bing';
         } elseif (preg_match('/(google\.|gclid|yahoo\.|ecosia\.)/', $sourceProbe)) {
             $bSource = 'google';
-        } elseif (!preg_match('/(katosalsahub\.pl|dancepuls\.pl|fuegolingua\.pl|twojastronawww\.pl|raricart\.pl|radar-p1\.pages\.dev|localhost|127\.0\.0\.1)/', $sourceProbe)) {
+        } elseif (!preg_match(aiGetSelfReferralPattern(), $sourceProbe)) {
             $bSource = 'other';
         }
     }

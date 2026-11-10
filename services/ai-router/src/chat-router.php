@@ -19,7 +19,7 @@ header('Referrer-Policy: no-referrer');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 // 0. Ochrona przed atakami PHP2Shell / Wrapper Deserialization & CGI Argument Injection (OWASP / CVE-2024-4577)
-foreach (['phar', 'ftp', 'ftps'] as $unsafeStreamWrapper) {
+foreach (['phar', 'ftp', 'ftps', 'expect'] as $unsafeStreamWrapper) {
     if (in_array($unsafeStreamWrapper, stream_get_wrappers(), true)) {
         @stream_wrapper_unregister($unsafeStreamWrapper);
     }
@@ -39,6 +39,7 @@ if ($rawQueryString !== '' && preg_match('/(^|&)(%2d|%ad|-)(d|n|s|w)\b|allow_url
 $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $isFromCloudflare = !empty($_SERVER['HTTP_CF_CONNECTING_IP']) || !empty($_SERVER['HTTP_CF_RAY']);
 
+require_once __DIR__ . '/sites-registry.php';
 require_once __DIR__ . '/ai-stats.php';
 require_once __DIR__ . '/router-endpoints.php';
 require_once __DIR__ . '/llm-cascade.php';
@@ -66,6 +67,7 @@ register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$
         $code === 403 => 'cors_forbidden',
         $code === 404 => 'no_knowledge_base',
         $code === 405 => 'method_not_allowed',
+        $code === 413 => 'payload_too_large',
         $code === 429 => 'rate_limited',
         $code === 500 => 'config_error',
         $code === 502 => 'all_models_failed',
@@ -75,27 +77,7 @@ register_shutdown_function(function () use (&$aiSite, &$usedModel, &$aiDepth, &$
 });
 
 // 2. ZABEZPIECZENIE CORS & BIAŁA LISTA DOMEN
-$defaultAllowedOrigins = [
-    'https://katosalsahub.pl',
-    'https://www.katosalsahub.pl',
-    'https://fuegolingua.pl',
-    'https://www.fuegolingua.pl',
-    'https://twojastronawww.pl',
-    'https://www.twojastronawww.pl',
-    'https://raricart.pl',
-    'https://www.raricart.pl',
-    'https://laclave.pl',
-    'https://www.laclave.pl',
-    'https://milpasoskatowice.pl',
-    'https://www.milpasoskatowice.pl',
-    'https://goodmood.dance',
-    'https://www.goodmood.dance',
-    'https://tanecznakompania.pl',
-    'https://www.tanecznakompania.pl',
-    'https://radar-p1.pages.dev',
-    'https://medicusnoster.pl',
-    'https://www.medicusnoster.pl'
-];
+$defaultAllowedOrigins = aiGetDefaultAllowedOrigins();
 $allowedOriginsEnv = getenv('ALLOWED_ORIGINS');
 $allowedOrigins = $allowedOriginsEnv
     ? array_values(array_unique(array_merge($defaultAllowedOrigins, array_map('trim', explode(',', $allowedOriginsEnv)))))
@@ -182,7 +164,7 @@ $fp = @fopen($rateFile, 'c+');
 if ($fp) {
     if (flock($fp, LOCK_EX)) {
         $content = stream_get_contents($fp);
-        $data = $content ? json_decode($content, true) : null;
+        $data = $content ? json_decode($content, true, 16) : null;
         if (!is_array($data)) {
             $data = [];
         }
@@ -270,7 +252,14 @@ if (mt_rand(1, 50) === 1) {
         $expireBefore = time() - 3600;
         foreach (glob($storageDir . '/*.json') ?: [] as $oldRateFile) {
             if (@filemtime($oldRateFile) < $expireBefore) {
-                @unlink($oldRateFile);
+                $gcFp = @fopen($oldRateFile, 'r+');
+                if ($gcFp) {
+                    if (flock($gcFp, LOCK_EX | LOCK_NB)) {
+                        @unlink($oldRateFile);
+                        flock($gcFp, LOCK_UN);
+                    }
+                    fclose($gcFp);
+                }
             }
         }
     }
@@ -278,14 +267,38 @@ if (mt_rand(1, 50) === 1) {
         $cacheExpireBefore = time() - $cacheTtl;
         foreach (glob($cacheDir . '/*.json') ?: [] as $oldCacheFile) {
             if (@filemtime($oldCacheFile) < $cacheExpireBefore) {
-                @unlink($oldCacheFile);
+                $gcFp = @fopen($oldCacheFile, 'r+');
+                if ($gcFp) {
+                    if (flock($gcFp, LOCK_EX | LOCK_NB)) {
+                        @unlink($oldCacheFile);
+                        flock($gcFp, LOCK_UN);
+                    }
+                    fclose($gcFp);
+                }
             }
         }
     }
 }
 
 // 4. PARSOWANIE I WALIDACJA WEJŚCIA (PAYLOAD + WAF L7)
-$rawInput = file_get_contents('php://input', false, null, 0, 65536);
+if ((int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 65536) {
+    http_response_code(413);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Payload Too Large: Przekroczono maksymalny rozmiar żądania (64 KB).'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$rawInput = file_get_contents('php://input', false, null, 0, 65537);
+if (is_string($rawInput) && strlen($rawInput) > 65536) {
+    http_response_code(413);
+    echo json_encode([
+        'success' => false,
+        'error'   => 'Payload Too Large: Przekroczono maksymalny rozmiar żądania (64 KB).'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 if (!$rawInput) {
     http_response_code(400);
     echo json_encode([
@@ -295,7 +308,7 @@ if (!$rawInput) {
     exit;
 }
 
-$payload = json_decode($rawInput, true);
+$payload = json_decode($rawInput, true, 16);
 if (json_last_error() !== JSON_ERROR_NONE || !is_array($payload)) {
     http_response_code(400);
     echo json_encode([
@@ -305,11 +318,15 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($payload)) {
     exit;
 }
 
-$siteId = trim((string)($payload['site_id'] ?? ''));
-$question = trim((string)($payload['question'] ?? $payload['message'] ?? ''));
+$rawSiteId = $payload['site_id'] ?? '';
+$siteId = is_scalar($rawSiteId) ? trim((string)$rawSiteId) : '';
+$rawQuestion = $payload['question'] ?? $payload['message'] ?? '';
+$question = is_scalar($rawQuestion) ? trim((string)$rawQuestion) : '';
 $rawHistory = is_array($payload['history'] ?? null) ? $payload['history'] : [];
-$kbVersion = substr(preg_replace('/[^a-zA-Z0-9._:-]/', '', trim((string)($payload['kb_version'] ?? ''))) ?: 'v0', 0, 64);
-$dynamicContext = trim((string)($payload['dynamic_context'] ?? ''));
+$rawKbVersion = $payload['kb_version'] ?? '';
+$kbVersion = substr(preg_replace('/[^a-zA-Z0-9._:-]/', '', is_scalar($rawKbVersion) ? trim((string)$rawKbVersion) : '') ?: 'v0', 0, 64);
+$rawDynCtx = $payload['dynamic_context'] ?? '';
+$dynamicContext = is_scalar($rawDynCtx) ? trim((string)$rawDynCtx) : '';
 if (mb_strlen($dynamicContext) > 12000) {
     $dynamicContext = mb_substr($dynamicContext, 0, 12000);
 }
@@ -343,32 +360,14 @@ if (mb_strlen($question) < 2 || mb_strlen($question) > 2000) {
     exit;
 }
 
-// WAF / Prompt Injection & Exploit Guard (< 0.5 ms)
-$qLower = mb_strtolower($question);
-$promptInjectionPattern = '/(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)|zignoruj\s+(wszystkie\s+)?(wcze[śs]niejsze|poprzednie)\s+(instrukcje|zasady)|reveal\s+your\s+(system\s+)?prompt|poka[żz]\s+(sw[óo]j\s+)?system\s+prompt|you\s+are\s+now\s+dan\b|developer\s+mode\s+enabled)/iu';
-$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/|\b(phar|expect|php):\/\/|\b(auto_prepend_file|auto_append_file|allow_url_include)\b)/iu';
-
-if (preg_match($promptInjectionPattern, $qLower) || preg_match($exploitPayloadPattern, $qLower)) {
-    $aiSecurityBlocked = true;
-    $wafReason = preg_match($promptInjectionPattern, $qLower) ? 'prompt_injection' : 'exploit_payload';
-    banClientIp($rateFile, 900, $wafReason);
-    aiLog('security_blocked', ['site' => $aiSite, 'reason' => $wafReason, 'penalty_box_sec' => 900]);
-    header('Retry-After: 900');
-    http_response_code(403);
-    echo json_encode([
-        'success'     => false,
-        'error'       => 'Forbidden: Żądanie zostało zablokowane przez filtr bezpieczeństwa (WAF / Prompt Injection Guard). Adres IP umieszczony w Penalty Box (15 min).',
-        'retry_after' => 900
-    ], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-// Sanityzacja historii rozmowy (max 8 ostatnich wiadomości)
+// Sanityzacja historii rozmowy (max 8 ostatnich wiadomości) PRZED kontrolą WAF L7
 $sanitizedHistory = [];
 foreach (array_slice($rawHistory, -8) as $turn) {
     if (!is_array($turn)) continue;
-    $role = strtolower(trim((string)($turn['role'] ?? '')));
-    $text = trim((string)($turn['text'] ?? $turn['content'] ?? ''));
+    $rawTurnRole = $turn['role'] ?? '';
+    $role = is_scalar($rawTurnRole) ? strtolower(trim((string)$rawTurnRole)) : '';
+    $rawTurnText = $turn['text'] ?? $turn['content'] ?? '';
+    $text = is_scalar($rawTurnText) ? trim((string)$rawTurnText) : '';
     if ($text === '' || mb_strlen($text) > 1200) {
         $text = mb_substr($text, 0, 1200);
     }
@@ -379,6 +378,37 @@ foreach (array_slice($rawHistory, -8) as $turn) {
         'role' => $normalizedRole,
         'text' => $text
     ];
+}
+
+// WAF L7 / Prompt Injection & Exploit Guard (< 0.5 ms) — skanuje pełny bufor wejściowy klienta ($question + $sanitizedHistory + $dynamicContext)
+$wafScanSegments = [$question];
+foreach ($sanitizedHistory as $turn) {
+    $wafScanSegments[] = $turn['text'];
+}
+if ($dynamicContext !== '') {
+    $wafScanSegments[] = $dynamicContext;
+}
+$wafCombinedLower = mb_strtolower(implode("\n", $wafScanSegments));
+
+$promptInjectionPattern = '/(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)|zignoruj\s+(wszystkie\s+)?(wcze[śs]niejsze|poprzednie)\s+(instrukcje|zasady)|reveal\s+your\s+(system\s+)?prompt|poka[żz]\s+(sw[óo]j\s+)?system\s+prompt|you\s+are\s+now\s+dan\b|developer\s+mode\s+enabled)/iu';
+$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/|\b(phar|expect|php):\/\/|\b(auto_prepend_file|auto_append_file|allow_url_include)\b)/iu';
+
+$isPromptInjection = (bool)preg_match($promptInjectionPattern, $wafCombinedLower);
+$isExploitPayload  = !$isPromptInjection && (bool)preg_match($exploitPayloadPattern, $wafCombinedLower);
+
+if ($isPromptInjection || $isExploitPayload) {
+    $aiSecurityBlocked = true;
+    $wafReason = $isPromptInjection ? 'prompt_injection' : 'exploit_payload';
+    banClientIp($rateFile, 900, $wafReason);
+    aiLog('security_blocked', ['site' => $aiSite, 'reason' => $wafReason, 'penalty_box_sec' => 900]);
+    header('Retry-After: 900');
+    http_response_code(403);
+    echo json_encode([
+        'success'     => false,
+        'error'       => 'Forbidden: Żądanie zostało zablokowane przez filtr bezpieczeństwa (WAF / Prompt Injection Guard). Adres IP umieszczony w Penalty Box (15 min).',
+        'retry_after' => 900
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
 // 5. DYNAMICZNY RAG (ŁADOWANIE BAZY WIEDZY TXT LUB HYBRYDOWEJ BAZY SQLITE FTS5 AMMS + INTELIGENTNY CACHE)
@@ -522,7 +552,7 @@ $cacheFile  = $cacheDir . '/' . $cacheKey . '.json';
 
 if (!$hasContactLead && is_file($cacheFile) && (time() - (int)@filemtime($cacheFile)) < $cacheTtl) {
     $cachedRaw = @file_get_contents($cacheFile);
-    $cachedJson = $cachedRaw ? json_decode($cachedRaw, true) : null;
+    $cachedJson = $cachedRaw ? json_decode($cachedRaw, true, 16) : null;
     if (is_array($cachedJson) && !empty($cachedJson['answer'])) {
         $usedModel = (string)($cachedJson['model'] ?? 'cache');
         $aiDepth = null;

@@ -1,0 +1,71 @@
+# ==============================================================================
+# Gitleaks Configuration — TwojaStronaWWW DevOps Stack (ISO 27001)
+# Ochrona przed wyciekiem kluczy prywatnych, haseł i tokenów API w historii Git
+# ==============================================================================
+title = "TwojaStronaWWW VPS Gitleaks Security Policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "tsw-private-key-block"
+description = "Klucz prywatny PEM / OpenSSH / PKCS8 / PGP"
+regex = '''-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY-----'''
+tags = ["key", "private-key", "iso27001"]
+
+[[rules]]
+id = "tsw-google-gemini-api-key"
+description = "Klucz Google Gemini / Google Cloud API (AIza...)"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''
+tags = ["api-key", "gemini", "gcp"]
+
+[[rules]]
+id = "tsw-anthropic-api-key"
+description = "Klucz Anthropic Claude API (sk-ant-...)"
+regex = '''sk-ant-api03-[A-Za-z0-9\-_]{80,}'''
+tags = ["api-key", "anthropic", "claude"]
+
+[[rules]]
+id = "tsw-groq-api-key"
+description = "Klucz Groq Cloud LPU API (gsk_...)"
+regex = '''gsk_[A-Za-z0-9]{48,}'''
+tags = ["api-key", "groq"]
+
+[[rules]]
+id = "tsw-cerebras-api-key"
+description = "Klucz Cerebras WSE API (csk-...)"
+regex = '''csk-[A-Za-z0-9]{40,}'''
+tags = ["api-key", "cerebras"]
+
+[[rules]]
+id = "tsw-openrouter-api-key"
+description = "Klucz OpenRouter API (sk-or-v1-...)"
+regex = '''sk-or-v1-[a-f0-9]{64}'''
+tags = ["api-key", "openrouter"]
+
+[[rules]]
+id = "tsw-ntfy-access-token"
+description = "Token dostępowy Ntfy Zero-Trust (tk_...)"
+regex = '''\btk_[a-z0-9]{28,}\b'''
+tags = ["token", "ntfy"]
+
+[[rules]]
+id = "tsw-github-pat-token"
+description = "Token GitHub Personal Access Token (ghp_ / github_pat_)"
+regex = '''\b(?:ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{80,})\b'''
+tags = ["token", "github"]
+
+[allowlist]
+description = "Wykluczenie szablonów przykładowych, dokumentacji i testów jednostkowych"
+paths = [
+  '''^\.env\.example$''',
+  '''^docs/.*\.md$''',
+  '''^(?:README|SECURITY|DISASTER_RECOVERY|AGENTS|GEMINI)\.md$''',
+  '''^tests/unit/.*\.test\.js$''',
+  '''^config/grafana/provisioning/.*\.json$''',
+]
+regexes = [
+  '''CHANGE_ME_[A-Z0-9_]+''',
+  '''YOUR_[A-Z0-9_]+_HERE''',
+  '''example\.com''',
+]

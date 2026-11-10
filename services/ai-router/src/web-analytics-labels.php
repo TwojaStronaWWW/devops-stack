@@ -278,13 +278,17 @@ function aiNormalizeSearchTerm(string $term): string
 function aiNormalizeGscQuery(string $query): string
 {
     static $gscSummaryMap = [
-        'katosalsahub ruch organiczny ogolem'   => 'Kato Salsa Hub — pozostały ruch organiczny ogółem',
-        'dancepuls ruch organiczny ogolem'      => 'DancePuls — pozostały ruch organiczny ogółem',
-        'fuegolingua ruch organiczny ogolem'    => 'FuegoLingua — pozostały ruch organiczny ogółem',
-        'twojastronawww ruch organiczny ogolem' => 'TwojaStronaWWW — pozostały ruch organiczny ogółem',
-        'raricart ruch organiczny ogolem'       => 'Raricart — pozostały ruch organiczny ogółem',
-        'radar-p1 ruch organiczny ogolem'       => 'Radar P1 — pozostały ruch organiczny ogółem',
-        'medicusnoster ruch organiczny ogolem'  => 'Medicus Noster — pozostały ruch organiczny ogółem',
+        'katosalsahub ruch organiczny ogolem'            => 'Kato Salsa Hub — pozostały ruch organiczny ogółem',
+        'dancepuls ruch organiczny ogolem'               => 'DancePuls — pozostały ruch organiczny ogółem',
+        'fuegolingua ruch organiczny ogolem'             => 'FuegoLingua — pozostały ruch organiczny ogółem',
+        'twojastronawww ruch organiczny ogolem'          => 'TwojaStronaWWW — pozostały ruch organiczny ogółem',
+        'raricart ruch organiczny ogolem'                => 'Raricart — pozostały ruch organiczny ogółem',
+        'radar-p1 ruch organiczny ogolem'                => 'Radar P1 — pozostały ruch organiczny ogółem',
+        'medicusnoster ruch organiczny ogolem'           => 'Medicus Noster — pozostały ruch organiczny ogółem',
+        'medycyna-regeneracyjna ruch organiczny ogolem'  => 'Medycyna Regeneracyjna — pozostały ruch organiczny ogółem',
+        'moje-cv ruch organiczny ogolem'                 => 'Krzysztof Początek CV — pozostały ruch organiczny ogółem',
+        'odzyskiwanie-stron ruch organiczny ogolem'      => 'Odzyskiwanie Stron — pozostały ruch organiczny ogółem',
+        'wspolnekamienice ruch organiczny ogolem'        => 'Wspólne Kamienice — pozostały ruch organiczny ogółem',
     ];
     $qTrim = trim($query);
     return $gscSummaryMap[$qTrim] ?? $qTrim;
@@ -371,6 +375,16 @@ function aiGetWebAnalyticsLabelDictionaries(): array
             '/#section-watcher'          => '🔭 /#section-watcher (Radar zmian legislacyjnych)',
             '/#glossary-section'         => '📖 /#glossary-section (Słownik awarii e-Zdrowia)',
             '/#faq-section'              => '❓ /#faq-section (Pytania i odpowiedzi e-Zdrowia)',
+            '/#nostryfikacja'            => '🎓 /#nostryfikacja (Nostryfikacja dyplomu lekarskiego — Medicus Noster)',
+            '/#lek-ldek'                 => '🩺 /#lek-ldek (Przygotowanie do LEK i LDEK — Medicus Noster)',
+            '/#egzaminy'                 => '📝 /#egzaminy (Egzaminy medyczne i językowe — Medicus Noster)',
+            '/#kurs-200h'                => '📚 /#kurs-200h (Kurs adaptacyjny 200h online — Medicus Noster)',
+            '/#dofinansowania'           => '💼 /#dofinansowania (Dofinansowania dla lekarzy — Medicus Noster)',
+            '/#o-nas'                    => '👥 /#o-nas (O nas i zespole ekspertów)',
+            '/#urzadzenia'               => '🔬 /#urzadzenia (Urządzenia medyczne — Medycyna Regeneracyjna)',
+            '/#technologie'              => '🧬 /#technologie (Technologie regeneracyjne — Medycyna Regeneracyjna)',
+            '/#publikacje'               => '📖 /#publikacje (Badania i publikacje naukowe — Medycyna Regeneracyjna)',
+            '/#zastosowania'             => '⚕️ /#zastosowania (Zastosowania kliniczne — Medycyna Regeneracyjna)',
         ],
         'source' => [
             'direct'     => '🔗 Bezpośrednie (wpisany adres / zakładka / komunikator)',

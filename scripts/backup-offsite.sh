@@ -102,7 +102,9 @@ write_prometheus_metrics() {
 
     if [[ -d "${METRICS_DIR}" ]]; then
         local metrics_file="${METRICS_DIR}/backup.prom"
-        cat <<EOF > "${metrics_file}.tmp"
+        (
+            umask 077
+            cat <<EOF > "${metrics_file}.$$.tmp"
 # HELP devops_backup_last_timestamp_seconds Czas uniksowy zakonczenia ostatniego backupu
 # TYPE devops_backup_last_timestamp_seconds gauge
 devops_backup_last_timestamp_seconds ${end_time}
@@ -135,8 +137,9 @@ devops_backup_offsite_status ${offsite_status}
 # TYPE devops_backup_duration_seconds gauge
 devops_backup_duration_seconds ${duration}
 EOF
-        mv "${metrics_file}.tmp" "${metrics_file}"
-        chmod 644 "${metrics_file}" 2>/dev/null || true
+        )
+        chmod 644 "${metrics_file}.$$.tmp" 2>/dev/null || true
+        mv -f "${metrics_file}.$$.tmp" "${metrics_file}"
         echo "--> [METRYKI] Zaktualizowano metryki Prometheusa: ${metrics_file}"
     fi
 }

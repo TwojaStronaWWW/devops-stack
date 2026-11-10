@@ -33,6 +33,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       '.editorconfig',
       '.gitattributes',
       '.npmrc',
+      '.gitleaks.toml',
       '.github/pull_request_template.md',
       '.github/dependabot.yml',
       '.github/workflows/lint-compose.yml',
@@ -107,6 +108,10 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /volumes\//);
     assert.match(content, /node_modules\//);
     assert.match(content, /\*password\*/);
+    assert.match(content, /docs\/audits\//);
+    assert.match(content, /\*\.kdbx/);
+    assert.match(content, /\*token\*\.json/);
+    assert.match(content, /\.chrome-\*\//);
   });
 
   it('skrypty automatyzacji 1-klik open-dashboard powinny istnieć i być zdefiniowane', () => {
@@ -171,11 +176,13 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     assert.match(content, /package-ecosystem:\s*"github-actions"/i);
     assert.match(content, /package-ecosystem:\s*"docker"/i);
+    assert.match(content, /package-ecosystem:\s*"npm"/i);
   });
 
   it('moduł services/ai-router powinien posiadać kompletną strukturę (Dockerfile, kod PHP, RAG, tester)', () => {
     const requiredRouterFiles = [
       path.join(ROOT_DIR, 'services', 'ai-router', 'Dockerfile'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'sites-registry.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'router-endpoints.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'llm-cascade.php'),
@@ -207,7 +214,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
   });
 
   function readRouterCombinedPhp() {
-    return ['chat-router.php', 'router-endpoints.php', 'llm-cascade.php', 'lead-notifier.php']
+    return ['sites-registry.php', 'chat-router.php', 'router-endpoints.php', 'llm-cascade.php', 'lead-notifier.php']
       .map((f) => fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', f), 'utf-8'))
       .join('\n');
   }
@@ -410,6 +417,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       'VPSHostHighCPU',
       'VPSHostInodesLow',
       'VPSClockNotSynchronized',
+      'ChangeRadarStaleOrFailed',
+      'P1RadarSyncStale',
     ]) {
       assert.match(rulesContent, new RegExp(`alert:\\s*${alertName}`));
     }
@@ -474,6 +483,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const secReviewYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'ai-security-review.yml'), 'utf-8');
     assert.match(secReviewYml, /services\/ai-router\/\*\*/);
     assert.match(secReviewYml, /scripts\/\*\*/);
+    assert.match(secReviewYml, /author_association/);
 
     const syncP1Sh = [
       fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'sync-p1-status.sh'), 'utf-8'),
@@ -627,10 +637,11 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       const siteAgents = fs.readFileSync(path.join(siteTemplateDir, 'AGENTS.md'), 'utf-8');
       const siteBlueprint = fs.readFileSync(path.join(siteTemplateDir, 'BLUEPRINT.md'), 'utf-8');
 
-      assert.match(siteWidget, /11-modelowej kaskady/);
+      assert.match(vpsWidget, /15-modelowej kaskady/);
+      assert.match(siteWidget, /15-modelowej kaskady/);
       assert.match(siteWidget, /hasContactPii/);
-      assert.match(siteAgents, /11-modelową kaskadę/);
-      assert.match(siteBlueprint, /11-Modelowa Kaskada/);
+      assert.match(siteAgents, /15-modelową kaskadę/);
+      assert.match(siteBlueprint, /15-Modelowa Kaskada/);
     }
   });
 

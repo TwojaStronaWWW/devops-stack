@@ -17,6 +17,8 @@ VOLUMES_TO_BACKUP=(
     "grafana_data"
     "prometheus_data"
     "ai_router_storage"
+    "ntfy_data"
+    "privatebin_data"
     "runner_zeslownikiem_data"
     "runner_twojastronawww_data"
     "runner_gal_anonim_web_data"

@@ -15,6 +15,7 @@
  * ==============================================================================
  */
 
+import dns from 'node:dns/promises';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -140,6 +141,129 @@ async function checkHttpToHttpsRedirect(targetUrl, timeoutMs = 6000) {
 }
 
 /**
+ * Sprawdza natywnie przez DNS (node:dns/promises) rekordy uwierzytelniania poczty SPF i DMARC
+ * dla domeny bazowej (ochrona przed spoofingiem i phishingiem na domenie klienta B2B).
+ * @param {string} hostname
+ * @param {number} timeoutMs
+ */
+export async function checkEmailDnsAuth(hostname, timeoutMs = 3500) {
+  const rawHost = String(hostname || '').trim().toLowerCase().replace(/\.$/, '');
+  const apexDomain = rawHost.replace(/^www\./, '');
+  if (!apexDomain || apexDomain === 'localhost' || /^(\d{1,3}\.){3}\d{1,3}$/.test(apexDomain) || apexDomain.includes(':')) {
+    return {
+      checked: false,
+      domain: apexDomain,
+      hasSpf: false,
+      spfRecord: '',
+      hasDmarc: false,
+      dmarcRecord: '',
+      dmarcPolicy: '',
+    };
+  }
+
+  const resolveTxtSafe = async (queryDomain) => {
+    let timer = null;
+    try {
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('DNS TXT timeout')), timeoutMs);
+        if (timer && typeof timer.unref === 'function') timer.unref();
+      });
+      const records = await Promise.race([dns.resolveTxt(queryDomain), timeoutPromise]);
+      if (!Array.isArray(records)) return [];
+      return records.map((chunks) => (Array.isArray(chunks) ? chunks.join('') : String(chunks || '')).trim());
+    } catch {
+      return [];
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
+  try {
+    const [rootTxt, dmarcTxt] = await Promise.all([
+      resolveTxtSafe(apexDomain),
+      resolveTxtSafe(`_dmarc.${apexDomain}`),
+    ]);
+
+    const spfRecord = rootTxt.find((txt) => /^v=spf1\b/i.test(txt)) || '';
+    const dmarcRecord = dmarcTxt.find((txt) => /^v=DMARC1\b/i.test(txt)) || '';
+    const policyMatch = dmarcRecord.match(/(?:^|;\s*)p\s*=\s*(none|quarantine|reject)\b/i);
+    const dmarcPolicy = policyMatch ? policyMatch[1].toLowerCase() : '';
+
+    return {
+      checked: true,
+      domain: apexDomain,
+      hasSpf: Boolean(spfRecord),
+      spfRecord: spfRecord.slice(0, 180),
+      hasDmarc: Boolean(dmarcRecord),
+      dmarcRecord: dmarcRecord.slice(0, 180),
+      dmarcPolicy,
+    };
+  } catch {
+    return {
+      checked: false,
+      domain: apexDomain,
+      hasSpf: false,
+      spfRecord: '',
+      hasDmarc: false,
+      dmarcRecord: '',
+      dmarcPolicy: '',
+    };
+  }
+}
+
+/**
+ * Pasywna sonda sprawdzająca publiczny wyciek listy kont użytkowników WordPress REST API (/wp-json/wp/v2/users).
+ * @param {string} origin
+ * @param {number} timeoutMs
+ */
+export async function probeWpUsersEnumeration(origin, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  try {
+    const res = await fetch(`${origin}/wp-json/wp/v2/users?per_page=5`, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: 'application/json',
+      },
+    });
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (res.status !== 200 || (!contentType.includes('json') && contentType.includes('text/html'))) {
+      return { checked: true, status: res.status, exposed: false, exposedCount: 0, sampleSlugs: [] };
+    }
+    const rawBody = await res.text();
+    const parsed = JSON.parse(rawBody);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { checked: true, status: res.status, exposed: false, exposedCount: 0, sampleSlugs: [] };
+    }
+    const validUsers = parsed.filter(
+      (item) => item && typeof item === 'object' && (typeof item.slug === 'string' || typeof item.id === 'number')
+    );
+    if (validUsers.length === 0) {
+      return { checked: true, status: res.status, exposed: false, exposedCount: 0, sampleSlugs: [] };
+    }
+    const sampleSlugs = validUsers
+      .map((u) => String(u.slug || u.name || '').replace(/[^a-zA-Z0-9_.-]/g, ''))
+      .filter(Boolean)
+      .slice(0, 3);
+    return {
+      checked: true,
+      status: res.status,
+      exposed: true,
+      exposedCount: validUsers.length,
+      sampleSlugs,
+    };
+  } catch {
+    return { checked: false, status: 0, exposed: false, exposedCount: 0, sampleSlugs: [] };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Pobiera stronę główną i zasoby pomocnicze przez sieć.
  * @param {URL} targetUrl
  */
@@ -180,12 +304,14 @@ export async function collectLiveWebsiteSnapshot(targetUrl) {
     headersObj[k.toLowerCase()] = v;
   }
 
-  const [httpRedirect, securityTxt, robotsTxt, sitemapXml, llmsTxt] = await Promise.all([
+  const [httpRedirect, securityTxt, robotsTxt, sitemapXml, llmsTxt, dnsEmailAuth, wpUsersJson] = await Promise.all([
     checkHttpToHttpsRedirect(finalUrl),
     probeEndpoint(`${origin}/.well-known/security.txt`),
     probeEndpoint(`${origin}/robots.txt`),
     probeEndpoint(`${origin}/sitemap.xml`),
     probeEndpoint(`${origin}/llms.txt`),
+    checkEmailDnsAuth(finalUrl.hostname),
+    probeWpUsersEnumeration(origin),
   ]);
 
   return {
@@ -199,11 +325,13 @@ export async function collectLiveWebsiteSnapshot(targetUrl) {
     html,
     headers: headersObj,
     httpRedirect,
+    dnsEmailAuth,
     probes: {
       securityTxt,
       robotsTxt,
       sitemapXml,
       llmsTxt,
+      wpUsersJson,
     },
   };
 }
@@ -382,7 +510,7 @@ export function evaluateAuditData(snapshot, options = {}) {
   // ============================================================================
   const cat2Name = '2. Bezpieczeństwo Aplikacji i Nagłówki OWASP';
 
-  // 2.1 Strict-Transport-Security (HSTS) (5 pkt)
+  // 2.1 Strict-Transport-Security (HSTS) (4 pkt)
   const hsts = headers['strict-transport-security'] || '';
   let hstsPts = 0;
   let hstsStatus = 'fail';
@@ -390,10 +518,10 @@ export function evaluateAuditData(snapshot, options = {}) {
     const maxAgeMatch = hsts.match(/max-age=(\d+)/i);
     const maxAge = maxAgeMatch ? Number(maxAgeMatch[1]) : 0;
     if (maxAge >= 15552000) {
-      hstsPts = 5;
+      hstsPts = 4;
       hstsStatus = 'pass';
     } else {
-      hstsPts = 3;
+      hstsPts = 2;
       hstsStatus = 'warn';
     }
   }
@@ -403,20 +531,20 @@ export function evaluateAuditData(snapshot, options = {}) {
     'Strict-Transport-Security (HSTS) [REF-01]',
     hstsStatus,
     hstsPts,
-    5,
+    4,
     hsts ? `Obecny (${hsts})` : 'BRAK nagłówka HSTS',
     hstsStatus === 'pass'
       ? 'Chroni klientów przed atakami podsłuchu SSL Stripping (Man-in-the-Middle) w publicznych sieciach Wi-Fi.'
       : 'Brak HSTS pozwala na przejęcie niezabezpieczonej sesji przy pierwszym połączeniu z domeną firmy.'
   );
 
-  // 2.2 Content-Security-Policy (CSP) (6 pkt)
+  // 2.2 Content-Security-Policy (CSP) (5 pkt)
   const csp = headers['content-security-policy'] || '';
   let cspPts = 0;
   let cspStatus = 'fail';
   if (csp.trim().length > 0) {
     const hasUnsafeEverything = csp.includes("'unsafe-eval'") && csp.includes('*');
-    cspPts = hasUnsafeEverything ? 3 : 6;
+    cspPts = hasUnsafeEverything ? 2 : 5;
     cspStatus = hasUnsafeEverything ? 'warn' : 'pass';
   }
   addCheck(
@@ -425,14 +553,14 @@ export function evaluateAuditData(snapshot, options = {}) {
     'Content-Security-Policy (CSP — ochrona przed XSS i wstrzyknięciem skryptów)',
     cspStatus,
     cspPts,
-    6,
+    5,
     csp ? `Skonfigurowany (${csp.slice(0, 90)}${csp.length > 90 ? '…' : ''})` : 'BRAK polityki Content-Security-Policy',
     cspStatus === 'pass'
       ? 'Blokuje wykonanie obcych, złośliwych skryptów JavaScript (XSS) oraz nieautoryzowanych trackerów.'
       : 'Brak CSP oznacza, że w razie luki we wtyczce CMS haker może wstrzyknąć dowolny złośliwy skrypt lub fałszywy formularz płatności.'
   );
 
-  // 2.3 X-Content-Type-Options: nosniff (4 pkt)
+  // 2.3 X-Content-Type-Options: nosniff (3 pkt)
   const xcto = (headers['x-content-type-options'] || '').toLowerCase();
   const hasNosniff = xcto === 'nosniff';
   addCheck(
@@ -440,15 +568,15 @@ export function evaluateAuditData(snapshot, options = {}) {
     'sec_nosniff',
     'X-Content-Type-Options: nosniff',
     hasNosniff ? 'pass' : 'fail',
-    hasNosniff ? 4 : 0,
-    4,
+    hasNosniff ? 3 : 0,
+    3,
     hasNosniff ? 'X-Content-Type-Options: nosniff' : 'BRAK nagłówka nosniff',
     hasNosniff
       ? 'Blokuje zgadywanie typów MIME przez przeglądarkę, uniemożliwiając uruchomienie złośliwego pliku jako skryptu.'
       : 'Brak blokady MIME-sniffingu zwiększa ryzyko wykonania niebezpiecznych plików przesłanych na serwer.'
   );
 
-  // 2.4 X-Frame-Options lub frame-ancestors (4 pkt)
+  // 2.4 X-Frame-Options lub frame-ancestors (3 pkt)
   const xfo = headers['x-frame-options'] || '';
   const hasFrameAncestors = /frame-ancestors\s+([^;]+)/i.test(csp);
   const frameProtected = Boolean(xfo.trim() || hasFrameAncestors);
@@ -457,8 +585,8 @@ export function evaluateAuditData(snapshot, options = {}) {
     'sec_clickjacking',
     'Ochrona przed Clickjackingiem (X-Frame-Options / CSP frame-ancestors)',
     frameProtected ? 'pass' : 'fail',
-    frameProtected ? 4 : 0,
-    4,
+    frameProtected ? 3 : 0,
+    3,
     frameProtected
       ? `${xfo ? `X-Frame-Options: ${xfo}` : ''}${xfo && hasFrameAncestors ? ' + ' : ''}${hasFrameAncestors ? 'CSP frame-ancestors' : ''}`
       : 'BRAK ochrony przed osadzeniem w obcym <iframe>',
@@ -483,7 +611,7 @@ export function evaluateAuditData(snapshot, options = {}) {
       : 'Brak kontroli nad nagłówkiem Referer może prowadzić do wycieku wewnętrznych adresów URL i tokenów sesji.'
   );
 
-  // 2.6 Permissions-Policy (3 pkt)
+  // 2.6 Permissions-Policy (2 pkt)
   const permissionsPolicy = headers['permissions-policy'] || '';
   const hasPermissionsPolicy = permissionsPolicy.trim().length > 0;
   addCheck(
@@ -491,8 +619,8 @@ export function evaluateAuditData(snapshot, options = {}) {
     'sec_permissions',
     'Kontrola uprawnień sprzętowych przeglądarki (Permissions-Policy)',
     hasPermissionsPolicy ? 'pass' : 'fail',
-    hasPermissionsPolicy ? 3 : 0,
-    3,
+    hasPermissionsPolicy ? 2 : 0,
+    2,
     hasPermissionsPolicy ? `Permissions-Policy: ${permissionsPolicy.slice(0, 80)}` : 'BRAK nagłówka Permissions-Policy',
     hasPermissionsPolicy
       ? 'Jawnie blokuje nieautoryzowany dostęp skryptów trzecich do kamery, mikrofonu, geolokalizacji i płatności.'
@@ -556,6 +684,55 @@ export function evaluateAuditData(snapshot, options = {}) {
     secTxtStatus === 'pass'
       ? 'Spełnia międzynarodowy standard RFC 9116 (ISO 27001 / NIS2) dla odpowiedzialnego kontaktu bezpieczeństwa.'
       : 'Brak standardowego punktu kontaktowego RFC 9116 wymaganego przez współczesne audyty cyberbezpieczeństwa.'
+  );
+
+  // 2.10 Uwierzytelnianie poczty domenowej DNS (SPF + DMARC) (3 pkt)
+  const dnsAuth = snapshot.dnsEmailAuth || { hasSpf: false, hasDmarc: false, dmarcPolicy: '' };
+  const hasSpf = Boolean(dnsAuth.hasSpf);
+  const hasDmarc = Boolean(dnsAuth.hasDmarc);
+  const dmarcPolicy = String(dnsAuth.dmarcPolicy || '').toLowerCase();
+  const strongDmarc = hasDmarc && (dmarcPolicy === 'quarantine' || dmarcPolicy === 'reject');
+  let emailAuthPts = 0;
+  let emailAuthStatus = 'fail';
+  if (hasSpf && strongDmarc) {
+    emailAuthPts = 3;
+    emailAuthStatus = 'pass';
+  } else if (hasSpf && hasDmarc) {
+    emailAuthPts = 2;
+    emailAuthStatus = 'warn';
+  } else if (hasSpf || hasDmarc) {
+    emailAuthPts = 1;
+    emailAuthStatus = 'warn';
+  }
+  addCheck(
+    cat2Name,
+    'sec_dns_spf_dmarc',
+    'Ochrona domeny przed podszywaniem pod pocztę e-mail (DNS SPF + DMARC)',
+    emailAuthStatus,
+    emailAuthPts,
+    3,
+    `SPF: ${hasSpf ? 'TAK' : 'BRAK'} | DMARC: ${hasDmarc ? `TAK (p=${dmarcPolicy || 'brak'})` : 'BRAK'}`,
+    emailAuthStatus === 'pass'
+      ? 'Aktywne rekordy SPF i rygorystyczny DMARC (quarantine/reject) chronią klientów przed fałszywymi fakturami wysyłanymi z domeny firmy.'
+      : 'Brak pełnej ochrony SPF + DMARC (quarantine/reject) pozwala oszustom rozsyłać fałszywe maile i faktury podszywające się pod Twoją domenę.'
+  );
+
+  // 2.11 Blokada publicznej enumeracji użytkowników WordPress (/wp-json/wp/v2/users) (2 pkt)
+  const wpUsersProbe = snapshot.probes?.wpUsersJson || { exposed: false, exposedCount: 0, sampleSlugs: [] };
+  const wpUsersExposed = Boolean(wpUsersProbe.exposed);
+  addCheck(
+    cat2Name,
+    'sec_wp_user_enum',
+    'Blokada wycieku loginów administratorów (/wp-json/wp/v2/users) [REF-05]',
+    wpUsersExposed ? 'fail' : 'pass',
+    wpUsersExposed ? 0 : 2,
+    2,
+    wpUsersExposed
+      ? `WYCIEK LOGINÓW (${wpUsersProbe.exposedCount} kont: ${(wpUsersProbe.sampleSlugs || []).join(', ') || 'publiczne JSON'})`
+      : 'Zabezpieczony (brak publicznego wycieku loginów przez /wp-json/wp/v2/users)',
+    wpUsersExposed
+      ? 'Domyślny endpoint WordPressa publicznie ujawnia loginy administratorów, ułatwiając botnetom zautomatyzowane ataki Brute-Force na panel logowania.'
+      : 'Nazwy kont administracyjnych nie są publicznie widoczne dla automatycznych skanerów i botnetów.'
   );
 
   // ============================================================================
@@ -891,6 +1068,8 @@ export function evaluateAuditData(snapshot, options = {}) {
       securityIssuesCount,
       detectedCms,
       hasLlmsTxt: hasLlmsTxtFile,
+      hasEmailAuth: emailAuthStatus === 'pass',
+      wpUsersExposed,
     },
     categories,
     checks,
@@ -919,11 +1098,21 @@ export function runSelfTest() {
       'x-powered-by': 'PHP/7.4.33',
     },
     httpRedirect: { checked: true, status: 200, location: '', redirectsToHttps: false },
+    dnsEmailAuth: {
+      checked: true,
+      domain: 'stara-strona-klienta.pl',
+      hasSpf: false,
+      spfRecord: '',
+      hasDmarc: false,
+      dmarcRecord: '',
+      dmarcPolicy: '',
+    },
     probes: {
       securityTxt: { ok: false, status: 404, sample: '' },
       robotsTxt: { ok: false, status: 404, sample: '' },
       sitemapXml: { ok: false, status: 404, sample: '' },
       llmsTxt: { ok: false, status: 404, sample: '' },
+      wpUsersJson: { checked: true, status: 200, exposed: true, exposedCount: 2, sampleSlugs: ['admin', 'redakcja'] },
     },
     html: `<!DOCTYPE html>
       <html>
@@ -953,6 +1142,9 @@ export function runSelfTest() {
   if (legacyAudit.summary.detectedCms.length < 3) {
     throw new Error('Nie wykryto oczekiwanych śladów WordPress / Elementor / jQuery Migrate');
   }
+  if (!legacyAudit.summary.wpUsersExposed || legacyAudit.summary.hasEmailAuth) {
+    throw new Error('Nie wykryto wycieku /wp-json/wp/v2/users lub braku rekordów SPF/DMARC w próbce legacy');
+  }
 
   // Próbka 2: Wzorcowa strona TwojaStronaWWW (Vanilla DevSecOps 100/100)
   const perfectSnapshot = {
@@ -981,6 +1173,15 @@ export function runSelfTest() {
       location: 'https://twojastronawww.pl/',
       redirectsToHttps: true,
     },
+    dnsEmailAuth: {
+      checked: true,
+      domain: 'twojastronawww.pl',
+      hasSpf: true,
+      spfRecord: 'v=spf1 include:_spf.mx.cloudflare.net -all',
+      hasDmarc: true,
+      dmarcRecord: 'v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s;',
+      dmarcPolicy: 'reject',
+    },
     probes: {
       securityTxt: {
         ok: true,
@@ -1005,6 +1206,13 @@ export function runSelfTest() {
         status: 200,
         sizeBytes: 1240,
         sample: '# TwojaStronaWWW — Inżynieria Stron WWW & AI\n',
+      },
+      wpUsersJson: {
+        checked: true,
+        status: 404,
+        exposed: false,
+        exposedCount: 0,
+        sampleSlugs: [],
       },
     },
     html: `<!DOCTYPE html>

@@ -9,7 +9,7 @@
  * - Warstwa Kolorów oparta o CSS Custom Properties (--tsw-ai-*), dziedzicząca z lokalnego CSS strony,
  *   presetów per site_id lub atrybutów HTML (data-primary, data-accent, data-bg, data-surface)
  * - Komunikacja z centralnym routerem AI na VPS (https://ai.twojastronawww.pl/chat-router.php)
- * - Obsługa 11-modelowej kaskady High-Availability (6 dostawców API) po stronie VPS
+ * - Obsługa 15-modelowej kaskady High-Availability (7 dostawców API) po stronie VPS
  * - Priorytetowe przekazywanie leadów kontaktowych (telefon / e-mail omija cache i wyzwala Ntfy 1-Klik)
  * - Dynamiczne Centrum Wiedzy ze strony i bazy JSON/Wiki (np. Salsopedia) z wyszukiwaniem fleksyjnym
  * - Dwupoziomowy Response Cache z automatyczną inwalidacją po zmianie wersji wiedzy (kbVersion)
@@ -342,6 +342,49 @@ function buildDynamicContext(question, entries) {
   );
 }
 
+const MAX_CACHE_ENTRIES = 50;
+
+/**
+ * Escapuje znaki specjalne HTML (ochrona przed DOM XSS w atrybutach i treściach HTML)
+ * @param {*} raw
+ * @returns {string}
+ */
+function escapeHtml(raw) {
+  if (raw === null || raw === undefined) return '';
+  return String(raw)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Sprawdza i aktualizuje flagę wykluczenia analityki dla właściciela witryny (?ignore_analytics=1 / 0)
+ * @param {Window} [winRef]
+ * @returns {boolean}
+ */
+function isOwnerAnalyticsIgnored(winRef) {
+  try {
+    const w = winRef || (typeof window !== 'undefined' ? window : globalThis);
+    const loc = w?.location || {};
+    const storage = w?.localStorage || null;
+    const params = new URLSearchParams(loc.search || '');
+    const toggle = params.get('ignore_analytics');
+    if (toggle === '1' || toggle === 'true') {
+      storage?.setItem('tsw_ignore_analytics', '1');
+      return true;
+    }
+    if (toggle === '0' || toggle === 'false') {
+      storage?.removeItem('tsw_ignore_analytics');
+      return false;
+    }
+    return storage?.getItem('tsw_ignore_analytics') === '1';
+  } catch (_) {
+    return false;
+  }
+}
+
 /**
  * Bezpieczny mikro-parser Markdown (100% odporny na XSS)
  * @param {string} rawText
@@ -349,12 +392,40 @@ function buildDynamicContext(question, entries) {
  */
 function formatMarkdown(rawText) {
   if (!rawText) return '';
-  let safe = String(rawText)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  let safe = escapeHtml(rawText);
+
+  const linkTokens = [];
+  const stashLink = (anchorHtml) => {
+    const idx = linkTokens.length;
+    linkTokens.push(anchorHtml);
+    return `\uE000TSWLINK_${idx}_\uE001`;
+  };
+
+  // Klikalne adresy URL (https://..., w tym adresy ze znakiem @ np. https://www.youtube.com/@channel)
+  // Zamieniane na token przed kursywą i mailto, aby uniknąć uszkodzenia linków z @ lub *
+  safe = safe.replace(/https?:\/\/[^\s<]+/g, (matched) => {
+    let cleanUrl = matched;
+    let trailing = '';
+    while (true) {
+      const entityMatch = cleanUrl.match(/(&quot;|&#039;|&gt;|&lt;)$/);
+      if (entityMatch) {
+        trailing = entityMatch[1] + trailing;
+        cleanUrl = cleanUrl.slice(0, -entityMatch[1].length);
+        continue;
+      }
+      const punctMatch = cleanUrl.match(/([.,:;!?)"'\]*]+)$/);
+      if (punctMatch) {
+        trailing = punctMatch[1] + trailing;
+        cleanUrl = cleanUrl.slice(0, -punctMatch[1].length);
+        continue;
+      }
+      break;
+    }
+    if (cleanUrl.length <= 8) {
+      return matched;
+    }
+    return stashLink(`<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="tsw-ai-link">${cleanUrl}</a>`) + trailing;
+  });
 
   // Pogrubienia **tekst**
   safe = safe.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -362,25 +433,21 @@ function formatMarkdown(rawText) {
   // Kursywa *tekst*
   safe = safe.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
 
-  // Klikalne adresy URL (https://...)
-  safe = safe.replace(
-    /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g,
-    '<a href="$1" target="_blank" rel="noopener noreferrer" class="tsw-ai-link">$1</a>'
-  );
-
   // Klikalne adresy e-mail oraz linki wewnętrzne (#kontakt, salsopedia.html, grafik.html, cennik.html, /pakiety)
   safe = safe.replace(
-    /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g,
-    '<a href="mailto:$1" class="tsw-ai-link">$1</a>'
+    /(^|[\s(>])(?:mailto:)?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g,
+    (_, prefix, email) => prefix + stashLink(`<a href="mailto:${email}" class="tsw-ai-link">${email}</a>`)
   );
   safe = safe.replace(
     /(^|\s)(#[a-zA-Z0-9_-]+)\b/g,
-    '$1<a href="$2" class="tsw-ai-link">$2</a>'
+    (_, prefix, hash) => prefix + stashLink(`<a href="${hash}" class="tsw-ai-link">${hash}</a>`)
   );
   safe = safe.replace(
     /(^|[\s(])((?:salsopedia|grafik|cennik|jak-pracuje)\.html(?:#[a-zA-Z0-9_-]+)?)/g,
-    '$1<a href="$2" class="tsw-ai-link">$2</a>'
+    (_, prefix, relPath) => prefix + stashLink(`<a href="${relPath}" class="tsw-ai-link">${relPath}</a>`)
   );
+
+  safe = safe.replace(/\uE000TSWLINK_(\d+)_\uE001/g, (_, idx) => linkTokens[Number(idx)] || '');
 
   const lines = safe.split(/\r?\n/);
   let html = '';
@@ -799,9 +866,16 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
             responseCache = { kbVersion, entries: {} };
             saveResponseCache();
           } else {
+            const loadedEntries = parsed.entries && typeof parsed.entries === 'object' ? parsed.entries : {};
+            const keys = Object.keys(loadedEntries);
+            if (keys.length > MAX_CACHE_ENTRIES) {
+              for (let k = 0; k < keys.length - MAX_CACHE_ENTRIES; k++) {
+                delete loadedEntries[keys[k]];
+              }
+            }
             responseCache = {
               kbVersion: parsed.kbVersion || kbVersion,
-              entries: parsed.entries || {}
+              entries: loadedEntries
             };
           }
         }
@@ -861,6 +935,16 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
       responseCache = { kbVersion, entries: {} };
     }
     responseCache.kbVersion = kbVersion;
+    if (Object.prototype.hasOwnProperty.call(responseCache.entries, normQ)) {
+      delete responseCache.entries[normQ];
+    }
+    const existingKeys = Object.keys(responseCache.entries);
+    while (existingKeys.length >= MAX_CACHE_ENTRIES) {
+      const oldestKey = existingKeys.shift();
+      if (oldestKey !== undefined) {
+        delete responseCache.entries[oldestKey];
+      }
+    }
     responseCache.entries[normQ] = {
       answer: String(answer),
       kbVersion,
@@ -1243,6 +1327,9 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
       ? 'Zapytaj o stoiska kulinarne, organizację lub rezerwację terminu...'
       : 'Napisz pytanie o ofertę lub wycenę...';
 
+  const safeTitle = escapeHtml(title);
+  const safePlaceholderText = escapeHtml(placeholderText);
+
   const root = doc.createElement('div');
   root.id = 'tsw-ai-widget-root';
   root.setAttribute('data-nosnippet', '');
@@ -1252,11 +1339,11 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
       <span class="tsw-ai-btn-badge" aria-hidden="true">AI</span>
     </button>
 
-    <div class="tsw-ai-window" id="tswAiWindow" role="dialog" aria-label="${title}">
+    <div class="tsw-ai-window" id="tswAiWindow" role="dialog" aria-label="${safeTitle}">
       <div class="tsw-ai-header">
         <div class="tsw-ai-header-title tsw-ai-title">
           <span class="tsw-ai-status-dot tsw-ai-dot" aria-hidden="true"></span>
-          <span>${title}</span>
+          <span>${safeTitle}</span>
         </div>
         <div class="tsw-ai-header-actions tsw-ai-actions">
           <button type="button" class="tsw-ai-icon-btn" id="tswAiClearBtn" title="Nowa rozmowa" aria-label="Nowa rozmowa">&#x21bb;</button>
@@ -1268,7 +1355,7 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
       <div class="tsw-ai-chips" id="tswAiChips"></div>
 
       <form class="tsw-ai-input-bar tsw-ai-form" id="tswAiForm">
-        <input type="text" class="tsw-ai-input" id="tswAiInput" placeholder="${placeholderText}" aria-label="Zadaj pytanie asystentowi" maxlength="500" required autocomplete="off" />
+        <input type="text" class="tsw-ai-input" id="tswAiInput" placeholder="${safePlaceholderText}" aria-label="Zadaj pytanie asystentowi" maxlength="500" required autocomplete="off" />
         <button type="button" class="tsw-ai-voice-btn" id="tswAiVoiceBtn" title="Zadaj pytanie głosem (mikrofon)" aria-label="Zadaj pytanie głosem" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
         </button>
@@ -1508,29 +1595,11 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
   }
 
   const analyticsUrl = routerUrl.replace(/\/chat-router\.php.*$/, '/analytics');
-
-  function isOwnerAnalyticsIgnored() {
-    try {
-      const loc = win?.location || {};
-      const params = new URLSearchParams(loc.search || '');
-      const toggle = params.get('ignore_analytics');
-      if (toggle === '1' || toggle === 'true') {
-        win?.localStorage?.setItem('tsw_ignore_analytics', '1');
-        return true;
-      }
-      if (toggle === '0' || toggle === 'false') {
-        win?.localStorage?.removeItem('tsw_ignore_analytics');
-        return false;
-      }
-      return win?.localStorage?.getItem('tsw_ignore_analytics') === '1';
-    } catch (_) {
-      return false;
-    }
-  }
+  isOwnerAnalyticsIgnored(win);
 
   function sendAnalyticsBeacon(extra) {
     try {
-      if (isOwnerAnalyticsIgnored()) return;
+      if (isOwnerAnalyticsIgnored(win)) return;
       const nav = win?.navigator || (typeof navigator !== 'undefined' ? navigator : null);
       const loc = win?.location || {};
       const params = new URLSearchParams(loc.search || '');
@@ -1543,6 +1612,14 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
         utm_source: params.get('utm_source') || '',
         utm_term: params.get('utm_term') || params.get('q') || ''
       }, extra || {});
+      if (payload.lcp_ms !== undefined) {
+        const lcpMs = Number(payload.lcp_ms);
+        if (Number.isFinite(lcpMs) && lcpMs >= 50 && lcpMs <= 8000) {
+          payload.lcp_ms = Math.round(lcpMs);
+        } else {
+          delete payload.lcp_ms;
+        }
+      }
       const body = JSON.stringify(payload);
       let sent = false;
       if (nav && typeof nav.sendBeacon === 'function') {
@@ -1718,7 +1795,8 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
           question: trimmed,
           kb_version: kbVersion,
           dynamic_context: dynamicContext,
-          history: conversationHistory.slice(-8)
+          history: conversationHistory.slice(-8),
+          ...(isOwnerAnalyticsIgnored(win) ? { ignore_analytics: true } : {})
         })
       });
 
@@ -1776,9 +1854,9 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
           if (doc.visibilityState === 'hidden') return;
           const entries = list.getEntries();
           if (entries && entries.length > 0) {
-            const candidate = Math.round(entries[entries.length - 1].startTime || 0);
-            if (candidate >= 50 && candidate <= 8000) {
-              lcpMeasured = candidate;
+            const lcpMs = Math.round(entries[entries.length - 1].startTime || 0);
+            if (lcpMs >= 50 && lcpMs <= 8000) {
+              lcpMeasured = lcpMs;
             }
           }
         });
@@ -1820,7 +1898,8 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
 
     doc.addEventListener?.('submit', (e) => {
       const form = e?.target;
-      if (form && form.id !== 'tsw-ai-form' && (form.id === 'contactForm' || form.classList?.contains?.('contact-form'))) {
+      if (!form || form.id === 'tswAiForm' || form.id === 'tsw-ai-form') return;
+      if (form.id === 'contactForm' || form.classList?.contains?.('contact-form')) {
         sendAnalyticsBeacon({ type: 'event', event: 'contact_form_submit' });
       }
     });
@@ -1884,6 +1963,9 @@ if (typeof document !== 'undefined') {
 const __tswExports = {
   QUICK_PROMPTS_MAP,
   THEME_PRESETS,
+  MAX_CACHE_ENTRIES,
+  escapeHtml,
+  isOwnerAnalyticsIgnored,
   normalizeCacheQuery,
   normalizeSearchText,
   computeKnowledgeVersion,

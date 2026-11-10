@@ -797,7 +797,7 @@ else
         FIRING_BLOCKS="$(echo "${PROM_ALERTS}" | sed 's/},{"labels":/}\n{"labels":/g' | grep '"state":"firing"' | grep -E '"severity":"(warning|critical)"' || true)"
         if [[ -z "${FIRING_BLOCKS}" ]]; then
             pass "Reguły Alertów Prometheusa (AI Router & Infrastruktura): 0 aktywnych alarmów (warning/critical firing=0)."
-            rm -f /tmp/devops_ntfy_alert_dedup.state 2>/dev/null || true
+            rm -f /var/tmp/devops_ntfy_alert_dedup.state 2>/dev/null || true
         else
             FIRING_COUNT="$(echo "${FIRING_BLOCKS}" | wc -l | tr -d ' ')"
             FIRING_NAMES="$(echo "${FIRING_BLOCKS}" | grep -oE '"alertname":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ')"
@@ -805,8 +805,21 @@ else
             warn "Aktywne alarmy Prometheusa (firing=${FIRING_COUNT}): ${FIRING_NAMES}" \
                  "Sprawdź raport: bash ${STACK_ROOT}/scripts/ai-router-report.sh"
             NTFY_TOPIC_VAL="$(grep -E '^NTFY_TOPIC=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+            NTFY_BASE_VAL="$(grep -E '^NTFY_BASE_URL=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' | sed 's:/*$::' || echo '')"
+            NTFY_TOKEN_VAL="$(grep -E '^NTFY_TOKEN=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+            if [[ -z "${NTFY_BASE_VAL}" || "${NTFY_BASE_VAL}" == "http://ntfy:8080" ]]; then
+                if [[ -n "${NTFY_TOKEN_VAL}" ]]; then
+                    NTFY_BASE_VAL="http://127.0.0.1:8086"
+                else
+                    NTFY_BASE_VAL="https://ntfy.sh"
+                fi
+            fi
+            NTFY_ALERT_AUTH=()
+            if [[ -n "${NTFY_TOKEN_VAL}" ]]; then
+                NTFY_ALERT_AUTH=(-H "Authorization: Bearer ${NTFY_TOKEN_VAL}")
+            fi
             if [[ -n "${NTFY_TOPIC_VAL}" ]]; then
-                DEDUP_FILE="/tmp/devops_ntfy_alert_dedup.state"
+                DEDUP_FILE="/var/tmp/devops_ntfy_alert_dedup.state"
                 NOW_EPOCH="$(date +%s)"
                 SEND_NTFY=1
                 if [[ -f "${DEDUP_FILE}" ]]; then
@@ -817,17 +830,18 @@ else
                     fi
                 fi
                 if [[ "${SEND_NTFY}" -eq 1 ]]; then
-                    printf "%s\n%s\n" "${FIRING_NAMES}" "${NOW_EPOCH}" > "${DEDUP_FILE}" 2>/dev/null || true
+                    ( umask 077 && printf "%s\n%s\n" "${FIRING_NAMES}" "${NOW_EPOCH}" > "${DEDUP_FILE}" ) 2>/dev/null || true
                     ALERT_MSG="Wykryto aktywne alarmy (${FIRING_COUNT}): ${FIRING_NAMES}"
                     if [[ -n "${FIRING_SUMMARIES}" ]]; then
                         ALERT_MSG="${ALERT_MSG}"$'\n\n'"Szczegóły:"$'\n'"${FIRING_SUMMARIES}"
                     fi
                     curl -s --max-time 5 \
+                        ${NTFY_ALERT_AUTH[@]+"${NTFY_ALERT_AUTH[@]}"} \
                         -H "Title: 🚨 Prometheus Alert (VPS Stack)" \
                         -H "Priority: high" \
                         -H "Tags: rotating_light,robot" \
                         -d "${ALERT_MSG}" \
-                        "https://ntfy.sh/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
+                        "${NTFY_BASE_VAL}/${NTFY_TOPIC_VAL}" >/dev/null 2>&1 || true
                 fi
             fi
         fi
@@ -1110,7 +1124,9 @@ if [[ -d "${PROM_DIR}" && -w "${PROM_DIR}" ]]; then
     if [[ "${FAIL_COUNT}" -gt 0 ]]; then
         AUDIT_OVERALL=0
     fi
-    cat <<EOF > "${AUDIT_PROM}.tmp"
+    (
+        umask 077
+        cat <<EOF > "${AUDIT_PROM}.$$.tmp"
 # HELP devops_audit_last_timestamp_seconds Czas uniksowy ostatniego audytu serwera
 # TYPE devops_audit_last_timestamp_seconds gauge
 devops_audit_last_timestamp_seconds ${AUDIT_TS}
@@ -1183,8 +1199,9 @@ devops_apt_upgradable_packages ${APT_PENDING_COUNT:-0}
 # TYPE devops_ntp_synchronized gauge
 devops_ntp_synchronized ${NTP_SYNCED:-1}
 EOF
-    mv "${AUDIT_PROM}.tmp" "${AUDIT_PROM}"
-    chmod 644 "${AUDIT_PROM}" 2>/dev/null || true
+    )
+    chmod 644 "${AUDIT_PROM}.$$.tmp" 2>/dev/null || true
+    mv -f "${AUDIT_PROM}.$$.tmp" "${AUDIT_PROM}"
 fi
 
 # Powiadomienia Push na Ntfy.sh oraz Poranny Raport 06:00 (wyodrębnione do modułu scripts/run-morning-digest.sh):

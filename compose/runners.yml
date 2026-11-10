@@ -13,8 +13,14 @@ services:
       dev.dozzle.name: "runner-zeslownikiem • CI/CD ZeSłownikiem"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji zeslownikiem"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     cap_drop:
       - NET_RAW
       - SYS_MODULE
@@ -42,6 +48,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 512M
     healthcheck:
@@ -62,8 +69,14 @@ services:
       dev.dozzle.name: "runner-twojastronawww • CI/CD TwojaStronaWWW"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji TwojaStronaWWW"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     cap_drop:
       - NET_RAW
       - SYS_MODULE
@@ -76,7 +89,7 @@ services:
       - RUNNER_SCOPE=${RUNNER_TWOJASTRONAWWW_SCOPE:-repo}
       - ORG_NAME=TwojaStronaWWW
       - REPO_URL=https://github.com/TwojaStronaWWW/devops-stack
-      - ACCESS_TOKEN=${GITHUB_TOKEN}
+      - ACCESS_TOKEN=${GITHUB_TOKEN_TWOJASTRONAWWW:-${GITHUB_TOKEN}}
       - RUNNER_NAME=vps-runner-twojastronawww-unified
       - RANDOM_RUNNER_SUFFIX=false
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified,twojastronawww
@@ -91,6 +104,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 512M
     healthcheck:
@@ -111,8 +125,14 @@ services:
     container_name: runner-gal-anonym
     profiles: ["split"]
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     cap_drop:
       - NET_RAW
       - SYS_MODULE
@@ -134,6 +154,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 512M
     healthcheck:
@@ -150,8 +171,14 @@ services:
       dev.dozzle.name: "runner-gal-anonim-web • CI/CD GalAnonim Web"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla repozytorium zeslownikiem/gal-anonim-web"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     cap_drop:
       - NET_RAW
       - SYS_MODULE
@@ -163,7 +190,7 @@ services:
     environment:
       - RUNNER_SCOPE=repo
       - REPO_URL=https://github.com/zeslownikiem/gal-anonim-web
-      - ACCESS_TOKEN=${GITHUB_TOKEN}
+      - ACCESS_TOKEN=${GITHUB_TOKEN_GAL_ANONIM:-${GITHUB_TOKEN}}
       - RUNNER_NAME=vps-runner-gal-anonim-web
       - RANDOM_RUNNER_SUFFIX=false
       - RUNNER_LABELS=self-hosted,linux,arm64,ARM64,vps,unified
@@ -178,6 +205,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 512M
     healthcheck:

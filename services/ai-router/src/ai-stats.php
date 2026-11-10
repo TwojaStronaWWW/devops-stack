@@ -220,7 +220,7 @@ function aiStatsRead(): array
         $bakFile = $file . '.bak';
         if (is_file($bakFile)) {
             $bakRaw = @file_get_contents($bakFile);
-            $bakData = $bakRaw ? json_decode($bakRaw, true) : null;
+            $bakData = $bakRaw ? json_decode($bakRaw, true, 32) : null;
             if (is_array($bakData)) {
                 return array_replace(aiStatsDefault(), $bakData);
             }
@@ -231,12 +231,12 @@ function aiStatsRead(): array
     $raw = stream_get_contents($fp);
     flock($fp, LOCK_UN);
     fclose($fp);
-    $data = $raw ? json_decode($raw, true) : null;
+    $data = $raw ? json_decode($raw, true, 32) : null;
     if (!is_array($data)) {
         $bakFile = $file . '.bak';
         if (is_file($bakFile)) {
             $bakRaw = @file_get_contents($bakFile);
-            $bakData = $bakRaw ? json_decode($bakRaw, true) : null;
+            $bakData = $bakRaw ? json_decode($bakRaw, true, 32) : null;
             if (is_array($bakData)) {
                 return array_replace(aiStatsDefault(), $bakData);
             }
@@ -258,10 +258,10 @@ function aiStatsMutate(callable $fn): void
         }
         if (flock($fp, LOCK_EX)) {
             $raw = stream_get_contents($fp);
-            $decoded = ($raw !== false && trim($raw) !== '') ? json_decode($raw, true) : null;
+            $decoded = ($raw !== false && trim($raw) !== '') ? json_decode($raw, true, 32) : null;
             if (!is_array($decoded) && is_file($bakFile)) {
                 $bakRaw = @file_get_contents($bakFile);
-                $decoded = $bakRaw ? json_decode($bakRaw, true) : null;
+                $decoded = $bakRaw ? json_decode($bakRaw, true, 32) : null;
             }
             $data = is_array($decoded) ? array_replace(aiStatsDefault(), $decoded) : aiStatsDefault();
             $fn($data);

@@ -185,6 +185,12 @@ net.ipv4.tcp_congestion_control = bbr
 fs.inotify.max_user_watches = 524288
 fs.inotify.max_user_instances = 512
 
+# Ochrona dowiązań symbolicznych/twardych oraz FIFO i plików regularnych w katalogach world-writable (/tmp, /var/tmp)
+fs.protected_regular = 2
+fs.protected_fifos = 2
+fs.protected_symlinks = 1
+fs.protected_hardlinks = 1
+
 # Optymalizacja zarządzania pamięcią wirtualną i Page Cache (dla SQLite FTS5 i TSDB)
 vm.swappiness = 10
 vm.vfs_cache_pressure = 50

@@ -79,4 +79,42 @@ EOF
     echo "[OK] Harmonogram devops-p1-radar.timer został zainstalowany i aktywowany (co 60 sek)."
 fi
 
+if [[ -f "${STACK_ROOT}/scripts/sync-change-radar.sh" ]]; then
+    CR_SERVICE="/etc/systemd/system/devops-change-radar.service"
+    CR_TIMER="/etc/systemd/system/devops-change-radar.timer"
+
+    cat <<EOF | sudo tee "${CR_SERVICE}" >/dev/null
+[Unit]
+Description=TwojaStronaWWW Change Detection Radar (CeZ P1, KSeF, NFZ, LH.pl, NGO)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=${STACK_ROOT}
+ExecStart=/bin/bash ${STACK_ROOT}/scripts/sync-change-radar.sh
+StandardOutput=journal
+StandardError=journal
+EOF
+
+    cat <<EOF | sudo tee "${CR_TIMER}" >/dev/null
+[Unit]
+Description=Run External Change Detection Radar every 6 hours
+
+[Timer]
+OnBootSec=4min
+OnUnitActiveSec=6h
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now devops-change-radar.timer
+    echo "[OK] Harmonogram devops-change-radar.timer został zainstalowany i aktywowany (co 6 godz.)."
+fi
+
 systemctl status devops-audit.timer --no-pager | head -n 12

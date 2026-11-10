@@ -11,8 +11,14 @@ services:
       dev.dozzle.name: "uptime-kuma • Monitoring Stron WWW"
       org.opencontainers.image.description: "Monitoring dostępności stron WWW, API i certyfikatów SSL (Uptime Kuma)"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -28,6 +34,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+          pids: 256
         reservations:
           memory: 128M
     healthcheck:
@@ -48,10 +55,16 @@ services:
       org.opencontainers.image.description: "Silnik bazy szeregów czasowych zbierający metryki serwera i usług (Prometheus)"
     restart: unless-stopped
     user: "65534:65534" # nobody:nobody (PoLP - non-root)
+    pids_limit: 256
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -74,6 +87,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 1024M
+          pids: 256
         reservations:
           memory: 256M
     healthcheck:
@@ -94,10 +108,16 @@ services:
       org.opencontainers.image.description: "Wizualizacja metryk, statusów stron WWW, AI Routera i backupów (Grafana)"
     restart: unless-stopped
     user: "472:472" # grafana non-root
+    pids_limit: 256
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -128,6 +148,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+          pids: 256
         reservations:
           memory: 128M
     healthcheck:
@@ -147,10 +168,16 @@ services:
       dev.dozzle.name: "node-exporter • Parametry Hosta VPS"
       org.opencontainers.image.description: "Eksporter parametrów sprzętowych VPS (CPU, RAM, dysk) i telemetrii backupów"
     restart: unless-stopped
+    pids_limit: 64
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     volumes:
@@ -169,6 +196,7 @@ services:
         limits:
           cpus: "0.2"
           memory: 128M
+          pids: 64
         reservations:
           memory: 32M
     healthcheck:
@@ -188,8 +216,14 @@ services:
       dev.dozzle.name: "cadvisor • Zasoby Kontenerów"
       org.opencontainers.image.description: "Monitorowanie zużycia procesora, pamięci RAM i sieci przez kontenery Docker"
     restart: unless-stopped
+    pids_limit: 64
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     volumes:
@@ -216,6 +250,7 @@ services:
         limits:
           cpus: "0.3"
           memory: 256M
+          pids: 64
         reservations:
           memory: 64M
     healthcheck:
@@ -235,10 +270,16 @@ services:
       dev.dozzle.name: "dozzle • Logi Kontenerów"
       org.opencontainers.image.description: "Przeglądarka logów wszystkich kontenerów Docker w czasie rzeczywistym"
     restart: unless-stopped
+    pids_limit: 128
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -254,6 +295,7 @@ services:
         limits:
           cpus: "0.2"
           memory: 128M
+          pids: 128
         reservations:
           memory: 32M
     healthcheck:
@@ -273,10 +315,16 @@ services:
       dev.dozzle.name: "github-exporter • Metryki GitHub"
       org.opencontainers.image.description: "Eksporter statystyk repozytoriów i statusów potoków GitHub Actions do Prometheusa"
     restart: unless-stopped
+    pids_limit: 64
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     environment:
@@ -284,12 +332,14 @@ services:
       - GITHUB_EXPORTER_REQUEST_TIMEOUT=15s
       - GITHUB_EXPORTER_WEB_TIMEOUT=20s
       - GITHUB_EXPORTER_ORGS=TwojaStronaWWW,zeslownikiem
-      - GITHUB_EXPORTER_REPOS=TwojaStronaWWW/devops-stack,TwojaStronaWWW/twojastronawww,TwojaStronaWWW/katosalsahub,TwojaStronaWWW/raricart,TwojaStronaWWW/hd-osticket-helpdesk,zeslownikiem/gal-anonym,zeslownikiem/gal-anonim-web
+      # Lista monitorowanych repozytoriów (domyślnie projekty platformy + strony klientów B2B)
+      - GITHUB_EXPORTER_REPOS=${GITHUB_EXPORTER_REPOS:-TwojaStronaWWW/devops-stack,TwojaStronaWWW/twojastronawww,TwojaStronaWWW/katosalsahub,TwojaStronaWWW/fuegolingua,TwojaStronaWWW/raricart,TwojaStronaWWW/medicusnoster,TwojaStronaWWW/medycyna-regeneracyjna,TwojaStronaWWW/krzysztofpoczatek,TwojaStronaWWW/wspolnekamienice,TwojaStronaWWW/hd-osticket-helpdesk,zeslownikiem/gal-anonym,zeslownikiem/gal-anonim-web}
     deploy:
       resources:
         limits:
           cpus: "0.2"
           memory: 128M
+          pids: 64
         reservations:
           memory: 32M
     healthcheck:
@@ -310,12 +360,18 @@ services:
     container_name: ai-router
     labels:
       dev.dozzle.name: "ai-router • Czatbot AI & AMMS"
-      org.opencontainers.image.description: "Scentralizowana bramka AI (11 modeli + Asystent AMMS & Oracle FTS5) dla TwojaStronaWWW"
+      org.opencontainers.image.description: "Scentralizowana bramka AI (15-Model Cascade + Asystent AMMS & Oracle FTS5) dla TwojaStronaWWW"
     restart: unless-stopped
+    pids_limit: 128
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -348,7 +404,7 @@ services:
       - LEAD_WEBHOOK_URL=${LEAD_WEBHOOK_URL:-}
       - OSTICKET_API_KEY=${OSTICKET_API_KEY:-}
       - PHP_CLI_SERVER_WORKERS=4
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl,https://raricart.pl,https://www.raricart.pl}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-https://katosalsahub.pl,https://www.katosalsahub.pl,https://fuegolingua.pl,https://www.fuegolingua.pl,https://twojastronawww.pl,https://www.twojastronawww.pl,https://raricart.pl,https://www.raricart.pl,https://medicusnoster.pl,https://www.medicusnoster.pl,https://medycyna-regeneracyjna.pl,https://www.medycyna-regeneracyjna.pl,https://krzysztofpoczatek.pl,https://www.krzysztofpoczatek.pl,https://wspolnekamienice.pl,https://www.wspolnekamienice.pl,https://radar-p1.pages.dev}
       - ANALYTICS_IGNORED_IPS=${ANALYTICS_IGNORED_IPS:-}
       - TZ=${TZ:-Europe/Warsaw}
     deploy:
@@ -356,6 +412,7 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+          pids: 128
         reservations:
           memory: 64M
     healthcheck:
@@ -375,12 +432,18 @@ services:
       dev.dozzle.name: "ntfy • Prywatny Serwer Push"
       org.opencontainers.image.description: "Własny serwer powiadomień Push RODO/ISO 27001 dla leadów i alertów (ntfy)"
     restart: unless-stopped
+    pids_limit: 64
     command:
       - serve
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -396,6 +459,7 @@ services:
         limits:
           cpus: "0.2"
           memory: 128M
+          pids: 64
         reservations:
           memory: 32M
     healthcheck:
@@ -416,10 +480,16 @@ services:
       org.opencontainers.image.description: "Jednorazowy sejf do bezpiecznego przekazywania haseł klientom AES-256-GCM (PrivateBin)"
     restart: unless-stopped
     read_only: true
+    pids_limit: 64
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     ports:
@@ -434,6 +504,7 @@ services:
         limits:
           cpus: "0.2"
           memory: 128M
+          pids: 64
         reservations:
           memory: 32M
     healthcheck:

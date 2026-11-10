@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/unit/*.test.js",
-    "check": "npm test",
+    "check:syntax": "node --check scripts/generate-client-audit.js && node --check scripts/client-audit-renderer.js && node --check scripts/setup-kuma.js && node --check scripts/setup-ntfy.js",
+    "check": "npm run check:syntax && npm test",
     "audit": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-remote.ps1",
     "prepare": "git config core.hooksPath .githooks || true"
   }

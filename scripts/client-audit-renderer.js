@@ -93,6 +93,8 @@ export function renderAuditHtml(audit) {
     summary.detectedCms.length > 0
       ? `Wykryto: ${summary.detectedCms.join(', ')}`
       : 'Brak ciężkiego CMS (czysta architektura)';
+  const securityChecksTotal =
+    categories.find((cat) => cat.name.startsWith('2.'))?.checks.length || 11;
 
   return `<!DOCTYPE html>
 <html lang="pl">
@@ -455,7 +457,7 @@ export function renderAuditHtml(audit) {
         <div class="risk-pill ${summary.riskBadgeClass}">${escapeHtml(summary.riskLevel)}</div>
         <ul class="comparison-list">
           <li>⏱️ <strong>Czas odpowiedzi serwera (TTFB):</strong> <code>${summary.ttfbMs} ms</code> (pobranie HTML: <code>${summary.totalDownloadMs} ms</code>, rozmiar: <code>${summary.htmlKb} KB</code>)</li>
-          <li>🛡️ <strong>Luki i braki nagłówków bezpieczeństwa OWASP:</strong> <strong>${summary.securityIssuesCount}</strong> z 9 punktów kontrolnych</li>
+          <li>🛡️ <strong>Luki bezpieczeństwa OWASP, DNS (SPF/DMARC) i REST API:</strong> <strong>${summary.securityIssuesCount}</strong> z ${securityChecksTotal} punktów kontrolnych</li>
           <li>🧱 <strong>Architektura / narzut CMS:</strong> ${escapeHtml(cmsSummaryText)}</li>
           <li>🤖 <strong>Widoczność w wyszukiwarkach AI (ChatGPT / Perplexity):</strong> ${summary.hasLlmsTxt ? 'Aktywny plik /llms.txt' : 'BRAK pliku /llms.txt (ryzyko pominięcia przez AI)'}</li>
           <li>⚠️ <strong>Bilans testów kontrolnych:</strong> ✅ ${summary.passCount} zaliczonych | ⚠️ ${summary.warnCount} ostrzeżeń | ❌ ${summary.failCount} błędów</li>
@@ -482,7 +484,7 @@ export function renderAuditHtml(audit) {
       ${categoryCardsHtml}
     </section>
 
-    <h2 class="section-heading">🔍 Szczegółowa Tabela Kontrolna (23 Punkty Audytowe ISO / OWASP / WCAG / GEO)</h2>
+    <h2 class="section-heading">🔍 Szczegółowa Tabela Kontrolna (${checks.length} Punktów Audytowych ISO / OWASP / DNS / WCAG / GEO)</h2>
     <table class="audit-table">
       <thead>
         <tr>

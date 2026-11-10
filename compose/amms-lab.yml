@@ -17,14 +17,20 @@ services:
       dev.dozzle.name: "szpital-oracle-db • Oracle DB (10.20.10.10)"
       org.opencontainers.image.description: "Natywny serwer bazy danych Oracle ARM64 (Service: moja) w strefie VLAN 10 (10.20.10.10)"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - TZ=${TZ:-Europe/Warsaw}
-      - ORACLE_PASSWORD=sysadm
+      - ORACLE_PASSWORD=${AMMS_LAB_ORACLE_PASSWORD:?Ustaw AMMS_LAB_ORACLE_PASSWORD w .env}
       - ORACLE_DATABASE=moja
       - APP_USER=SYSADM
-      - APP_USER_PASSWORD=sysadm
+      - APP_USER_PASSWORD=${AMMS_LAB_ORACLE_PASSWORD:?Ustaw AMMS_LAB_ORACLE_PASSWORD w .env}
     volumes:
       - /opt/amms-lab/oracle-db:/opt/oracle/oradata
       - /opt/amms-lab/transfer:/opt/oracle/dpdump
@@ -44,6 +50,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 4096M
+          pids: 256
         reservations:
           memory: 1536M
     healthcheck:
@@ -64,12 +71,19 @@ services:
       dev.dozzle.name: "szpital-pc01 • Stacja Robocza (10.20.40.50)"
       org.opencontainers.image.description: "Graficzna stacja robocza XFCE w sieci szpitalnej (10.20.40.50)"
     restart: unless-stopped
+    pids_limit: 256
     cap_add:
       - SYS_ADMIN
       - NET_ADMIN
+    # Uwaga: linuxserver/webtop (XFCE + s6-overlay) wymaga SUID dla sesji X11/pulpitu (brak no-new-privileges)
     security_opt:
       - seccomp:unconfined
       - apparmor:unconfined
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - PUID=1000
       - PGID=1000
@@ -101,6 +115,7 @@ services:
         limits:
           cpus: "1.5"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 512M
     healthcheck:
@@ -121,8 +136,14 @@ services:
       dev.dozzle.name: "szpital-integracja • Tomcat DMZ (10.20.30.10)"
       org.opencontainers.image.description: "Platforma Integracyjna Asseco (Apache Tomcat) w strefie DMZ (10.20.30.10)"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     working_dir: /opt/tomcat
     command: ["/bin/bash", "-c", "if [ -x /opt/tomcat/apache-tomcat/bin/catalina.sh ]; then exec /opt/tomcat/apache-tomcat/bin/catalina.sh run; else echo 'Oczekiwanie na pliki Tomcat w /opt/amms-lab/integracja-tomcat...' && sleep infinity; fi"]
     environment:
@@ -149,6 +170,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 2048M
+          pids: 256
         reservations:
           memory: 256M
     healthcheck:
@@ -169,8 +191,14 @@ services:
       dev.dozzle.name: "szpital-amms-his • WildFly 26 (10.20.20.10)"
       org.opencontainers.image.description: "Serwer aplikacyjny Asseco AMMS (WildFly 26.0.1.Final + amms.ear) w strefie HIS (10.20.20.10)"
     restart: unless-stopped
+    pids_limit: 256
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     working_dir: /opt/wildfly
     command: ["/bin/bash", "-c", "if [ -x /opt/wildfly/wildfly-26.0.1.Final/bin/standalone.sh ]; then exec /opt/wildfly/wildfly-26.0.1.Final/bin/standalone.sh -b 0.0.0.0 -bmanagement 0.0.0.0; else echo 'Oczekiwanie na pliki WildFly w /opt/amms-lab/amms-wildfly...' && sleep infinity; fi"]
     environment:
@@ -198,6 +226,7 @@ services:
         limits:
           cpus: "2.0"
           memory: 5120M
+          pids: 256
         reservations:
           memory: 1024M
     healthcheck:

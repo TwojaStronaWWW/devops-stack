@@ -14,6 +14,8 @@ scripts/*-created.json
 id_ed25519*
 id_rsa*
 *.password
+*.kdbx
+*token*.json
 config/prometheus/*password*
 node_modules/
 
@@ -48,7 +50,10 @@ services/ai-router/storage/metrics/
 services/ai-router/storage/cache/
 services/ai-router/storage/p1_*
 
-# OS, Python & Editor artifacts
+# OS, Python, Browser Automation & Local Audit artifacts
+docs/audits/
+.chrome-*/
+.playwright-*/
 __pycache__/
 *.pyc
 .DS_Store

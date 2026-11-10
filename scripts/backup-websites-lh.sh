@@ -24,7 +24,13 @@ TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 R2_RETENTION_DAYS="${R2_RETENTION_DAYS:-14}"
 NTFY_TOPIC="${NTFY_TOPIC:-}"
-NTFY_URL="${NTFY_URL:-https://ntfy.sh/${NTFY_TOPIC}}"
+NTFY_TOKEN="${NTFY_TOKEN:-}"
+NTFY_BASE_URL="${NTFY_BASE_URL:-https://ntfy.sh}"
+if [[ "${NTFY_BASE_URL}" == "http://ntfy:8080" ]]; then
+    NTFY_BASE_URL="http://127.0.0.1:8086"
+fi
+NTFY_BASE_URL="${NTFY_BASE_URL%/}"
+NTFY_URL="${NTFY_URL:-${NTFY_BASE_URL}/${NTFY_TOPIC}}"
 METRICS_DIR="${PROMETHEUS_METRICS_DIR:-${STACK_ROOT}/config/node-exporter}"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
@@ -73,7 +79,13 @@ send_notification() {
         return 0
     fi
 
+    local auth_args=()
+    if [[ -n "${NTFY_TOKEN}" ]]; then
+        auth_args=(-H "Authorization: Bearer ${NTFY_TOKEN}")
+    fi
+
     curl -s \
+        ${auth_args[@]+"${auth_args[@]}"} \
         -H "Title: ${title}" \
         -H "Priority: ${priority}" \
         -H "Tags: ${tags}" \
@@ -91,7 +103,9 @@ write_prometheus_metrics() {
 
     if [[ -d "${METRICS_DIR}" ]]; then
         local metrics_file="${METRICS_DIR}/backup_websites.prom"
-        cat <<EOF > "${metrics_file}.tmp"
+        (
+            umask 077
+            cat <<EOF > "${metrics_file}.$$.tmp"
 # HELP devops_backup_websites_last_timestamp_seconds Czas uniksowy zakonczenia ostatniego backupu stron LH
 # TYPE devops_backup_websites_last_timestamp_seconds gauge
 devops_backup_websites_last_timestamp_seconds ${end_time}
@@ -120,8 +134,9 @@ devops_backup_websites_offsite_status ${offsite_status}
 # TYPE devops_backup_websites_duration_seconds gauge
 devops_backup_websites_duration_seconds ${duration}
 EOF
-        mv "${metrics_file}.tmp" "${metrics_file}"
-        chmod 644 "${metrics_file}" 2>/dev/null || true
+        )
+        chmod 644 "${metrics_file}.$$.tmp" 2>/dev/null || true
+        mv -f "${metrics_file}.$$.tmp" "${metrics_file}"
         echo "--> [METRYKI] Zaktualizowano metryki stron WWW: ${metrics_file}"
     fi
 }
@@ -220,9 +235,10 @@ if [[ -n "${LH_DB_HOST}" && -n "${LH_DB_NAMES}" && -n "${LH_DB_USER}" && -n "${L
             -v "${STAGING_DIR}:/target" \
             -e MYSQL_PWD="${LH_DB_PASSWORD}" \
             alpine:latest \
-            sh -c "set -o pipefail && apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${db_name}' | gzip -9 > '/target/_db_${db_name}.sql.gz' && gzip -t '/target/_db_${db_name}.sql.gz' && zcat '/target/_db_${db_name}.sql.gz' | tail -n 5 | grep -q 'Dump completed' && chown ${HOST_UID}:${HOST_GID} '/target/_db_${db_name}.sql.gz'"; then
-            echo "--> [OK] Zrzut bazy danych ${db_name} zweryfikowany (gzip -t + Dump completed) i zapisany w archiwum."
+            sh -c "set -o pipefail && apk add --no-cache mysql-client gzip >/dev/null 2>&1 && mysqldump --single-transaction --quick --routines --triggers -h '${LH_DB_HOST}' -u '${LH_DB_USER}' '${db_name}' | gzip -9 > '/target/_db_${db_name}.sql.gz.tmp' && gzip -t '/target/_db_${db_name}.sql.gz.tmp' && zcat '/target/_db_${db_name}.sql.gz.tmp' | tail -n 5 | grep -q 'Dump completed' && mv -f '/target/_db_${db_name}.sql.gz.tmp' '/target/_db_${db_name}.sql.gz' && chown ${HOST_UID}:${HOST_GID} '/target/_db_${db_name}.sql.gz'"; then
+            echo "--> [OK] Zrzut bazy danych ${db_name} zweryfikowany (--routines --triggers + gzip -t + Dump completed) i zapisany w archiwum."
         else
+            rm -f "${STAGING_DIR}/_db_${db_name}.sql.gz.tmp" 2>/dev/null || true
             DB_BACKUP_VERIFIED=0
             echo "--> [WARN] Nie udało się wykonać lub zweryfikować zrzutu bazy danych MySQL: ${db_name}!"
             send_notification \

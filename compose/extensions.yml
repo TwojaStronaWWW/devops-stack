@@ -11,10 +11,16 @@ services:
       dev.dozzle.name: "cloudflared • Tunel Zero Trust"
       org.opencontainers.image.description: "Szyfrowany tunel krawędziowy Cloudflare Zero Trust (dostęp bez otwartych portów WAN)"
     restart: unless-stopped
+    pids_limit: 128
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - internal_network
     command: tunnel --metrics 0.0.0.0:2000 --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
@@ -23,6 +29,7 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
+          pids: 128
         reservations:
           memory: 64M
     healthcheck:

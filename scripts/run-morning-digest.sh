@@ -99,7 +99,9 @@ if [[ -f "${ENV_FILE:-}" ]]; then
             # Zbieranie Pełnego Rentgena 24h (Deep X-Ray 24h) z odfiltrowaniem szumu healthchecków
             AI_AUDIT_INSIGHT=""
             if command -v python3 >/dev/null 2>&1; then
-                XRAY_FILE="/var/tmp/devops-xray.txt"
+                XRAY_FILE="$(umask 077 && mktemp /var/tmp/devops-xray.XXXXXX)"
+                chmod 600 "${XRAY_FILE}"
+                trap 'rm -f "${XRAY_FILE:-}"' EXIT
                 {
                     echo "=== WYNIK DETERMINISTYCZNEGO AUDYTU 5 WARSTW VPS (ISO 27001, AUTO-HEAL) ==="
                     echo "Data: ${PL_DATE} | Wynik VPS: ${OK_COUNT} OK, ${WARN_COUNT} WARN, ${FAIL_COUNT} FAIL (IoC Clean=${IOC_CLEAN:-1}, Krytyczne wyjatki 24h=${LOG_CRITICAL_24H:-0})"

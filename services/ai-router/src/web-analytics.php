@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/sites-registry.php';
 require_once __DIR__ . '/web-analytics-labels.php';
 
 /**
@@ -350,7 +351,8 @@ function aiRenderWebAnalyticsMetrics(array $s, array &$o): void
     $waSameDay = (($wa['day'] ?? '') === $todayDay);
     $waIsYesterday = (($wa['day'] ?? '') === $yesterdayDay);
     $dailyMap = is_array($wa['daily'] ?? null) ? $wa['daily'] : [];
-    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1'];
+    $knownSites = ['katosalsahub', 'dancepuls', 'fuegolingua', 'twojastronawww', 'raricart', 'radar-p1', 'medicusnoster', 'medycyna-regeneracyjna', 'moje-cv'];
+    $allowedRegistry = array_flip(aiGetAllowedAnalyticsSites());
 
     $dicts = aiGetWebAnalyticsLabelDictionaries();
     $pathLabels    = $dicts['path'];
@@ -384,6 +386,24 @@ function aiRenderWebAnalyticsMetrics(array $s, array &$o): void
                 ? (is_array($yesterdayBucket['unique_visitors'][$uSite]) ? count($yesterdayBucket['unique_visitors'][$uSite]) : (int)$yesterdayBucket['unique_visitors'][$uSite])
                 : 0;
             $yesterdayBucket['unique_visitors'][$uSite] = max($cur, $cnt);
+        }
+    }
+
+    foreach ([
+        $todayBucket['unique_visitors'] ?? [],
+        $yesterdayBucket['unique_visitors'] ?? [],
+        is_array($wa['unique_visitors_total'] ?? null) ? $wa['unique_visitors_total'] : [],
+        is_array($wa['engaged_visits'] ?? null) ? $wa['engaged_visits'] : [],
+        is_array($wa['gsc_keywords'] ?? null) ? $wa['gsc_keywords'] : [],
+    ] as $dynSiteMap) {
+        if (!is_array($dynSiteMap)) {
+            continue;
+        }
+        foreach (array_keys($dynSiteMap) as $dynSite) {
+            $dynSiteStr = (string)$dynSite;
+            if (isset($allowedRegistry[$dynSiteStr]) && !in_array($dynSiteStr, $knownSites, true)) {
+                $knownSites[] = $dynSiteStr;
+            }
         }
     }
 

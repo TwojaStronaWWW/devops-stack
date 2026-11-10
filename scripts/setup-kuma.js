@@ -22,6 +22,8 @@ const SITES = [
     { name: "GalAnonim API", url: "https://api.galanonim.pl/" },
     { name: "Serwis Maxbit", url: "https://serwis.maxbit.com.pl/" },
     { name: "FuegoLingua.pl", url: "https://fuegolingua.pl/" },
+    { name: "MedicusNoster.pl", url: "https://medicusnoster.pl" },
+    { name: "Radar P1", url: "https://radar-p1.pages.dev" },
     { name: "AI Router Healthcheck", url: "http://ai-router:8080/health" },
     { name: "Asystent AMMS & Oracle DBA", url: "http://ai-router:8080/amms" },
 ];
