@@ -117,4 +117,42 @@ EOF
     echo "[OK] Harmonogram devops-change-radar.timer został zainstalowany i aktywowany (co 6 godz.)."
 fi
 
+if [[ -f "${STACK_ROOT}/scripts/sync-civic-mail.sh" ]]; then
+    CM_SERVICE="/etc/systemd/system/devops-civic-mail.service"
+    CM_TIMER="/etc/systemd/system/devops-civic-mail.timer"
+
+    cat <<EOF | sudo tee "${CM_SERVICE}" >/dev/null
+[Unit]
+Description=Kancelaria Obywatelska (wspolnekamienice.pl) - IMAP4_SSL & UDIP 14d SLA Watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=${STACK_ROOT}
+ExecStart=/bin/bash ${STACK_ROOT}/scripts/sync-civic-mail.sh
+StandardOutput=journal
+StandardError=journal
+EOF
+
+    cat <<EOF | sudo tee "${CM_TIMER}" >/dev/null
+[Unit]
+Description=Run Civic Mail IMAP & UDIP SLA Watchdog every 5 minutes
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=5min
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now devops-civic-mail.timer
+    echo "[OK] Harmonogram devops-civic-mail.timer został zainstalowany i aktywowany (co 5 min)."
+fi
+
 systemctl status devops-audit.timer --no-pager | head -n 12
