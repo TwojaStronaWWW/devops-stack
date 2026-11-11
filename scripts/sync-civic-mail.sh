@@ -75,7 +75,10 @@ if [[ "${1:-}" == "--test-notify" ]]; then
     SUMMARY="$(echo "${OUTPUT}" | python3 -c '
 import json, sys
 d = json.loads(sys.stdin.read() or "{}")
-print(f"Skrzynka {d.get(\"mailbox\", \"?\")} podpieta 24/7 na VPS! Wiadomosci w INBOX: {d.get(\"total_messages\", 0)} (nieprzeczytane: {d.get(\"unseen_messages\", 0)}).")
+mb = d.get("mailbox", "?")
+tot = d.get("total_messages", 0)
+uns = d.get("unseen_messages", 0)
+print(f"Skrzynka {mb} podpieta 24/7 na VPS! Wiadomosci w INBOX: {tot} (nieprzeczytane: {uns}).")
 ')"
     send_ntfy "Kancelaria Obywatelska: Nasluch 24/7 aktywny" "default" "white_check_mark,mailbox_with_mail" "${SUMMARY}"
     echo "${SUMMARY}"
@@ -94,9 +97,14 @@ import json, sys
 d = json.loads(sys.stdin.read() or "{}")
 lines = []
 for m in d.get("new_messages") or []:
-    sig = f" [{m[\"signature\"]}]" if m.get("signature") else ""
-    atts = f"\nZalaczniki: {\", \".join(m[\"attachments\"])}" if m.get("attachments") else ""
-    lines.append(f"Od: {m.get(\"from\", \"?\")}\nTemat: {m.get(\"subject\", \"?\")}{sig}{atts}\nPodglad: {m.get(\"snippet\", \"\")[:180]}")
+    sig_val = m.get("signature") or ""
+    sig = f" [{sig_val}]" if sig_val else ""
+    att_list = m.get("attachments") or []
+    atts = ("\nZalaczniki: " + ", ".join(att_list)) if att_list else ""
+    frm = m.get("from", "?")
+    subj = m.get("subject", "?")
+    snip = (m.get("snippet") or "")[:180]
+    lines.append(f"Od: {frm}\nTemat: {subj}{sig}{atts}\nPodglad: {snip}")
 print("\n---\n".join(lines))
 ')"
     send_ntfy "Nowe pismo w skrzynce wspolnekamienice (${NEW_COUNT})" "high" "incoming_envelope,classical_building" "${MAIL_BODY}"
@@ -114,7 +122,11 @@ import json, sys
 d = json.loads(sys.stdin.read() or "{}")
 lines = []
 for a in d.get("overdue_alerts") or []:
-    lines.append(f"• {a[\"case_code\"]} ({a[\"category\"]}) — termin minal {a[\"deadline_date\"]} ({a[\"days_overdue\"]} dni po terminie). Gotowe do ponaglenia / skargi WSA!")
+    cc = a.get("case_code", "?")
+    cat = a.get("category", "?")
+    dl = a.get("deadline_date", "?")
+    ov = a.get("days_overdue", 0)
+    lines.append(f"• {cc} ({cat}) — termin minal {dl} ({ov} dni po terminie). Gotowe do ponaglenia / skargi WSA!")
 print("\n".join(lines))
 ')"
     send_ntfy "UDIP 14 dni: Termin ustawowy minal (${OVERDUE_COUNT})" "high" "hourglass_flowing_sand,scales" "${SLA_BODY}"
