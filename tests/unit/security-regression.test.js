@@ -66,10 +66,10 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const memLimitCount = (mainCompose.match(/memory:\s*\d+[MG]/g) || []).length;
       const mainHealthCount = (mainCompose.match(/^\s*healthcheck:\s*$/gm) || []).length;
 
-      // W docker-compose.yml jest 10 usług (uptime-kuma, prometheus, grafana, node-exporter, cadvisor, dozzle, github-exporter, ai-router, ntfy, privatebin)
-      assert.ok(noNewPrivCount >= 10, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 10)`);
-      assert.ok(memLimitCount >= 10, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 10)`);
-      assert.strictEqual(mainHealthCount, 10, `Wszystkie 10 usług w docker-compose.yml musi posiadać zdefiniowany healthcheck (znaleziono: ${mainHealthCount})`);
+      // W docker-compose.yml jest 12 usług (uptime-kuma, prometheus, grafana, node-exporter, cadvisor, dozzle, github-exporter, ai-router, ntfy, privatebin, freescout-db, freescout)
+      assert.ok(noNewPrivCount >= 12, `Zbyt mało deklaracji no-new-privileges:true w docker-compose.yml (${noNewPrivCount} < 12)`);
+      assert.ok(memLimitCount >= 12, `Brak limitów pamięci RAM dla wszystkich kontenerów w docker-compose.yml (${memLimitCount} < 12)`);
+      assert.strictEqual(mainHealthCount, 12, `Wszystkie 12 usług w docker-compose.yml musi posiadać zdefiniowany healthcheck (znaleziono: ${mainHealthCount})`);
       assert.strictEqual(/^\s*privileged:\s*true\s*$/m.test(mainCompose), false, 'CIS Docker Benchmark 5.4: kontenery w docker-compose.yml nie mogą używać privileged: true (użyj cap_add)');
       assert.match(mainCompose, /referenced_memory/, 'cAdvisor powinien wyłączać metrykę referenced_memory (ochrona przed spamem smaps w logach)');
 
@@ -86,8 +86,8 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       assert.match(runnersCompose, /cap_drop:/, 'Runnery CI/CD powinny jawnie ograniczać niebezpieczne zdolności jądra (cap_drop)');
 
       // Limity procesów (pids_limit) oraz rotacja logów we wszystkich plikach Compose + brak hasła sysadm w amms-lab.yml
-      assert.ok((mainCompose.match(/^\s*pids_limit:\s*\d+/gm) || []).length >= 10, 'Wszystkie 10 usług w docker-compose.yml musi mieć pids_limit');
-      assert.ok((mainCompose.match(/max-size:\s*"10m"/g) || []).length >= 10, 'Wszystkie 10 usług w docker-compose.yml musi mieć rotację logów max-size: "10m"');
+      assert.ok((mainCompose.match(/^\s*pids_limit:\s*\d+/gm) || []).length >= 12, 'Wszystkie 12 usług w docker-compose.yml musi mieć pids_limit');
+      assert.ok((mainCompose.match(/max-size:\s*"10m"/g) || []).length >= 12, 'Wszystkie 12 usług w docker-compose.yml musi mieć rotację logów max-size: "10m"');
       assert.match(extCompose, /^\s*pids_limit:\s*\d+/m, 'Usługa cloudflared musi mieć pids_limit');
       assert.ok((runnersCompose.match(/^\s*pids_limit:\s*\d+/gm) || []).length >= 4, 'Wszystkie runnery w runners.yml muszą mieć pids_limit');
 
@@ -148,6 +148,9 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
         const res = spawnSync('php', ['-l', path.join(ROUTER_SRC_DIR, phpFile)], { encoding: 'utf-8' });
         assert.strictEqual(res.status, 0, `Błąd składni PHP w ${phpFile}: ${res.stderr || res.stdout}`);
       }
+      const fsSetupPhp = path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.php');
+      const fsRes = spawnSync('php', ['-l', fsSetupPhp], { encoding: 'utf-8' });
+      assert.strictEqual(fsRes.status, 0, `Błąd składni PHP w setup-freescout-mailboxes.php: ${fsRes.stderr || fsRes.stdout}`);
     });
 
     it('funkcje pomocnicze PHP (getClientIp, load_env, aiExtractContactLeads, executeJsonPost) powinny przechodzić testy jednostkowe CLI', { skip: !hasPhpCli() }, () => {

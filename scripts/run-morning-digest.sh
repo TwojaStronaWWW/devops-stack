@@ -126,14 +126,14 @@ if [[ -f "${ENV_FILE:-}" ]]; then
                     echo "=== SKANER ANOMALII LOGOW KONTENEROW Z PELNYCH 24 GODZIN (--since 24h, bez szumu healthcheckow) ==="
                     for cname in "${EXPECTED_CONTAINERS[@]}"; do
                         anom_24h="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' \
-                            | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|id=anonymous:0|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|HEAD /|Listening for Jobs|Connected to GitHub|plugins-bundled|\.gitkeep|Pending:.*Retry: [12]\b|no recent network activity)' \
+                            | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|id=anonymous:0|connection reset by peer|referenced_memory|machine info|container factory failed|inotify_add_watch|No such image: sha256|Runner connect error|HttpRequestException|SIGTERM|Shutting down|GET /health|GET /metrics|GET /amms|GET /login|HEAD /|Listening for Jobs|Connected to GitHub|plugins-bundled|\.gitkeep|Pending:.*Retry: [12]\b|no recent network activity)' \
                             | grep -iE '(error|warn|fail|fatal|panic|crit|exception|denied|security_blocked|\bban(ned)?\b|corrupt|unhealthy)' \
                             | tail -n 6 | cut -c 1-240 || true)"
                         if [[ -n "${anom_24h}" ]]; then
                             echo "--- [${cname}] ANOMALIE 24H ---"
                             echo "${anom_24h}"
                         else
-                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|referenced_memory|Found node without cache information|GET /health|GET /metrics)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
+                            last_line="$(docker logs --since 24h "${cname}" 2>&1 | tr -d '\000' | grep -vE '(broken pipe|context canceled|permissions\.sync\.forbidden|referenced_memory|Found node without cache information|GET /health|GET /metrics|GET /login)' | tail -n 1 | cut -c 1-180 || echo 'OK')"
                             echo "--- [${cname}] 24h: 0 bledow/ostrzezen (ostatni wpis: ${last_line})"
                         fi
                     done

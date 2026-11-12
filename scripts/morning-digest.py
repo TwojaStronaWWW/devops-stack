@@ -579,7 +579,7 @@ def cmd_ai_audit(env_vars: dict) -> int:
         "Jesteś Niezależnym Audytorem #1 (Perspektywa Red Team / Pentester, Certyfikaty SSL & Reputacja RBL). "
         "Przeprowadź niezależny audyt krzyżowy WSZYSTKICH 3 PRZESTRZENI i wypisz po polsku dokładnie 3 krótkie punkty (po 1-2 zdania na obszar):\n"
         "- [1. Twój Hosting LH.pl (Auto-Heal)]: oceń blokady .htaccess, uprawnienia PoLP, Auto-Heal, ważność certyfikatów SSL, reputację antyspamową RBL oraz terminy wygaśnięcia domen (wskaż jeśli domena wymaga opłacenia <35 dni).\n"
-        "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), blokady WAF L7 i Fail2ban, reputację RBL IP VPS oraz logi 12 kontenerów.\n"
+        "- [2. Serwer VPS (Auto-Heal)]: oceń odporność perymetru Zero Trust (UFW/DOCKER-USER/SSH Ed25519), blokady WAF L7 i Fail2ban, reputację RBL IP VPS oraz logi 16 kontenerów.\n"
         "- [3. Hosting Klienta nazwa.pl (100% Read-Only)]: oceń wyłącznie informacyjnie (bez żadnych zmian!) kwarantannę 0000, pliki 0444 na medycyna-regeneracyjna.pl, szablon statyczny TSW + .env 0600 na medicusnoster.pl, czysty kod HTML oraz ważność domen i certyfikatów SSL klienta."
     )
 

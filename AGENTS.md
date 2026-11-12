@@ -30,7 +30,7 @@ VPS/
 ├── .github/workflows/             # lint-compose.yml, deploy.yml (SSH + nscd flush + audyt), external-watchdog.yml, ai-security-review.yml
 ├── .githooks/                     # pre-commit (ochrona sekretów .env/.env.bak*), commit-msg (Conventional Commits)
 ├── compose/
-│   ├── docker-compose.yml         # devops_internal_network: Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router (8085), Ntfy (8086), PrivateBin (8087), GitHub Exporter
+│   ├── docker-compose.yml         # devops_internal_network: Prometheus, Grafana, cAdvisor, Node Exporter, Uptime Kuma, Dozzle, AI Router (8085), Ntfy (8086), PrivateBin (8087), FreeScout (8088) + MariaDB, GitHub Exporter
 │   ├── runners.yml                # Kontenerowe GitHub Actions Runnery ARM64 (devops_runners_network)
 │   └── extensions.yml             # Tunel krawędziowy Cloudflare Zero Trust (cloudflared --metrics 0.0.0.0:2000)
 ├── config/
@@ -70,7 +70,7 @@ VPS/
    - **Warstwa CI/CD i Hosta:** Sekrety GitHub Actions (`VPS_HOST`, `VPS_SSH_KEY`, `FTP_*`, `LH_*`); na VPS `/opt/devops-stack/.env` posiada uprawnienia `chmod 600` (właściciel `ubuntu`).
    - **KeePass-First Secret Provisioning:** Zanim jakikolwiek nowy klucz, hasło lub token trafi do `.env` lub kodu, Agent ma bezwzględny obowiązek zapisania go w bazie **KeePass**. Nowe hasła muszą mieć min. 32 znaki bez znaku `$`. Pliki `.env`, `.env.bak*`, `*.pem`, `*.key`, `id_ed25519*` i `*.prom` są wykluczone z Git.
 2. **Kopie Zapasowe, Weryfikacja Integralności, Nocny Restore Drill i Autonomiczny Audyt 24/7 (Disaster Recovery):**
-   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Snapshot 7 wolumenów Dockera + `amms-knowledge.sqlite` z testem `PRAGMA quick_check` i `tar -tzf` (`devops_backup_verified`, `devops_backup_sqlite_verified`), szyfrowaniem AES-256-CBC (`BACKUP_ENCRYPTION_KEY`), retencją **30 dni lokalnie** i **14 dni w Cloudflare R2** (`rclone delete --min-age 14d`). Co noc test `restore-backup.sh --verify-only` (`devops_backup_restore_drill_verified`).
+   - **Backup Wolumenów (`backup-offsite.sh`) i Odtwarzanie (`restore-backup.sh`):** Snapshot 12 wolumenów Dockera + gorący zrzut `mariadb-dump` (`freescout-db`) + `amms-knowledge.sqlite` z testem `PRAGMA quick_check` i `tar -tzf` (`devops_backup_verified`, `devops_backup_sqlite_verified`), szyfrowaniem AES-256-CBC (`BACKUP_ENCRYPTION_KEY`), retencją **30 dni lokalnie** i **14 dni w Cloudflare R2** (`rclone delete --min-age 14d`). Co noc test `restore-backup.sh --verify-only` (`devops_backup_restore_drill_verified`).
    - **Backup Stron WWW (`backup-websites-lh.sh`):** Backup z **LH.pl** przez **FTPS TLS** (`ftp:ssl-protect-data true`, `--no-perms`), `mysqldump`, test `tar -tzf` (`devops_backup_websites_verified`, `devops_backup_websites_db_verified`) oraz rotacja 30d lokalnie / 14d w R2.
    - **Garbage Collection i OCI Keepalive Buffer:** Po `deploy.yml`, `backup-offsite.sh` i `audit-server.sh` czyszczone są obrazy (`docker image prune -f`) i cache (`docker builder prune --filter "until=168h" -f`). Kontener `oci-keepalive-buffer` utrzymuje bufor 4.8 GB RAM w `tmpfs` (`devops_oci_keepalive_buffer_bytes`).
    - **Harmonogramy Systemd i Poranny Audytor Dual-AI (`HIGH Reasoning` $0.00 + Smart Escalation Claude Sonnet 4.6):**

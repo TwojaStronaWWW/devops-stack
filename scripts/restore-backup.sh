@@ -164,6 +164,19 @@ for VARCH in "${VOLUME_ARCHIVES[@]}"; do
     fi
 done
 
+shopt -s nullglob
+FS_SQL_DUMPS=("${EXTRACT_DIR}"/freescout_mariadb_*.sql.gz)
+shopt -u nullglob
+for FS_DUMP in "${FS_SQL_DUMPS[@]}"; do
+    FS_BASE="$(basename "${FS_DUMP}")"
+    if gzip -t "${FS_DUMP}" 2>/dev/null && gzip -dc "${FS_DUMP}" 2>/dev/null | tail -n 5 | grep -q "Dump completed"; then
+        echo "    [OK MariaDB] Zrzut logiczny ${FS_BASE} jest w 100% spójny (gzip -t & Dump completed)."
+    else
+        echo "[BŁĄD MariaDB] Uszkodzony lub niekompletny zrzut bazy ${FS_BASE}!" >&2
+        exit 1
+    fi
+done
+
 if [[ "${VERIFY_ONLY}" == "true" ]]; then
     echo "=============================================================================="
     echo "==> [SUKCES DRILLU] Test odtworzeniowy (--verify-only) zakończony w 100% pomyślnie!"
@@ -198,11 +211,12 @@ for VARCH in "${VOLUME_ARCHIVES[@]}"; do
         sh -c "tar -xzf /backup.tar.gz -C /target"
 done
 
-# Korekta uprawnień PoLP (ISO 27001): Grafana (UID 472), Prometheus (UID 65534), AI Router (UID 65534)
+# Korekta uprawnień PoLP (ISO 27001): Grafana (UID 472), Prometheus (UID 65534), AI Router (UID 65534), MariaDB (UID 999)
 echo "--> Ustawianie uprawnień non-root (PoLP) na odtworzonych wolumenach..."
 docker run --rm -v grafana_data:/target alpine:latest chown -R 472:472 /target 2>/dev/null || true
 docker run --rm -v prometheus_data:/target alpine:latest chown -R 65534:65534 /target 2>/dev/null || true
 docker run --rm -v ai_router_storage:/target alpine:latest chown -R 65534:65534 /target 2>/dev/null || true
+docker run --rm -v freescout_db_data:/target alpine:latest chown -R 999:999 /target 2>/dev/null || true
 
 # 6. Odtworzenie statycznej bazy wiedzy SQLite FTS5 Asystenta AMMS (162 MB, wykluczona z Git) z Cloudflare R2
 AMMS_SQLITE_TARGET="${STACK_ROOT}/services/ai-router/data/amms-knowledge.sqlite"

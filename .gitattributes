@@ -2,8 +2,10 @@
 # Zapobiega błędom '\r: command not found' w środowiskach Linux, Docker, WSL2 i GitHub Actions
 * text=auto eol=lf
 
-# Skrypty powłoki i hooki gita bezwzględnie w formacie LF
+# Skrypty powłoki, Pythona, PHP i hooki gita bezwzględnie w formacie LF
 *.sh text eol=lf
+*.py text eol=lf
+*.php text eol=lf
 .githooks/* text eol=lf
 *.bash text eol=lf
 

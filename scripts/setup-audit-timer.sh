@@ -155,4 +155,8 @@ EOF
     echo "[OK] Harmonogram devops-civic-mail.timer został zainstalowany i aktywowany (co 5 min)."
 fi
 
+if [[ -f "${STACK_ROOT}/scripts/setup-freescout-ntfy-timer.sh" ]]; then
+    STACK_ROOT="${STACK_ROOT}" bash "${STACK_ROOT}/scripts/setup-freescout-ntfy-timer.sh"
+fi
+
 systemctl status devops-audit.timer --no-pager | head -n 12

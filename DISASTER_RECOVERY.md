@@ -49,6 +49,11 @@ docker volume create uptime_kuma_data
 docker volume create grafana_data
 docker volume create prometheus_data
 docker volume create ai_router_storage
+docker volume create ntfy_data
+docker volume create privatebin_data
+docker volume create freescout_db_data
+docker volume create freescout_data
+docker volume create freescout_logs
 docker volume create runner_zeslownikiem_data
 docker volume create runner_twojastronawww_data
 docker volume create runner_gal_anonim_web_data
@@ -57,7 +62,7 @@ mkdir -p /opt/devops-stack/backups/websites
 ```
 
 ### Krok 5: Odtworzenie danych z archiwów (Restore) (Czas: ~2 min)
-Możesz przeprowadzić automatyczne pobranie z chmury Cloudflare R2, odszyfrowanie AES-256-CBC, weryfikację spójności SQLite oraz przywrócenie wszystkich 7 wolumenów, uprawnień PoLP i statycznej bazy wiedzy `amms-knowledge.sqlite` (162 MB FTS5 z `r2:${S3_BUCKET}/static/amms-knowledge.sqlite.gz.enc`) jednym poleceniem:
+Możesz przeprowadzić automatyczne pobranie z chmury Cloudflare R2, odszyfrowanie AES-256-CBC, weryfikację spójności SQLite/MariaDB oraz przywrócenie wszystkich 12 wolumenów, uprawnień PoLP i statycznej bazy wiedzy `amms-knowledge.sqlite` (162 MB FTS5 z `r2:${S3_BUCKET}/static/amms-knowledge.sqlite.gz.enc`) jednym poleceniem:
 
 ```bash
 # Opcja A (Zalecana — pełny automat pobierający najświeższy backup wolumenów + bazę AMMS FTS5 z Cloudflare R2):
@@ -107,7 +112,7 @@ sudo bash /opt/devops-stack/scripts/setup-backup-timer.sh
 
 ## 3. Test Poprawności (Post-Recovery Checklist)
 
-- [ ] Wszystkie 12 kontenerów (w tym `oci-keepalive-buffer`) ma status `Up (healthy)` / `running`.
+- [ ] Wszystkie 16 kontenerów (w tym `freescout-db`, `freescout`, `ntfy`, `privatebin`) ma status `Up (healthy)` / `running`.
 - [ ] Runnery `runner-zeslownikiem-unified`, `runner-twojastronawww-unified` oraz `runner-gal-anonim-web` działają w odseparowanej sieci `devops_runners_network`.
 - [ ] AI Router odpowiada na `curl -s http://127.0.0.1:8085/health`, posiada bazę FTS5 `/app/data/amms-knowledge.sqlite` (162 MB), ma rozgrzane wpisy Quick Prompts w `/app/storage/cache` (`warm-ai-cache.sh`) oraz eksportuje metryki pod `http://127.0.0.1:8085/metrics`.
 - [ ] Uptime Kuma prezentuje wszystkie 10 monitorowanych witryn i usług (w tym `AI Router Healthcheck` = UP).

@@ -514,6 +514,135 @@ services:
       retries: 3
       start_period: 10s
 
+  # ============================================================================
+  # FreeScout DB: Izolowana relacyjna baza poczty MariaDB 10.11 (InnoDB UTF8MB4)
+  # ============================================================================
+  freescout-db:
+    image: mariadb:10.11
+    container_name: freescout-db
+    labels:
+      dev.dozzle.name: "freescout-db • Baza Poczty MariaDB"
+      org.opencontainers.image.description: "Izolowana baza danych MariaDB 10.11 dla centrum poczty FreeScout (brak wystawionych portów)"
+    restart: unless-stopped
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal_network
+    volumes:
+      - freescout_db_data:/var/lib/mysql
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      - "--innodb-buffer-pool-size=128M"
+      - "--max-connections=64"
+    environment:
+      - MARIADB_ROOT_PASSWORD=${FREESCOUT_DB_ROOT_PASS:-ChangeMe_FreeScoutDbRootPass_2026!}
+      - MARIADB_DATABASE=freescout
+      - MARIADB_USER=freescout
+      - MARIADB_PASSWORD=${FREESCOUT_DB_PASS:-ChangeMe_FreeScoutDbUserPass_2026!}
+      - TZ=${TZ:-Europe/Warsaw}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 384M
+          pids: 128
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================================
+  # FreeScout: Scentralizowane Centrum Poczty & Helpdesk (Zero-Trust + OPSEC)
+  # ============================================================================
+  freescout:
+    image: nfrastack/freescout:2.2.24
+    container_name: freescout
+    labels:
+      dev.dozzle.name: "freescout • Centrum Poczty & Helpdesk"
+      org.opencontainers.image.description: "Centralne centrum poczty IMAP/SMTP z izolacją tożsamości skrzynek i OPSEC Lockdown (FreeScout)"
+    restart: unless-stopped
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - internal_network
+    ports:
+      # Bezpieczeństwo: Powiązanie wyłącznie z pętlą zwrotną (tunel SSH localhost:8088)
+      - "127.0.0.1:8088:80"
+    volumes:
+      - freescout_data:/data
+      - freescout_logs:/logs
+    depends_on:
+      freescout-db:
+        condition: service_healthy
+    environment:
+      - SETUP_TYPE=AUTO
+      - ENABLE_AUTO_UPDATE=FALSE
+      - DB_TYPE=mariadb
+      - DB_HOST=freescout-db
+      - DB_PORT=3306
+      - DB_NAME=freescout
+      - DB_USER=freescout
+      - DB_PASS=${FREESCOUT_DB_PASS:-ChangeMe_FreeScoutDbUserPass_2026!}
+      - DB_SSL=FALSE
+      - APP_URL=${FREESCOUT_APP_URL:-http://localhost:8088}
+      - ADMIN_EMAIL=${FREESCOUT_ADMIN_EMAIL:-admin@poczta.local}
+      - ADMIN_FIRST_NAME=Krzysztof
+      - ADMIN_LAST_NAME=Admin
+      - ADMIN_PASS=${FREESCOUT_ADMIN_PASS:-ChangeMe_FreeScoutAdminPass_2026!}
+      - TIMEZONE=${TZ:-Europe/Warsaw}
+      - FREESCOUT_APP_TIMEZONE=${TZ:-Europe/Warsaw}
+      - FREESCOUT_APP_LOCALE=pl
+      - FREESCOUT_APP_DEBUG=false
+      - FREESCOUT_APP_TRUSTED_PROXIES=*
+    deploy:
+      resources:
+        limits:
+          cpus: "0.8"
+          memory: 512M
+          pids: 256
+        reservations:
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H 'X-Forwarded-Proto: https' http://127.0.0.1:80/login >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
 # ==============================================================================
 # Sieć izolowana
 # ==============================================================================
@@ -540,3 +669,9 @@ volumes:
     name: ntfy_cache
   privatebin_data:
     name: privatebin_data
+  freescout_db_data:
+    name: freescout_db_data
+  freescout_data:
+    name: freescout_data
+  freescout_logs:
+    name: freescout_logs

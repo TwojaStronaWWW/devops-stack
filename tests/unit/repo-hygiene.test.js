@@ -243,7 +243,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /\$sanitizedHistory/);
   });
 
-  it('docker-compose.yml powinien zawierać zdefiniowany serwis ai-router oraz wolumen ai_router_storage', () => {
+  it('docker-compose.yml powinien zawierać zdefiniowany serwis ai-router, wolumen ai_router_storage oraz utwardzony stos FreeScout + MariaDB', () => {
     const composePath = path.join(ROOT_DIR, 'compose', 'docker-compose.yml');
     const content = fs.readFileSync(composePath, 'utf-8');
 
@@ -251,6 +251,12 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(content, /ai_router_storage:/);
     assert.match(content, /127\.0\.0\.1:8085:8080/);
     assert.match(content, /data:\/app\/data:ro/);
+    assert.match(content, /freescout-db:/);
+    assert.match(content, /freescout:/);
+    assert.match(content, /127\.0\.0\.1:8088:80/);
+    assert.match(content, /freescout_db_data:/);
+    assert.match(content, /freescout_data:/);
+    assert.match(content, /freescout_logs:/);
   });
 
   it('skrypty diagnostyki i audytu żywego serwera (audit-server.sh, verify-remote.ps1/.cmd) powinny istnieć i eksportować metryki', () => {
@@ -282,6 +288,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(composeMain, /dev\.dozzle\.name:\s*"prometheus • Baza Metryk TSDB"/);
     assert.match(composeMain, /dev\.dozzle\.name:\s*"grafana • Dashboardy i Wykresy"/);
     assert.match(composeMain, /dev\.dozzle\.name:\s*"ai-router • Czatbot AI & AMMS"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"freescout-db • Baza Poczty MariaDB"/);
+    assert.match(composeMain, /dev\.dozzle\.name:\s*"freescout • Centrum Poczty & Helpdesk"/);
     assert.match(composeExt, /dev\.dozzle\.name:\s*"cloudflared • Tunel Zero Trust"/);
     assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-twojastronawww • CI\/CD TwojaStronaWWW"/);
     assert.match(composeRunners, /dev\.dozzle\.name:\s*"runner-zeslownikiem • CI\/CD ZeSłownikiem"/);
@@ -469,6 +477,15 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /openssl enc -aes-256-cbc -pbkdf2/);
     assert.match(offsiteBackup, /runner_gal_anonim_web_data/);
+    assert.match(offsiteBackup, /freescout_db_data/);
+    assert.match(offsiteBackup, /freescout_data/);
+    assert.match(offsiteBackup, /freescout_logs/);
+    assert.match(offsiteBackup, /mariadb-dump/);
+
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.php')), 'Brak scripts/setup-freescout-mailboxes.php');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.sh')), 'Brak scripts/setup-freescout-mailboxes.sh');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'sync-freescout-ntfy.sh')), 'Brak scripts/sync-freescout-ntfy.sh');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-ntfy-timer.sh')), 'Brak scripts/setup-freescout-ntfy-timer.sh');
 
     const routerPhp = readRouterCombinedPhp();
     assert.match(routerPhp, /filemtime\(\$oldRateFile\)/);

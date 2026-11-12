@@ -50,6 +50,9 @@ VOLUMES_TO_BACKUP=(
     "ai_router_storage"
     "ntfy_data"
     "privatebin_data"
+    "freescout_db_data"
+    "freescout_data"
+    "freescout_logs"
     "runner_zeslownikiem_data"
     "runner_twojastronawww_data"
     "runner_gal_anonim_web_data"
@@ -164,6 +167,27 @@ echo "==========================================================================
 
 ARCHIVES_CREATED=()
 TOTAL_SIZE=0
+
+# Gorący zrzut transakcyjny bazy MariaDB 10.11 (FreeScout) przed archiwizacją wolumenów raw (.sql.gz, nie .tar.gz!)
+if docker inspect -f '{{.State.Running}}' freescout-db 2>/dev/null | grep -qx "true"; then
+    FS_SQL_NAME="freescout_mariadb_${TIMESTAMP}.sql.gz"
+    FS_SQL_PATH="${BACKUP_DIR}/${FS_SQL_NAME}"
+    echo "--> [0/3] Gorący zrzut bazy MariaDB (freescout-db -> ${FS_SQL_NAME})..."
+    docker exec freescout-db sh -c 'MYSQL_PWD="${MARIADB_ROOT_PASSWORD}" mariadb-dump -u root --single-transaction --quick --routines --triggers "${MARIADB_DATABASE}"' \
+        | gzip -c > "${FS_SQL_PATH}"
+    chmod 600 "${FS_SQL_PATH}" 2>/dev/null || true
+
+    if gzip -t "${FS_SQL_PATH}" 2>/dev/null && gzip -dc "${FS_SQL_PATH}" 2>/dev/null | tail -n 5 | grep -q "Dump completed"; then
+        ARCHIVES_CREATED+=("${FS_SQL_PATH}")
+        FS_SQL_SIZE="$(du -h "${FS_SQL_PATH}" | awk '{print $1}')"
+        echo "--> [OK MariaDB] Zweryfikowano spójny zrzut logiczny: ${FS_SQL_NAME} (${FS_SQL_SIZE})"
+    else
+        echo "--> [BŁĄD MariaDB] Zrzut ${FS_SQL_NAME} nie przeszedł weryfikacji integralności (gzip -t / Dump completed)!"
+        rm -f "${FS_SQL_PATH}"
+        write_prometheus_metrics 0 0 0
+        exit 1
+    fi
+fi
 
 for VOLUME in "${VOLUMES_TO_BACKUP[@]}"; do
     if docker volume inspect "${VOLUME}" >/dev/null 2>&1; then
@@ -343,7 +367,7 @@ write_prometheus_metrics "${BACKUP_STATUS}" "${OFFSITE_STATUS}" "${BUNDLE_SIZE_B
 # 3. Osierocone warstwy obrazów Dockera (<none>) oraz build cache starszy niż 7 dni są automatycznie usuwane
 echo "==> Rotacja lokalna: usuwanie kopii zbiorczych starszych niż ${RETENTION_DAYS} dni oraz higiena obrazów Dockera..."
 find "${BACKUP_DIR}" -maxdepth 1 -type f \( -name "vps_full_backup_*.tar.gz" -o -name "vps_full_backup_*.tar.gz.enc" \) -mtime +"${RETENTION_DAYS}" -exec rm -f {} +
-find "${BACKUP_DIR}" -maxdepth 1 -type f ! -name "vps_full_backup_*" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -exec rm -f {} +
+find "${BACKUP_DIR}" -maxdepth 1 -type f ! -name "vps_full_backup_*" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" -o -name "freescout_mariadb_*.sql.gz" \) -exec rm -f {} +
 docker image prune -f >/dev/null 2>&1 || true
 docker builder prune --filter "until=168h" -f >/dev/null 2>&1 || true
 

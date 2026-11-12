@@ -103,7 +103,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
   - Grafana działa jako użytkownik `grafana` (UID `472`) z domyślną rolą `Viewer` dla dostępu bez logowania przez tunel SSH (`GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`).
   - Uptime Kuma ma wymuszone logowanie (`DISABLE_AUTH=false`) i jest dostępna przez tunel SSH (`127.0.0.1:3001`).
   - AI Router działa jako użytkownik `nobody` z 4 workerami PHP (`PHP_CLI_SERVER_WORKERS=4`), wyłączonymi funkcjami powłoki (`disable_functions = exec,passthru,shell_exec,system,proc_open,popen,...`), wyłączonym `file_uploads` oraz `open_basedir = /app:/tmp`.
-- **Flaga bezpieczeństwa**: `security_opt: [no-new-privileges:true]` uniemożliwia eskalację uprawnień z wnętrza któregokolwiek z 13 kontenerów.
+- **Flaga bezpieczeństwa**: `security_opt: [no-new-privileges:true]` uniemożliwia eskalację uprawnień z wnętrza któregokolwiek z 16 kontenerów.
 - **Pliki konfiguracyjne w trybie tylko do odczytu**: `prometheus.yml`, `rules/`, `provisioning/` oraz bazy wiedzy `data/` montowane z uprawnieniem `:ro`.
 - **Prewencja zapełnienia dysku**: Rotacja logów kontenerów w `/etc/docker/daemon.json` (`max-size: 10m`, `max-file: 3`).
 
@@ -125,7 +125,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── pre-commit                 # Git hook blokujący wycieki sekretów (.env, .env.bak*, *.pem, *.key)
 │   └── commit-msg                 # Git hook wymuszający format Conventional Commits
 ├── compose/
-│   ├── docker-compose.yml         # Stos (devops_internal_network): Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, AI Router, GitHub Exporter, OCI Keepalive Buffer
+│   ├── docker-compose.yml         # Stos (devops_internal_network): Prometheus, Grafana, Kuma, Node Exporter, cAdvisor, Dozzle, AI Router, Ntfy, PrivateBin, FreeScout + MariaDB, GitHub Exporter
 │   ├── extensions.yml             # Tunel Cloudflare Zero Trust (cloudflared)
 │   └── runners.yml                # Runnery GitHub Actions ARM64 w odseparowanej sieci (devops_runners_network)
 ├── config/
@@ -318,7 +318,8 @@ Aby wyeliminować konieczność manualnego otwierania terminala i zestawiania tu
 3. Po ustabilizowaniu portów automatycznie otwiera domyślną przeglądarkę z gotowymi kartami:
    - **Grafana** (`http://127.0.0.1:3000`): Działa w trybie podglądu **Anonymous Viewer (`GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`)** zgodnie z zasadą PoLP (ISO 27001), chroniąc dashboardy przed przypadkowym usunięciem. Pełna edycja wymaga zalogowania na konto administratora.
    - **Uptime Kuma** (`http://127.0.0.1:3001`): Panel statusu 10 monitorowanych witryn i usług.
-   - **Dozzle** (`http://127.0.0.1:8888`): Podgląd logów wszystkich 12 kontenerów w czasie rzeczywistym.
+   - **Dozzle** (`http://127.0.0.1:8888`): Podgląd logów wszystkich 16 kontenerów w czasie rzeczywistym.
+   - **FreeScout** (`http://127.0.0.1:8088`): Scentralizowane centrum poczty IMAP/SMTP z izolacją tożsamości skrzynek i OPSEC Lockdown.
 
 ---
 
@@ -349,8 +350,8 @@ Infrastruktura została zaprojektowana w oparciu o wojskowy rygor **Defense-in-D
 
 Serwer VPS pełni funkcję **Centralnego Sejfu i Węzła Disaster Recovery** dla całej infrastruktury TwojaStronaWWW:
 
-### A. Backup Wolumenów Monitoringu i AI (`scripts/backup-offsite.sh`) + Nocny Restore Drill:
-- Tworzy spójne snapshoty wszystkich 7 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`) wraz z weryfikacją baz SQLite (`PRAGMA quick_check`).
+### A. Backup Wolumenów Monitoringu, Poczty i AI (`scripts/backup-offsite.sh`) + Nocny Restore Drill:
+- Tworzy gorący zrzut `mariadb-dump` (`freescout-db`) oraz spójne snapshoty wszystkich 12 wolumenów (`uptime_kuma_data`, `grafana_data`, `prometheus_data`, `ai_router_storage`, `ntfy_data`, `privatebin_data`, `freescout_db_data`, `freescout_data`, `freescout_logs`, `runner_zeslownikiem_data`, `runner_twojastronawww_data`, `runner_gal_anonim_web_data`) montowanych w trybie tylko do odczytu (`:ro`) wraz z weryfikacją baz SQLite (`PRAGMA quick_check`).
 - Automatycznie weryfikuje integralność wygenerowanego archiwum (`tar -tzf`) przed dalszym przetwarzaniem i eksportuje metrykę `devops_backup_verified`.
 - Szyfruje archiwum symetrycznie algorytmem **AES-256-CBC (PBKDF2)** (`BACKUP_ENCRYPTION_KEY`) i przesyła do **Cloudflare R2 / S3** z kroczącą retencją **30 dni lokalnie na VPS** oraz **14 dni w chmurze R2** (`rclone delete --min-age 14d`, mieszcząc się w 100% w darmowym limicie 10 GB R2).
 - **Automatyczny Nocny Restore Drill (`restore-backup.sh --verify-only`)**: Po wysłaniu kopii do R2 skrypt automatycznie pobiera paczkę z chmury, odszyfrowuje ją w izolowanym katalogu tymczasowym i testuje odtwarzalność archiwów oraz spójność baz SQLite, wystawiając metrykę `devops_backup_restore_drill_verified`.

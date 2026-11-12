@@ -168,6 +168,9 @@ else
         "RUNNER_ORG_TOKEN"
         "RUNNER_TWOJASTRONAWWW_ORG_TOKEN"
         "GEMINI_API_KEY"
+        "FREESCOUT_ADMIN_PASS"
+        "FREESCOUT_DB_PASS"
+        "FREESCOUT_DB_ROOT_PASS"
         "TZ"
     )
 
@@ -268,8 +271,8 @@ fi
 # ==============================================================================
 section "[3/5] WARSTWA 3: Bezpieczeństwo Systemu Operacyjnego i Sieci"
 
-# 1. Porty nasłuchujące na interfejsach publicznych (0.0.0.0 / [::]) - w tym rpcbind (111)
-EXPOSED_WEB_PORTS="$(ss -tuln 2>/dev/null | awk 'NR>1 {print $1, $5}' | grep -E '(0\.0\.0\.0:|\[::\]:)(80|111|443|3000|3001|8080|8085|8888|9090)$' || true)"
+# 1. Porty nasłuchujące na interfejsach publicznych (0.0.0.0 / [::]) - w tym rpcbind (111) oraz MariaDB/Ntfy/PrivateBin/FreeScout
+EXPOSED_WEB_PORTS="$(ss -tuln 2>/dev/null | awk 'NR>1 {print $1, $5}' | grep -E '(0\.0\.0\.0:|\[::\]:)(80|111|443|3000|3001|3306|8080|8085|8086|8087|8088|8888|9090)$' || true)"
 if [[ -z "${EXPOSED_WEB_PORTS}" ]]; then
     pass "Zero Trust WAN: Żaden port webowy/aplikacyjny ani rpcbind (111) nie nasłuchuje na 0.0.0.0 (wyłącznie 127.0.0.1)."
 else
@@ -591,6 +594,8 @@ else
         "ai-router"
         "ntfy"
         "privatebin"
+        "freescout-db"
+        "freescout"
         "cloudflared"
         "runner-zeslownikiem-unified"
         "runner-twojastronawww-unified"
@@ -641,9 +646,9 @@ else
             C_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CNAME}" 2>/dev/null || echo 'none')"
             C_RESTARTS="$(docker inspect -f '{{.RestartCount}}' "${CNAME}" 2>/dev/null || echo '0')"
 
-            # Jeśli kontener został świeżo utworzony podczas deployu lub Auto-Heala i jest w fazie 'starting', poczekaj na pierwszy wynik healthchecka
+            # Jeśli kontener został świeżo utworzony podczas deployu lub Auto-Heala i jest w fazie 'starting', poczekaj na pierwszy wynik healthchecka (do 120s dla migracji FreeScout)
             if [[ "${C_STATE}" == "running" && "${C_HEALTH}" == "starting" ]]; then
-                for _wait_hc in {1..18}; do
+                for _wait_hc in {1..60}; do
                     sleep 2
                     C_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${CNAME}" 2>/dev/null || echo 'none')"
                     [[ "${C_HEALTH}" != "starting" ]] && break
@@ -702,6 +707,7 @@ else
     check_http "Uptime Kuma" "http://127.0.0.1:3001"
     check_http "Dozzle Logs" "http://127.0.0.1:8888"
     check_http "AI Router"   "http://127.0.0.1:8085/health"
+    check_http "FreeScout"   "http://127.0.0.1:8088/login"
 
     # Weryfikacja odporności kontenera Alpine (ai-router) na luki musl OpenSSH (sshole) oraz PHP2Shell (allow_url_fopen=Off, disable_functions)
     if docker inspect ai-router >/dev/null 2>&1; then
@@ -880,7 +886,7 @@ else
     LOG_CRITICAL_SAMPLES=""
     for _cname in "${EXPECTED_CONTAINERS[@]}"; do
         _hits="$(docker logs --since 24h "${_cname}" 2>&1 | tr -d '\000' \
-            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|GET /amms|HEAD /)' \
+            | grep -vE '(broken pipe|context canceled|referenced_memory|machine info|GET /health|GET /metrics|GET /amms|GET /login|HEAD /)' \
             | grep -E '(FATAL|PANIC|Out of memory|Segmentation fault|Uncaught Error|SQLITE_CORRUPT)' | tail -n 2 || true)"
         if [[ -n "${_hits}" ]]; then
             _cnt="$(echo "${_hits}" | wc -l | tr -d ' ')"
@@ -1039,7 +1045,7 @@ else
 fi
 
 # 3. Wolumeny danych
-REQUIRED_VOLUMES=("uptime_kuma_data" "prometheus_data" "grafana_data" "ai_router_storage")
+REQUIRED_VOLUMES=("uptime_kuma_data" "prometheus_data" "grafana_data" "ai_router_storage" "freescout_db_data" "freescout_data" "freescout_logs")
 for VOL in "${REQUIRED_VOLUMES[@]}"; do
     if docker volume inspect "${VOL}" >/dev/null 2>&1; then
         pass "Trwały wolumen Docker '${VOL}' istnieje."
