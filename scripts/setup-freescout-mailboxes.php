@@ -79,13 +79,21 @@ if (class_exists('\Eventy')) {
 }
 PHP;
 
+    $wasActive = class_exists('\App\Module') ? (bool) \App\Module::isActive('imapleaveunread') : false;
+    $changed = (!is_file($modDir . '/module.json')) || (!is_file($modDir . '/start.php')) || !$wasActive;
+
     file_put_contents($modDir . '/module.json', $moduleJson);
     file_put_contents($modDir . '/start.php', $startPhp . PHP_EOL);
 
     if (class_exists('\App\Module') && method_exists('\App\Module', 'setActive')) {
         \App\Module::setActive('imapleaveunread', true);
+        if (method_exists('\App\Module', 'clearModulesCache')) {
+            \App\Module::clearModulesCache();
+        }
     }
-    if (class_exists('\Module') && method_exists('\Module', 'clearCache')) {
+    if ($changed && class_exists('\Illuminate\Support\Facades\Artisan')) {
+        \Illuminate\Support\Facades\Artisan::call('freescout:clear-cache');
+    } elseif (class_exists('\Module') && method_exists('\Module', 'clearCache')) {
         \Module::clearCache();
     }
 
