@@ -30,4 +30,7 @@ docker exec -i -u nginx \
     -e FS_MB_IK_EMAIL \
     -e FS_MB_IK_PASS \
     -e FS_MB_IK_PASS_B64 \
+    -e FS_MB_MAXBIT_EMAIL \
+    -e FS_MB_MAXBIT_PASS \
+    -e FS_MB_MAXBIT_PASS_B64 \
     freescout php < "${PHP_SCRIPT}"

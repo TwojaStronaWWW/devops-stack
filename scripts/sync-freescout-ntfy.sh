@@ -176,6 +176,8 @@ def resolve_badge(email_addr: str, mb_name: str) -> str:
         return "[TwojaStronaWWW]"
     if el == "kontakt@wspolnekamienice.pl":
         return "[Wspólne Kamienice]"
+    if el == "krzysztof.poczatek@maxbit.com.pl" or el.endswith("@maxbit.com.pl"):
+        return "[Maxbit]"
     if el.endswith("@ik.me") or "audyt" in el:
         return "[Audyt ik.me]"
     return f"[{mb_name or email_addr}]"
