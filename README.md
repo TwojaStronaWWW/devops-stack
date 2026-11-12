@@ -319,7 +319,7 @@ Aby wyeliminować konieczność manualnego otwierania terminala i zestawiania tu
    - **Grafana** (`http://127.0.0.1:3000`): Działa w trybie podglądu **Anonymous Viewer (`GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer`)** zgodnie z zasadą PoLP (ISO 27001), chroniąc dashboardy przed przypadkowym usunięciem. Pełna edycja wymaga zalogowania na konto administratora.
    - **Uptime Kuma** (`http://127.0.0.1:3001`): Panel statusu 10 monitorowanych witryn i usług.
    - **Dozzle** (`http://127.0.0.1:8888`): Podgląd logów wszystkich 16 kontenerów w czasie rzeczywistym.
-   - **FreeScout** (`http://127.0.0.1:8088`): Scentralizowane centrum poczty IMAP/SMTP z izolacją tożsamości skrzynek i OPSEC Lockdown.
+   - **FreeScout** (`https://poczta.twojastronawww.pl` / lokalnie `http://127.0.0.1:8088`): Scentralizowane centrum poczty IMAP/SMTP z izolacją tożsamości skrzynek i OPSEC Lockdown.
 
 ---
 

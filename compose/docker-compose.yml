@@ -618,7 +618,7 @@ services:
       - DB_USER=freescout
       - DB_PASS=${FREESCOUT_DB_PASS:-ChangeMe_FreeScoutDbUserPass_2026!}
       - DB_SSL=FALSE
-      - APP_URL=${FREESCOUT_APP_URL:-http://localhost:8088}
+      - APP_URL=${FREESCOUT_APP_URL:-https://poczta.twojastronawww.pl}
       - ADMIN_EMAIL=${FREESCOUT_ADMIN_EMAIL:-admin@poczta.local}
       - ADMIN_FIRST_NAME=Krzysztof
       - ADMIN_LAST_NAME=Admin

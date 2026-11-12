@@ -32,7 +32,13 @@ if [[ -f "${ENV_FILE}" ]]; then
     if [[ -z "${NTFY_TOKEN:-}" ]]; then
         NTFY_TOKEN="$(grep -E '^NTFY_TOKEN=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
     fi
+    if [[ -z "${FREESCOUT_APP_URL:-}" ]]; then
+        FREESCOUT_APP_URL="$(grep -E '^FREESCOUT_APP_URL=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d'=' -f2- | tr -d '"' | tr -d "'" | tr -d '\r' || echo '')"
+    fi
 fi
+
+FREESCOUT_APP_URL="${FREESCOUT_APP_URL:-https://poczta.twojastronawww.pl}"
+FREESCOUT_APP_URL="${FREESCOUT_APP_URL%/}"
 
 if [[ -z "${NTFY_BASE_URL:-}" || "${NTFY_BASE_URL}" == "http://ntfy:8080" ]]; then
     if [[ -n "${NTFY_TOKEN:-}" ]]; then
@@ -55,6 +61,7 @@ fi
 export NTFY_TOPIC="${NTFY_TOPIC:-}"
 export NTFY_BASE_URL
 export NTFY_TOKEN="${NTFY_TOKEN:-}"
+export FREESCOUT_APP_URL
 export STATE_FILE
 export RESET_CURSOR
 
@@ -70,6 +77,7 @@ reset_cursor = os.environ.get("RESET_CURSOR", "0") == "1"
 ntfy_base = os.environ.get("NTFY_BASE_URL", "https://ntfy.sh").rstrip("/")
 ntfy_topic = os.environ.get("NTFY_TOPIC", "").strip()
 ntfy_token = os.environ.get("NTFY_TOKEN", "").strip()
+freescout_url = os.environ.get("FREESCOUT_APP_URL", "https://poczta.twojastronawww.pl").rstrip("/")
 
 
 def run_mariadb_sql(sql: str) -> str:
@@ -146,6 +154,7 @@ preview_expr = "LEFT(REPLACE(REPLACE(COALESCE(c.preview, ''), '\\r', ' '), '\\n'
 query = f"""
 SELECT JSON_OBJECT(
     'id', t.id,
+    'conversation_id', c.id,
     'mailbox_email', COALESCE(m.email, ''),
     'mailbox_name', COALESCE(m.name, ''),
     'subject', COALESCE(c.subject, '(brak tematu)'),
@@ -231,10 +240,14 @@ for line in rows_raw.splitlines():
     if preview:
         body_lines.append(f"Podgląd: {preview}")
 
+    conv_id = int(item.get("conversation_id") or 0)
+    click_url = f"{freescout_url}/conversation/{conv_id}" if conv_id > 0 else freescout_url
+
     headers = {
         "Title": title_hdr,
         "Priority": "default",
         "Tags": "incoming_envelope",
+        "Click": click_url,
         "Content-Type": "text/plain; charset=utf-8",
     }
     if ntfy_token:

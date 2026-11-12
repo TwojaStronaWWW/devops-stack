@@ -81,7 +81,7 @@ Write-Host "  [9090] Prometheus              : http://localhost:9090" -Foregroun
 Write-Host "  [8085] AI Router & AMMS Teams  : http://localhost:8085/amms" -ForegroundColor White
 Write-Host "  [8086] Self-Hosted Ntfy Push   : http://127.0.0.1:8086" -ForegroundColor Green
 Write-Host "  [8087] PrivateBin Sejf Haseł   : http://127.0.0.1:8087" -ForegroundColor Green
-Write-Host "  [8088] FreeScout Centrum Poczty : http://localhost:8088" -ForegroundColor Green
+Write-Host "  [8088] FreeScout Centrum Poczty : https://poczta.twojastronawww.pl (SSH: 127.0.0.1:8088)" -ForegroundColor Green
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -96,8 +96,8 @@ $TabsInOrder = @(
     "http://localhost:3001/dashboard",
     # 4. ASYSTENT EKSPERCKI AMMS & BAZA ORACLE (Microsoft Teams UI)
     "http://localhost:8085/amms",
-    # 5. FREESCOUT CENTRUM POCZTY & HELPDESK
-    "http://localhost:8088"
+    # 5. FREESCOUT CENTRUM POCZTY & HELPDESK (Cloudflare Zero Trust)
+    "https://poczta.twojastronawww.pl"
 )
 
 Write-Host ">> Otwieranie kart w kolejności: [3x Grafana] -> [Dozzle] -> [Uptime Kuma] -> [Asystent AMMS]..." -ForegroundColor Green
