@@ -28,6 +28,17 @@ if (siteSelect) {
 }
 
 /**
+ * Ustawia widoczność elementu bez manipulacji stylami inline (zgodnie z [REF-03] / CSP)
+ * @param {HTMLElement | null} el
+ * @param {boolean} visible
+ */
+function setElementVisible(el, visible) {
+  if (!el) return;
+  el.hidden = !visible;
+  el.classList.toggle('is-hidden', !visible);
+}
+
+/**
  * Ustawia stan ładowania interfejsu (loading state)
  * @param {boolean} isLoading
  */
@@ -35,7 +46,7 @@ function setLoading(isLoading) {
   if (isLoading) {
     submitBtn.disabled = true;
     btnText.innerHTML = '<span class="spinner"></span> Myślę...';
-    errorAlert.style.display = 'none';
+    setElementVisible(errorAlert, false);
     errorAlert.textContent = '';
   } else {
     submitBtn.disabled = false;
@@ -49,8 +60,8 @@ function setLoading(isLoading) {
  */
 function showError(message) {
   errorAlert.textContent = message;
-  errorAlert.style.display = 'block';
-  responseCard.style.display = 'none';
+  setElementVisible(errorAlert, true);
+  setElementVisible(responseCard, false);
 }
 
 /**
@@ -69,6 +80,8 @@ chatForm.addEventListener('submit', async (e) => {
 
   setLoading(true);
   const startTime = performance.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(routerUrl, {
@@ -80,7 +93,8 @@ chatForm.addEventListener('submit', async (e) => {
         site_id: currentSiteId,
         question: question,
         history: siteHistory.slice(-8)
-      })
+      }),
+      signal: controller.signal
     });
 
     const endTime = performance.now();
@@ -112,11 +126,16 @@ chatForm.addEventListener('submit', async (e) => {
     const modelBadge = data.model ? ` • ${data.model}` : '';
     responseBody.textContent = data.answer;
     responseLatency.textContent = `Czas: ${latencySec}s • [${data.site_id}]${modelBadge}`;
-    responseCard.style.display = 'block';
+    setElementVisible(responseCard, true);
 
   } catch (err) {
-    showError(err.message || 'Wystąpił błąd podczas połączenia z routerem AI.');
+    if (err && err.name === 'AbortError') {
+      showError('Przekroczono limit czasu oczekiwania na odpowiedź serwera AI (15s timeout).');
+    } else {
+      showError(err.message || 'Wystąpił błąd podczas połączenia z routerem AI.');
+    }
   } finally {
+    clearTimeout(timeoutId);
     setLoading(false);
   }
 });

@@ -1,4 +1,4 @@
-;<?php http_response_code(403); /*
+;<?php declare(strict_types=1); http_response_code(403); /*
 ; ==============================================================================
 ; PrivateBin Configuration — TwojaStronaWWW Zero-Knowledge Secret Vault
 ; Standard: ISO 27001 Out-of-Band Credential Sharing ("Burn After Reading")

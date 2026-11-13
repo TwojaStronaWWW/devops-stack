@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /amms
+Disallow: /metrics
+Disallow: /radar-data
+Allow: /widget.js
+Allow: /llms.txt
+Allow: /.well-known/security.txt

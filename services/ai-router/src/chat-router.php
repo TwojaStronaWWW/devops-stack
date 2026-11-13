@@ -18,6 +18,9 @@ header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
+// [REF-05] OWASP ASVS: natychmiastowe zwolnienie blokady sesji PHP (mikro-router działa w trybie 100% bezstanowym / Cookieless)
+@session_write_close();
+
 // 0. Ochrona przed atakami PHP2Shell / Wrapper Deserialization & CGI Argument Injection (OWASP / CVE-2024-4577)
 foreach (['phar', 'ftp', 'ftps', 'expect'] as $unsafeStreamWrapper) {
     if (in_array($unsafeStreamWrapper, stream_get_wrappers(), true)) {
@@ -44,6 +47,7 @@ require_once __DIR__ . '/ai-stats.php';
 require_once __DIR__ . '/router-endpoints.php';
 require_once __DIR__ . '/llm-cascade.php';
 require_once __DIR__ . '/lead-notifier.php';
+require_once __DIR__ . '/pii-guard.php';
 
 // 1. Obsługa wczesnych endpointów GET (/widget.js, /radar-data, /radar, /amms, /docs-pdf/*, /amms-page, /metrics, /health)
 aiHandleEarlyGetEndpoints($requestUri, $isFromCloudflare);
@@ -94,7 +98,7 @@ if ($origin !== '') {
         header("Access-Control-Allow-Origin: {$origin}");
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Methods: POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-CSRF-Token');
         header('Access-Control-Max-Age: 86400');
     } else {
         http_response_code(403);
@@ -126,6 +130,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         'error'   => 'Method Not Allowed: Wymagana metoda POST.'
     ], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// [REF-05] OWASP ASVS: weryfikacja opcjonalnego tokenu CSRF w stałym czasie (hash_equals), gdy skonfigurowano AI_ROUTER_CSRF_TOKEN
+$configuredCsrfToken = trim((string)(getenv('AI_ROUTER_CSRF_TOKEN') ?: ''));
+if ($configuredCsrfToken !== '') {
+    $providedCsrfToken = trim((string)($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+    if (!aiVerifyConstantTimeToken($configuredCsrfToken, $providedCsrfToken)) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'error'   => 'CSRF Forbidden: Nieprawidłowy lub brakujący token X-CSRF-Token.'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 // 2b. ENDPOINT BEZCIASTECZKOWEJ ANALITYKI RUCHU WWW (POST /analytics | /collect)
@@ -391,7 +409,7 @@ if ($dynamicContext !== '') {
 $wafCombinedLower = mb_strtolower(implode("\n", $wafScanSegments));
 
 $promptInjectionPattern = '/(ignore\s+(all\s+)?(previous|prior)\s+instructions|disregard\s+(all\s+)?(previous|prior)|zignoruj\s+(wszystkie\s+)?(wcze[śs]niejsze|poprzednie)\s+(instrukcje|zasady)|reveal\s+your\s+(system\s+)?prompt|poka[żz]\s+(sw[óo]j\s+)?system\s+prompt|you\s+are\s+now\s+dan\b|developer\s+mode\s+enabled)/iu';
-$exploitPayloadPattern  = '/(<\s*script\b|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/|\b(phar|expect|php):\/\/|\b(auto_prepend_file|auto_append_file|allow_url_include)\b)/iu';
+$exploitPayloadPattern  = '/(<\s*script\b|<\s*iframe\b[^>]*\bsrcdoc\s*=|mathlive#virtual-keyboard-message|javascript\s*:|on(error|load|mouseover)\s*=|\bunion\s+all\s+select\b|\bdrop\s+table\b|\/etc\/(passwd|shadow)|\.\.\/\.\.\/|\b(phar|expect|php):\/\/|\b(auto_prepend_file|auto_append_file|allow_url_include)\b)/iu';
 
 $isPromptInjection = (bool)preg_match($promptInjectionPattern, $wafCombinedLower);
 $isExploitPayload  = !$isPromptInjection && (bool)preg_match($exploitPayloadPattern, $wafCombinedLower);
@@ -610,9 +628,30 @@ $isAmmsDbQuery = $isAmmsSite && (
     || (class_exists('AmmsRagSearch') && AmmsRagSearch::isDatabaseOrArchitectureQuery($ragSearchQuery, $ammsChannel))
 );
 
+// Maskowanie wrażliwych polskich identyfikatorów PII (PESEL, dowód osobisty, IBAN, adres) po ekstrakcji leada,
+// a przed wysyłką promptu do zewnętrznych dostawców LLM (port polanon MIT — zachowuje telefony i e-maile).
+$piiGuardResult = mask_sensitive_pl_pii($question);
+$llmQuestion = $piiGuardResult['masked'];
+$hasMaskedPii = ($piiGuardResult['count'] > 0);
+$llmHistory = [];
+foreach ($sanitizedHistory as $turn) {
+    if (($turn['role'] ?? '') === 'user') {
+        $turnPii = mask_sensitive_pl_pii((string)$turn['text']);
+        if ($turnPii['count'] > 0) {
+            $hasMaskedPii = true;
+        }
+        $llmHistory[] = [
+            'role' => $turn['role'],
+            'text' => $turnPii['masked'],
+        ];
+    } else {
+        $llmHistory[] = $turn;
+    }
+}
+
 $cascadeResult = aiRunModelCascade([
-    'question'            => $question,
-    'sanitizedHistory'    => $sanitizedHistory,
+    'question'            => $llmQuestion,
+    'sanitizedHistory'    => $llmHistory,
     'systemInstruction'   => $systemInstruction,
     'isAmmsSite'          => $isAmmsSite,
     'isAmmsDbQuery'       => $isAmmsDbQuery,
@@ -643,7 +682,7 @@ if ($answer === null) {
 }
 
 // Zapis odpowiedzi w pamięci podręcznej RAG (atomowo, z pominięciem komunikatów SAFETY oraz wiadomości z danymi kontaktowymi Zero-PII)
-if (!$hasContactLead && is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
+if (!$hasContactLead && !$hasMaskedPii && is_dir($cacheDir) && !str_starts_with($answer, 'Przepraszam, zapytanie narusza zasady')) {
     $tmpCache = $cacheFile . '.' . getmypid() . '.tmp';
     $cachePayload = [
         'answer'          => $answer,

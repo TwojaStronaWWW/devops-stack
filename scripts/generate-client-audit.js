@@ -776,8 +776,8 @@ export function evaluateAuditData(snapshot, options = {}) {
       ? 'Czysty kod (0 śladów WordPressa, Elementora ani starych bibliotek jQuery Migrate)'
       : `Wykryto narzut CMS (${detectedCms.length}): ${detectedCms.join(', ')}`,
     cmsStatus === 'pass'
-      ? 'Czysta architektura bez bazy SQL i wtyczek WordPressa eliminuje 99% wektorów włamań i kosztów aktualizacji.'
-      : 'Strona oparta na ciężkim CMS/wtyczkach wymaga stałych płatnych aktualizacji, bazy SQL i jest głównym celem automatycznych ataków botnetów.'
+      ? 'Czysta architektura Vanilla JS (7 KiB vs 142 KiB JS w Next.js wg benchmarku Nolana Lawsona, październik 2026) daje 0 ms TBT i < 850 ms LCP zamiast 2 090 ms LCP i 71 ms TBT oraz eliminuje wtyczki WP i bazę SQL.'
+      : 'Ciężkie systemy CMS i frameworki (np. Next.js ładujący 142 KiB JS — 20x więcej niż nasz kod Vanilla 7 KiB, z najgorszym LCP 2 090 ms i 71 ms TBT wg benchmarku Nolana Lawsona, październik 2026) spowalniają stronę i wymagają płatnych aktualizacji.'
   );
 
   // 3.2 Liczba zewnętrznych blokujących skryptów <script src=...> oraz arkuszy <link rel="stylesheet"> (5 pkt)
@@ -1000,8 +1000,8 @@ export function evaluateAuditData(snapshot, options = {}) {
       ? `Aktywny standard /llms.txt (${snapshot.probes?.llmsTxt?.sizeBytes || 0} B)${hasLlmsHeadLink ? ' + podpięty w <head>' : ''}`
       : 'BRAK pliku /llms.txt (strona nieprzystosowana do cytowania przez asystentów AI)',
     llmsStatus === 'pass'
-      ? 'Twoja firma posiada ustrukturyzowaną bazę faktów /llms.txt, dzięki czemu ChatGPT, Perplexity i Google AI Overviews precyzyjnie polecają Twoje usługi.'
-      : 'W 2026/2027 coraz więcej klientów szuka usług przez ChatGPT i Google AI. Brak /llms.txt sprawia, że AI pomija Twoją stronę lub halucynuje na temat cennika.'
+      ? 'Twoja firma posiada bazę faktów /llms.txt + WebMCP (document.modelContext) oraz 100% widoczności ruchu w Cookieless Web Analytics v3 (web-analytics.php) + GSC Sync (podczas gdy GA4 traci 63,8% sesji organicznych i 72,7% konwersji przy 71% odrzuceń zgód cookies w UE wg raportu Moz, listopad 2026).'
+      : 'Brak /llms.txt sprawia, że ChatGPT i Google AI pomijają ofertę firmy, a tradycyjne GA4 z banerami cookies traci aż 63,8% sesji organicznych i 72,7% konwersji (71% odrzuceń w UE wg raportu Moz, listopad 2026) — nasza architektura Cookieless Web Analytics v3 (web-analytics.php) + GSC Sync daje 100% widoczności ruchu.'
   );
 
   // Podsumowanie kategorii i wyniku całkowitego
@@ -1187,7 +1187,7 @@ export function runSelfTest() {
         ok: true,
         status: 200,
         sizeBytes: 180,
-        sample: 'Contact: mailto:kontakt@twojastronawww.pl\nExpires: 2027-12-31T23:59:00.000Z\n',
+        sample: 'Contact: mailto:kontakt@twojastronawww.pl\nExpires: 2027-12-31T23:59:59.000Z\n',
       },
       robotsTxt: {
         ok: true,

@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
+      color-scheme: dark light;
       --teams-bg-app: #141414;
       --teams-bg-rail: #0a0a0a;
       --teams-bg-list: #1f1f1f;
@@ -33,6 +34,75 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @view-transition {
+        navigation: auto;
+      }
+    }
+
+    html {
+      scrollbar-gutter: stable;
+    }
+
+    h1, h2, h3, h4 {
+      text-wrap: balance;
+    }
+
+    p {
+      text-wrap: pretty;
+    }
+
+    .skip-link {
+      position: absolute;
+      top: -100px;
+      left: 16px;
+      z-index: 2000;
+      padding: 8px 14px;
+      background: var(--teams-accent-light);
+      color: #0a0a0a;
+      font-weight: 700;
+      border-radius: 6px;
+      text-decoration: none;
+    }
+
+    .skip-link:focus,
+    .skip-link:focus-visible {
+      top: 10px;
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--teams-accent-light);
+      outline-offset: 2px;
+    }
+
+    .kb-stat-free {
+      color: #4ade80;
+    }
+
+    .lb-page-counter {
+      font-size: 12.5px;
+      color: #d4d4d4;
+      padding: 0 8px;
+    }
+
+    .inline-code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: "JetBrains Mono", monospace;
+      color: #93c5fd;
+    }
+
+    .avatar-user {
+      background: #3b3d8f;
+    }
+
+    .msg-error-text {
+      color: #fca5a5;
     }
 
     body {
@@ -495,6 +565,13 @@
       background: rgba(249, 115, 22, 0.18);
       color: #fdba74;
       border-color: rgba(249, 115, 22, 0.4);
+    }
+
+    .msg-decision-badge {
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+      border-color: rgba(16, 185, 129, 0.38);
+      font-weight: 600;
     }
 
     .msg-bubble {
@@ -1023,8 +1100,29 @@
       .lightbox-body { grid-template-columns: 1fr; overflow-y: auto; }
     }
   </style>
+  <meta name="description" content="Ekspert Asseco AMMS 6.10.07 i Architekt Bazy Danych Oracle z silnikiem SQLite FTS5 BM25 i podglądem stron PDF.">
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLMs.txt — Dokumentacja AI Router">
+  <script type="speculationrules">
+  {
+    "prerender": [
+      {
+        "where": {
+          "and": [
+            { "href_matches": "/*" },
+            { "not": { "href_matches": "/api/*" } },
+            { "not": { "href_matches": "/amms-page*" } },
+            { "not": { "href_matches": "/docs-pdf/*" } },
+            { "not": { "href_matches": "/chat-router.php" } }
+          ]
+        },
+        "eagerness": "moderate"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Przejdź do głównej treści</a>
 
   <!-- Pasek górny Microsoft Teams -->
   <header class="teams-titlebar">
@@ -1138,12 +1236,12 @@
         <div class="kb-stat-row"><span>Słownik Bazy Oracle:</span><strong>69 plików (SQL/FK)</strong></div>
         <div class="kb-stat-row"><span>Silnik SQL (Tylko AMMS):</span><strong>Codestral / Cohere Code</strong></div>
         <div class="kb-stat-row"><span>Poziom rozumowania:</span><strong id="sidebarReasoningStatus">Adaptacyjny (Auto)</strong></div>
-        <div class="kb-stat-row"><span>Koszt modeli:</span><strong style="color:#4ade80;">0.00 PLN (Free Tier)</strong></div>
+        <div class="kb-stat-row"><span>Koszt modeli:</span><strong class="kb-stat-free">0.00 PLN (Free Tier)</strong></div>
       </div>
     </aside>
 
     <!-- Główne okno rozmowy Teams -->
-    <main class="teams-main">
+    <main id="main-content" class="teams-main">
       <header class="chat-header">
         <div class="chat-header-left">
           <div class="avatar-wrap avatar-amms" id="activeHeaderAvatar">
@@ -1215,7 +1313,7 @@
       </div>
       <div class="lightbox-controls">
         <button type="button" class="lb-btn" id="lbPrevBtn">◀ Poprzednia strona</button>
-        <span id="lbPageCounter" style="font-size:12.5px; color:#d4d4d4; padding:0 8px;">Strona 1 z 1</span>
+        <span id="lbPageCounter" class="lb-page-counter">Strona 1 z 1</span>
         <button type="button" class="lb-btn" id="lbNextBtn">Następna strona ▶</button>
         <button type="button" class="lb-btn" id="lbDownloadPngBtn">💾 Pobierz zdjęcie strony (.png)</button>
         <button type="button" class="lb-btn close" id="lbCloseBtn">✕ Zamknij</button>
@@ -1493,7 +1591,7 @@
 
         // 3. Pogrubienia i kod inline
         processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        processed = processed.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:4px;font-family:JetBrains Mono,monospace;color:#93c5fd;">$1</code>');
+        processed = processed.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
 
         // 4. Zamiana cytowań [Nazwa_pliku, str. X] / [Nazwa_pliku, cz. Y] na klikalne odnośniki otwierające zdjęcie strony
         processed = processed.replace(/\[([^\[\]]+?(?:str\.|cz\.)\s*\d+)\]/gi, function (fullMatch, inner) {
@@ -1551,6 +1649,15 @@
         return html;
       }
 
+      function escapeHtml(raw) {
+        return String(raw ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
       function getNowTimeStr() {
         const d = new Date();
         return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
@@ -1602,7 +1709,7 @@
           .replace(/\r?\n/g, '<br>');
 
         row.innerHTML =
-          '<div class="avatar-wrap" style="background:#3b3d8f;">TY</div>' +
+          '<div class="avatar-wrap avatar-user">TY</div>' +
           '<div class="msg-bubble-wrap">' +
             '<div class="msg-meta">' +
               '<span>' + getNowTimeStr() + '</span>' +
@@ -1621,8 +1728,14 @@
         row.className = 'msg-row bot';
 
         const isHigh = reasoningTier === 'high';
-        const badgeHtml = reasoningLabel
-          ? '<span class="msg-badge ' + (isHigh ? 'high' : '') + '">' + (isHigh ? '🔬 ' : '⚡ ') + reasoningLabel + (modelLabel ? ' • ' + modelLabel : '') + (latencySec ? ' • ' + latencySec + 's' : '') + '</span>'
+        const safeReasoningLabel = escapeHtml(reasoningLabel || '');
+        const safeModelLabel = escapeHtml(modelLabel || '');
+        const safeLatencySec = escapeHtml(latencySec || '');
+        const badgeHtml = safeReasoningLabel
+          ? '<span class="msg-badge ' + (isHigh ? 'high' : '') + '">' + (isHigh ? '🔬 ' : '⚡ ') + safeReasoningLabel + (safeModelLabel ? ' • ' + safeModelLabel : '') + (safeLatencySec ? ' • ' + safeLatencySec + 's' : '') + '</span>'
+          : '';
+        const decisionBadgeHtml = (safeReasoningLabel || safeModelLabel)
+          ? '<span class="msg-badge msg-decision-badge" title="OpenMausBot Decision Model — pewność routingu kanału eksperckiego">🎯 Decision Model: ' + escapeHtml(ch.title) + '</span>'
           : '';
 
         let attachmentsHtml = '';
@@ -1638,22 +1751,27 @@
             const typeTagLabel = src.doc_type === 'oracle_db'
               ? 'BAZA ORACLE'
               : (src.doc_type === 'architecture' ? 'ARCHITEKTURA' : 'STRONA PDF');
+            const safeDocType = escapeHtml(src.doc_type || 'pdf');
+            const safeCitation = escapeHtml(src.citation || '');
+            const safeBadgeLabel = escapeHtml(src.badge_label || ('Strona ' + (src.page ?? '')));
+            const safeSourceFile = escapeHtml(src.source_file || '');
+            const safeSectionTitle = escapeHtml(src.section_title || '');
 
             return (
               '<div class="page-photo-card" data-source-id="' + uniqueId + '" title="Kliknij, aby powiększyć zdjęcie strony i przeglądać sąsiednie strony">' +
                 '<div class="page-photo-preview">' +
-                  '<img src="' + dataUrl + '" alt="Zrzut strony ' + (src.citation || '') + '">' +
+                  '<img src="' + dataUrl + '" alt="Zrzut strony ' + safeCitation + '">' +
                   '<div class="page-photo-overlay">' +
                     '<span class="zoom-pill">🔍 Powiększ stronę i kartkuj</span>' +
                   '</div>' +
                 '</div>' +
                 '<div class="page-photo-footer">' +
                   '<div class="page-photo-badge-row">' +
-                    '<span class="doc-type-tag ' + (src.doc_type || 'pdf') + '">' + typeTagLabel + '</span>' +
-                    '<span class="page-num-pill">📄 ' + (src.badge_label || ('Strona ' + src.page)) + '</span>' +
+                    '<span class="doc-type-tag ' + safeDocType + '">' + typeTagLabel + '</span>' +
+                    '<span class="page-num-pill">📄 ' + safeBadgeLabel + '</span>' +
                   '</div>' +
-                  '<div class="page-photo-filename">' + (src.source_file || '') + '</div>' +
-                  '<div class="page-photo-section">' + (src.section_title || '') + '</div>' +
+                  '<div class="page-photo-filename">' + safeSourceFile + '</div>' +
+                  '<div class="page-photo-section">' + safeSectionTitle + '</div>' +
                 '</div>' +
               '</div>'
             );
@@ -1673,8 +1791,9 @@
           '</div>' +
           '<div class="msg-bubble-wrap">' +
             '<div class="msg-meta">' +
-              '<span class="msg-author">' + ch.title + '</span>' +
+              '<span class="msg-author">' + escapeHtml(ch.title) + '</span>' +
               '<span>' + getNowTimeStr() + '</span>' +
+              decisionBadgeHtml +
               badgeHtml +
             '</div>' +
             '<div class="msg-bubble">' +
@@ -1726,6 +1845,8 @@
         messagesStream.scrollTop = messagesStream.scrollHeight;
 
         const tStart = performance.now();
+        const reqController = new AbortController();
+        const reqTimeoutId = setTimeout(function () { reqController.abort(); }, 30000);
         try {
           const res = await fetch(ROUTER_ENDPOINT, {
             method: 'POST',
@@ -1736,7 +1857,8 @@
               question: q,
               reasoning_mode: reasoningMode,
               history: histories[currentChannel].slice(-8)
-            })
+            }),
+            signal: reqController.signal
           });
 
           const data = await res.json();
@@ -1744,7 +1866,7 @@
 
           if (!res.ok || !data.success) {
             renderBotMessage({
-              html: '<p style="color:#fca5a5;">⚠️ <strong>Błąd komunikacji:</strong> ' + (data.error || ('HTTP ' + res.status)) + '</p>',
+              html: '<p class="msg-error-text">⚠️ <strong>Błąd komunikacji:</strong> ' + escapeHtml(data.error || ('HTTP ' + res.status)) + '</p>',
               modelLabel: 'error',
               reasoningTier: 'fast',
               reasoningLabel: 'Błąd',
@@ -1771,8 +1893,11 @@
           });
         } catch (err) {
           typingRow.remove();
+          const errMsg = (err && err.name === 'AbortError')
+            ? 'Przekroczono limit czasu oczekiwania (30s timeout).'
+            : String(err.message || err);
           renderBotMessage({
-            html: '<p style="color:#fca5a5;">⚠️ <strong>Błąd połączenia z serwerem AI Router:</strong> ' + String(err.message || err) + '</p>',
+            html: '<p class="msg-error-text">⚠️ <strong>Błąd połączenia z serwerem AI Router:</strong> ' + escapeHtml(errMsg) + '</p>',
             modelLabel: 'network_error',
             reasoningTier: 'fast',
             reasoningLabel: 'Offline',
@@ -1780,6 +1905,7 @@
             sources: []
           });
         } finally {
+          clearTimeout(reqTimeoutId);
           isSending = false;
           sendMsgBtn.disabled = false;
           messageInput.focus();
@@ -1854,9 +1980,11 @@
       }
 
       async function fetchAndRenderPage(sourceFile, page, part) {
+        const pageController = new AbortController();
+        const pageTimeoutId = setTimeout(function () { pageController.abort(); }, 10000);
         try {
           const url = '/amms-page?file=' + encodeURIComponent(sourceFile) + '&page=' + encodeURIComponent(page) + '&part=' + encodeURIComponent(part);
-          const res = await fetch(url);
+          const res = await fetch(url, { signal: pageController.signal });
           if (!res.ok) return;
           const json = await res.json();
           if (!json.success || !json.page_data) return;
@@ -1873,6 +2001,8 @@
           updateLightboxView(activeLightboxSource, pd.content);
         } catch {
           // Zachowaj lokalny zrzut w razie braku sieci
+        } finally {
+          clearTimeout(pageTimeoutId);
         }
       }
 

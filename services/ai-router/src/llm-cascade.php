@@ -60,7 +60,7 @@ function executeJsonPost(string $url, array $payload, array $headers = [], int $
         'httpCode' => $httpCode,
         'body'     => $body,
         'error'    => $error,
-        'json'     => is_string($body) ? json_decode($body, true, 32) : null
+        'json'     => is_string($body) ? json_decode($body, true, 16) : null
     ];
 }
 

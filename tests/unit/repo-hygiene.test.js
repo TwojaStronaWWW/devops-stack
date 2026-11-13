@@ -187,6 +187,7 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'router-endpoints.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'llm-cascade.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'lead-notifier.php'),
+      path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'pii-guard.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'ai-stats.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'web-analytics.php'),
       path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'web-analytics-labels.php'),
@@ -738,6 +739,120 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     const watchPyContent = fs.readFileSync(watchPyPath, 'utf-8');
     assert.match(watchPyContent, /__NEXT_DATA__/);
     assert.match(watchPyContent, /mode == "rss"/);
+  });
+
+  it('standardy Evergreen Web Standards Radar ([REF-02]..[REF-07]) powinny być wdrożone w plikach PHP, HTML, CSS, JS i skryptach (.sh / .githooks z końcami linii LF)', () => {
+    // 1. Wszystkie skrypty .sh oraz .githooks/* muszą mieć końce linii LF (brak CRLF)
+    const shDirs = [path.join(ROOT_DIR, 'scripts'), path.join(ROOT_DIR, '.githooks')];
+    for (const dir of shDirs) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isFile() && (entry.name.endsWith('.sh') || dir.endsWith('.githooks'))) {
+          const raw = fs.readFileSync(fullPath, 'utf-8');
+          assert.strictEqual(raw.includes('\r\n'), false, `Wykryto CRLF w pliku powłoki: ${fullPath}`);
+        }
+      }
+    }
+
+    // 2. Wszystkie pliki .php w services/ai-router/src oraz config/privatebin muszą mieć declare(strict_types=1);
+    const phpDirs = [path.join(ROOT_DIR, 'services', 'ai-router', 'src'), path.join(ROOT_DIR, 'config', 'privatebin')];
+    for (const dir of phpDirs) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isFile() && entry.name.endsWith('.php')) {
+          const content = fs.readFileSync(path.join(dir, entry.name), 'utf-8');
+          assert.match(content, /declare\(strict_types=1\);/, `Brak declare(strict_types=1); w ${entry.name}`);
+        }
+      }
+    }
+
+    // 3. Brak stylów inline (style="...") oraz atrybutów onclick="..." w plikach frontendu HTML i generatorze raportów
+    for (const relHtml of [
+      'services/ai-router/public-test/index.html',
+      'services/ai-router/src/amms-teams.html',
+      'scripts/client-audit-renderer.js',
+    ]) {
+      const content = fs.readFileSync(path.join(ROOT_DIR, relHtml), 'utf-8');
+      assert.strictEqual(/\bstyle\s*=\s*["']/i.test(content), false, `Wykryto styl inline style="..." w ${relHtml}`);
+      assert.strictEqual(/\bonclick\s*=\s*["']/i.test(content), false, `Wykryto handler inline onclick="..." w ${relHtml}`);
+    }
+
+    // 4. [REF-02], [REF-03], [REF-04], [REF-06], [REF-07] w public-test oraz amms-teams.html
+    const publicIndexHtml = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'index.html'), 'utf-8');
+    const publicStyleCss = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'style.css'), 'utf-8');
+    const publicAppJs = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', 'app.js'), 'utf-8');
+    const publicSecTxt = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'public-test', '.well-known', 'security.txt'), 'utf-8');
+
+    assert.match(publicIndexHtml, /class="skip-link"/);
+    assert.match(publicIndexHtml, /type="speculationrules"/);
+    assert.match(publicIndexHtml, /href="\/llms\.txt"/);
+    assert.match(publicStyleCss, /scrollbar-gutter:\s*stable/);
+    assert.match(publicStyleCss, /text-wrap:\s*balance/);
+    assert.match(publicStyleCss, /text-wrap:\s*pretty/);
+    assert.match(publicStyleCss, /@view-transition/);
+    assert.match(publicAppJs, /AbortController/);
+    assert.match(publicSecTxt, /Expires:\s*2027-12-31T23:59:59\.000Z/);
+  });
+
+  it('powinien posiadać wdrożone usprawnienia z researchu UnknowNews (WebMCP w widget.js, pii-guard.php w chat-router.php, CSP + escapeHtml + Decision Model w amms-teams.html oraz benchmarki Moz/Nolan Lawson)', () => {
+    const widgetJs = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'widget.js'), 'utf-8');
+    assert.match(widgetJs, /function isValidPesel\(/);
+    assert.match(widgetJs, /function maskSensitivePlPii\(/);
+    assert.match(widgetJs, /function registerWebMcpTools\(/);
+    assert.match(widgetJs, /ask_site_assistant/);
+    assert.match(widgetJs, /readOnlyHint:\s*true/);
+    assert.match(widgetJs, /question:\s*maskSensitivePlPii\(trimmed\)/);
+
+    const piiGuardPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'pii-guard.php'), 'utf-8');
+    for (const fnName of [
+      'is_valid_pesel',
+      'is_valid_nip',
+      'is_valid_regon',
+      'is_valid_pl_id',
+      'mask_sensitive_pl_pii',
+      'pseudonymize_entity_hmac',
+      'restore_stream_chunk',
+      'flush_stream_restorer',
+    ]) {
+      assert.match(piiGuardPhp, new RegExp(`function\\s+${fnName}\\s*\\(`), `Brak funkcji ${fnName} w pii-guard.php`);
+    }
+
+    const chatRouterPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'chat-router.php'), 'utf-8');
+    assert.match(chatRouterPhp, /require_once __DIR__ \. '\/pii-guard\.php';/);
+    assert.match(chatRouterPhp, /mask_sensitive_pl_pii\(/);
+    assert.match(chatRouterPhp, /iframe\\b\[\^>\]\*\\bsrcdoc\\s\*=/);
+    assert.match(chatRouterPhp, /mathlive#virtual-keyboard-message/);
+
+    const routerEndpointsPhp = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'router-endpoints.php'), 'utf-8');
+    assert.match(
+      routerEndpointsPhp,
+      /Content-Security-Policy:\s*frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'/
+    );
+
+    const ammsTeamsHtml = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'src', 'amms-teams.html'), 'utf-8');
+    assert.match(ammsTeamsHtml, /function escapeHtml\(/);
+    assert.match(ammsTeamsHtml, /escapeHtml\(src\.source_file/);
+    assert.match(ammsTeamsHtml, /escapeHtml\(src\.section_title/);
+    assert.match(ammsTeamsHtml, /escapeHtml\(src\.badge_label/);
+    assert.match(ammsTeamsHtml, /escapeHtml\(src\.citation/);
+    assert.match(ammsTeamsHtml, /escapeHtml\(data\.error/);
+    assert.match(ammsTeamsHtml, /msg-decision-badge/);
+    assert.match(ammsTeamsHtml, /Decision Model/);
+
+    const clientAuditJs = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'generate-client-audit.js'), 'utf-8');
+    const knowledgeTxt = fs.readFileSync(path.join(ROOT_DIR, 'services', 'ai-router', 'data', 'twojastronawww-knowledge.txt'), 'utf-8');
+    const agentsMd = fs.readFileSync(path.join(ROOT_DIR, 'AGENTS.md'), 'utf-8');
+    const radarMd = fs.readFileSync(path.join(ROOT_DIR, 'docs', 'WEB_STANDARDS_RADAR.md'), 'utf-8');
+
+    assert.match(clientAuditJs, /63,8%/);
+    assert.match(clientAuditJs, /72,7%/);
+    assert.match(clientAuditJs, /142 KiB/);
+    assert.match(clientAuditJs, /2 090 ms/);
+    assert.match(knowledgeTxt, /63,8%/);
+    assert.match(knowledgeTxt, /72,7%/);
+    assert.match(knowledgeTxt, /142 KiB/);
+    assert.match(knowledgeTxt, /2 090 ms/);
+    assert.match(agentsMd, /document\.modelContext/);
+    assert.match(radarMd, /document\.modelContext/);
   });
 });
 

@@ -110,5 +110,5 @@ VPS/
 - **`[REF-04]` Dostępność WCAG 2.2 (`w3c/aria-practices` & `alphagov/govuk-frontend`):** `.skip-link`, role ARIA (`alert`, `status`), pełna obsługa klawiatury i czytników ekranu.
 - **`[REF-05]` Bezpieczeństwo Aplikacji (`OWASP/ASVS` & `OWASP/CheatSheetSeries`):** walidacja nagłówka `Sec-Fetch-Site` (blokujące `cross-site`), tokeny CSRF `hash_equals`, `flock(LOCK_EX)`, `@session_write_close()`, `CURLOPT_FOLLOWLOCATION => false`, `CURLPROTO_HTTPS`.
 - **`[REF-06]` Polityka Podatności RFC 9116 (`securitytxt.org`):** plik `/.well-known/security.txt` z aktywną datą `Expires:`.
-- **`[REF-07]` Optymalizacja dla Wyszukiwarek AI – GEO (`llmstxt.org`):** plik `/llms.txt` podpięty w `<head>` (`rel="alternate" type="text/markdown"`) i dozwolony w `robots.txt` (`Allow: /llms.txt`).
+- **`[REF-07]` Optymalizacja dla Wyszukiwarek AI – GEO & WebMCP (`llmstxt.org` & `webmachinelearning/webmcp`):** plik `/llms.txt` podpięty w `<head>` (`rel="alternate" type="text/markdown"`), dozwolony w `robots.txt` (`Allow: /llms.txt`) oraz rejestracja narzędzi dla agentów przeglądarkowych przez imperatywne API **WebMCP (`document.modelContext`)**.
 - **`[REF-08]` SEO On-Page & Schema.org (`schema.org` & `indexnow.org`):** pełny graf `@graph` JSON-LD, przekierowanie `301` non-www oraz `data-nosnippet` na widgecie AI.

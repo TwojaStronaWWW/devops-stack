@@ -38,6 +38,16 @@ function load_env(string $envPath): int {
 }
 
 /**
+ * [REF-05] OWASP ASVS: porównanie tokenu CSRF / API w stałym czasie (ochrona przed atakami typu timing attack).
+ */
+function aiVerifyConstantTimeToken(string $expected, string $provided): bool {
+    if ($expected === '' || $provided === '') {
+        return false;
+    }
+    return hash_equals($expected, $provided);
+}
+
+/**
  * Pobiera rzeczywisty adres IP klienta z uwzględnieniem Cloudflare Tunnel
  */
 function getClientIp(): string {
@@ -131,9 +141,35 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
         header('Cache-Control: public, max-age=86400');
         http_response_code(200);
         echo "Contact: mailto:kontakt@twojastronawww.pl\n"
-           . "Expires: 2027-12-31T23:59:00.000Z\n"
+           . "Expires: 2027-12-31T23:59:59.000Z\n"
            . "Preferred-Languages: pl, en\n"
            . "Canonical: https://ai.twojastronawww.pl/.well-known/security.txt\n";
+        exit;
+    }
+
+    // [REF-07] Optymalizacja dla Wyszukiwarek AI – GEO (GET /llms.txt)
+    if ($requestUri === '/llms.txt') {
+        $reqMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        if ($reqMethod !== 'GET' && $reqMethod !== 'HEAD') {
+            header('Content-Type: text/plain; charset=UTF-8');
+            http_response_code(405);
+            echo "Method Not Allowed\n";
+            exit;
+        }
+        header('Content-Type: text/markdown; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: public, max-age=86400');
+        http_response_code(200);
+        echo "# TwojaStronaWWW — AI Router & DevOps Stack\n\n"
+           . "> Scentralizowana bramka AI RAG, bezciasteczkowa analityka ruchu WWW (100% Cookieless RODO / Zero-PII) oraz monitoring infrastruktury TwojaStronaWWW.\n\n"
+           . "## Główne Usługi i Endpointy Publiczne\n"
+           . "- **Widget Asystenta AI (`/widget.js`, `/ai-widget.js`)**: Uniwersalny widget czatu AI (Single Source of Truth v4.0) z lokalnym hybrydowym indeksem RAG.\n"
+           . "- **Bramka Czatbota AI (`POST /chat-router.php`)**: 15-modelowa kaskada LLM chroniona przez WAF warstwy 7 oraz 15-minutowy IP Penalty Box.\n"
+           . "- **Bezciasteczkowa Analityka WWW (`POST /analytics`)**: Telemetria ruchu i Core Web Vitals zgodna z RODO bez zapisu adresów IP na dysku.\n"
+           . "- **Polityka Bezpieczeństwa (`/.well-known/security.txt`)**: Zgodna z RFC 9116 oraz ISO/IEC 27001.\n\n"
+           . "## Kontakt\n"
+           . "- Strona główna: https://twojastronawww.pl\n"
+           . "- Kontakt: mailto:kontakt@twojastronawww.pl\n";
         exit;
     }
 
@@ -154,7 +190,9 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
            . "Disallow: /amms\n"
            . "Disallow: /metrics\n"
            . "Disallow: /radar-data\n"
-           . "Allow: /widget.js\n";
+           . "Allow: /widget.js\n"
+           . "Allow: /llms.txt\n"
+           . "Allow: /.well-known/security.txt\n";
         exit;
     }
 
@@ -172,6 +210,9 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
                 echo "export const THEME_PRESETS = globalThis.THEME_PRESETS;\n";
                 echo "export const MAX_CACHE_ENTRIES = globalThis.MAX_CACHE_ENTRIES;\n";
                 echo "export const escapeHtml = globalThis.escapeHtml;\n";
+                echo "export const isValidPesel = globalThis.isValidPesel;\n";
+                echo "export const maskSensitivePlPii = globalThis.maskSensitivePlPii;\n";
+                echo "export const registerWebMcpTools = globalThis.registerWebMcpTools;\n";
                 echo "export const isOwnerAnalyticsIgnored = globalThis.isOwnerAnalyticsIgnored;\n";
                 echo "export const normalizeCacheQuery = globalThis.normalizeCacheQuery;\n";
                 echo "export const normalizeSearchText = globalThis.normalizeSearchText;\n";
@@ -219,7 +260,7 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
             exit;
         }
         $rawRadar = @file_get_contents($radarJsonPath);
-        $decodedRadar = $rawRadar ? json_decode($rawRadar, true, 32) : null;
+        $decodedRadar = $rawRadar ? json_decode($rawRadar, true, 16) : null;
         if (!is_array($decodedRadar)) {
             http_response_code(503);
             echo json_encode(['success' => false, 'error' => 'Trwa odświeżanie pliku telemetrii P1.'], JSON_UNESCAPED_UNICODE);
@@ -268,7 +309,7 @@ function aiHandleEarlyGetEndpoints(string $requestUri, bool $isFromCloudflare): 
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: DENY');
         header('Referrer-Policy: no-referrer');
-        header("Content-Security-Policy: frame-ancestors 'none'");
+        header("Content-Security-Policy: frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'");
         $ammsHtmlPath = __DIR__ . '/amms-teams.html';
         if (file_exists($ammsHtmlPath)) {
             readfile($ammsHtmlPath);

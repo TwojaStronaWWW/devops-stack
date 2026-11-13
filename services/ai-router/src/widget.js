@@ -146,6 +146,110 @@ const KSH_CORE_CONTEXT = [
 ].join('\n');
 
 /**
+ * Waliduje polski numer PESEL (11 cyfr, wagi [1,3,7,9,1,3,7,9,1,3] mod 10 oraz poprawność miesiąca i dnia).
+ * @param {string} raw
+ * @returns {boolean}
+ */
+function isValidPesel(raw) {
+  const s = String(raw ?? '').replace(/[\s-]+/g, '');
+  if (!/^\d{11}$/.test(s)) return false;
+
+  const month = Number(s.slice(2, 4)) % 20;
+  const day = Number(s.slice(4, 6));
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+
+  const weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+  let sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += Number(s[i]) * weights[i];
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(s[10]);
+}
+
+/**
+ * Maskuje wrażliwe polskie identyfikatory PII (PESEL oraz numer dowodu osobistego po słowie kluczowym)
+ * przed wysyłką zapytania do zewnętrznego routera LLM, zachowując numery telefonów i e-maile dla detektora leadów.
+ * @param {string} text
+ * @returns {string}
+ */
+function maskSensitivePlPii(text) {
+  if (!text) return '';
+  let out = String(text);
+
+  // 1. 11 cyfr bezpośrednio po słowie PESEL (nawet z błędną sumą kontrolną)
+  out = out.replace(/\b(pesel[\s:#=-]{0,10})\d{11}\b/gi, '$1[PESEL-ZAMASKOWANY]');
+
+  // 2. Dowolny 11-cyfrowy ciąg przechodzący deterministyczną sumę kontrolną PESEL (z wykluczeniem +48...)
+  out = out.replace(/(?<![+\d])\b\d{11}\b/g, (match) => (
+    isValidPesel(match) ? '[PESEL-ZAMASKOWANY]' : match
+  ));
+
+  // 3. Seria i numer dowodu osobistego po słowie "dowód" / "seria"
+  out = out.replace(
+    /\b((?:dow[oó]d(?:\s+osobisty)?|nr\s+dowodu|seri[ai])[\s:#=-]{0,12})[A-Z]{3}\s?\d{6}\b/gi,
+    '$1[DOWOD-ZAMASKOWANY]'
+  );
+
+  return out;
+}
+
+/**
+ * [REF-07] Rejestruje imperatywne narzędzie WebMCP (W3C document.modelContext / navigator.modelContext)
+ * umożliwiające natywnym agentom przeglądarkowym zadanie pytania asystentowi AI serwisu.
+ * @param {Document} doc
+ * @param {Object} widgetInstance
+ * @param {string} [siteId='twojastronawww']
+ * @returns {{ supported: boolean, abort?: Function }}
+ */
+function registerWebMcpTools(doc = typeof document !== 'undefined' ? document : null, widgetInstance = null, siteId = 'twojastronawww') {
+  const mc = doc?.modelContext || globalThis.navigator?.modelContext;
+  if (!mc || typeof mc.registerTool !== 'function' || !widgetInstance || typeof widgetInstance.sendQuestion !== 'function') {
+    return { supported: false };
+  }
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  try {
+    mc.registerTool(
+      {
+        name: 'ask_site_assistant',
+        description: 'Zadaj pytanie asystentowi AI serwisu o ofertę, cennik, dostępność lub bazę wiedzy.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            question: {
+              type: 'string',
+              description: 'Pytanie do asystenta w języku polskim.'
+            }
+          },
+          required: ['question']
+        },
+        annotations: {
+          readOnlyHint: true,
+          untrustedContentHint: false,
+          consequentialHint: false
+        },
+        async execute(args) {
+          const res = await widgetInstance.sendQuestion(args?.question || '');
+          return JSON.stringify({
+            siteId,
+            answer: res?.answer || '',
+            cached: Boolean(res?.cached)
+          });
+        }
+      },
+      controller ? { signal: controller.signal } : undefined
+    );
+    return {
+      supported: true,
+      abort: () => controller?.abort?.()
+    };
+  } catch (_) {
+    return { supported: false };
+  }
+}
+
+/**
  * Normalizuje tekst zapytania do klucza pamięci podręcznej (Response Cache)
  * @param {string} text
  * @returns {string}
@@ -1792,7 +1896,7 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
         ...(controller ? { signal: controller.signal } : {}),
         body: JSON.stringify({
           site_id: siteId,
-          question: trimmed,
+          question: maskSensitivePlPii(trimmed),
           kb_version: kbVersion,
           dynamic_context: dynamicContext,
           history: conversationHistory.slice(-8),
@@ -1909,7 +2013,9 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
     refreshKnowledge();
   }
 
-  return {
+  let webMcpHandle = null;
+
+  const instance = {
     root,
     toggleBtn,
     closeBtn,
@@ -1936,8 +2042,13 @@ function initAiWidget(doc = document, win = globalThis.window, options = {}) {
     clearCache: () => {
       responseCache = { kbVersion, entries: {} };
       saveResponseCache();
-    }
+    },
+    unregisterWebMcpTools: () => webMcpHandle?.abort?.()
   };
+
+  webMcpHandle = registerWebMcpTools(doc, instance, siteId);
+
+  return instance;
 }
 
 function autoInitAiWidget() {
@@ -1965,6 +2076,9 @@ const __tswExports = {
   THEME_PRESETS,
   MAX_CACHE_ENTRIES,
   escapeHtml,
+  isValidPesel,
+  maskSensitivePlPii,
+  registerWebMcpTools,
   isOwnerAnalyticsIgnored,
   normalizeCacheQuery,
   normalizeSearchText,

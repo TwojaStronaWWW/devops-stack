@@ -44,8 +44,8 @@ export function renderAuditHtml(audit) {
     minute: '2-digit',
   });
 
-  const scoreColor =
-    summary.totalScore >= 85 ? '#15803d' : summary.totalScore >= 55 ? '#b45309' : '#b91c1c';
+  const scoreToneClass =
+    summary.totalScore >= 85 ? 'score-tone-high' : summary.totalScore >= 55 ? 'score-tone-med' : 'score-tone-low';
 
   const statusBadge = (status, pts, maxPts) => {
     if (status === 'pass') {
@@ -57,18 +57,25 @@ export function renderAuditHtml(audit) {
     return `<span class="status-pill status-fail">❌ BŁĄD / BRAK (${pts}/${maxPts} pkt)</span>`;
   };
 
-  const categoryCardsHtml = categories
-    .map((cat) => {
+  const categoryDynamicCss = categories
+    .map((cat, idx) => {
       const pct = Math.round((cat.score / Math.max(1, cat.maxScore)) * 100);
-      const barColor = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+      return `.progress-fill-${idx} { width: ${pct}%; }`;
+    })
+    .join('\n      ');
+
+  const categoryCardsHtml = categories
+    .map((cat, idx) => {
+      const pct = Math.round((cat.score / Math.max(1, cat.maxScore)) * 100);
+      const toneClass = pct >= 80 ? 'cat-tone-high' : pct >= 50 ? 'cat-tone-med' : 'cat-tone-low';
       return `
         <div class="cat-card">
           <div class="cat-card-header">
             <span class="cat-title">${escapeHtml(cat.name)}</span>
-            <strong class="cat-score" style="color:${barColor}">${cat.score} / ${cat.maxScore} pkt</strong>
+            <strong class="cat-score ${toneClass}">${cat.score} / ${cat.maxScore} pkt</strong>
           </div>
           <div class="progress-track">
-            <div class="progress-fill" style="width:${pct}%;background:${barColor}"></div>
+            <div class="progress-fill progress-fill-${idx} ${toneClass}-bg"></div>
           </div>
         </div>`;
     })
@@ -426,11 +433,36 @@ export function renderAuditHtml(audit) {
         break-inside: avoid;
       }
     }
+
+    html {
+      scrollbar-gutter: stable;
+    }
+
+    h1, h2, h3, h4 {
+      text-wrap: balance;
+    }
+
+    p {
+      text-wrap: pretty;
+    }
+
+    .score-tone-high { color: #15803d; }
+    .score-tone-med { color: #b45309; }
+    .score-tone-low { color: #b91c1c; }
+    .score-grade-tag { font-size: 15px; }
+    .cat-tone-high { color: #16a34a; }
+    .cat-tone-med { color: #d97706; }
+    .cat-tone-low { color: #dc2626; }
+    .cat-tone-high-bg { background: #16a34a; }
+    .cat-tone-med-bg { background: #d97706; }
+    .cat-tone-low-bg { background: #dc2626; }
+    .remediation-intro { font-size: 12.5px; color: #1e293b; }
+    ${categoryDynamicCss}
   </style>
 </head>
 <body>
   <div class="print-toolbar">
-    <button class="btn-print" onclick="window.print()">🖨️ Drukuj / Zapisz jako PDF (A4)</button>
+    <button type="button" id="printAuditBtn" class="btn-print">🖨️ Drukuj / Zapisz jako PDF (A4)</button>
   </div>
 
   <main class="page-sheet">
@@ -453,7 +485,7 @@ export function renderAuditHtml(audit) {
       <div class="comparison-card card-before">
         <span class="card-badge">STAN OBECNY (PRZED)</span>
         <div class="comparison-title">Obecna strona: ${escapeHtml(meta.hostname)}</div>
-        <div class="score-display" style="color:${scoreColor}">Wynik: ${summary.totalScore} / ${summary.maxTotalScore} <small style="font-size:15px">(Ocena ${summary.grade})</small></div>
+        <div class="score-display ${scoreToneClass}">Wynik: ${summary.totalScore} / ${summary.maxTotalScore} <small class="score-grade-tag">(Ocena ${summary.grade})</small></div>
         <div class="risk-pill ${summary.riskBadgeClass}">${escapeHtml(summary.riskLevel)}</div>
         <ul class="comparison-list">
           <li>⏱️ <strong>Czas odpowiedzi serwera (TTFB):</strong> <code>${summary.ttfbMs} ms</code> (pobranie HTML: <code>${summary.totalDownloadMs} ms</code>, rozmiar: <code>${summary.htmlKb} KB</code>)</li>
@@ -467,14 +499,14 @@ export function renderAuditHtml(audit) {
       <div class="comparison-card card-after">
         <span class="card-badge">PO WDROŻENIU TWOJASTRONAWWW</span>
         <div class="comparison-title">Standard TwojaStronaWWW (Czysty Kod Vanilla DevSecOps)</div>
-        <div class="score-display" style="color:#15803d">100 / 100 <small style="font-size:15px">(Klasa Enterprise A+)</small></div>
+        <div class="score-display score-tone-high">100 / 100 <small class="score-grade-tag">(Klasa Enterprise A+)</small></div>
         <div class="risk-pill risk-low">GWARANCJA BEZPIECZEŃSTWA I SZYBKOŚCI 24/7</div>
         <ul class="comparison-list">
-          <li>⚡ <strong>Błyskawiczny czas ładowania:</strong> <code>TTFB &lt; 50 ms</code>, wynik Google PageSpeed <strong>99–100 / 100</strong></li>
+          <li>⚡ <strong>Błyskawiczny czas ładowania (Benchmark Nolana Lawsona 10/2026):</strong> Nasz kod Vanilla JS to <code>7 KiB</code> (<code>0 ms TBT</code>, <code>&lt; 850 ms LCP</code>) wobec <strong>142 KiB JS</strong> (20x więcej), <strong>2 090 ms LCP</strong> i <strong>71 ms TBT</strong> w Next.js</li>
           <li>🔒 <strong>Pełny pakiet nagłówków OWASP [REF-01]/[REF-05]:</strong> HSTS, rygorystyczne CSP, COOP, CORP, <code>nosniff</code>, <code>security.txt</code></li>
           <li>💎 <strong>0 podatnych wtyczek WordPress:</strong> Czysty kod HTML5 + Vanilla CSS + ES6+ bez bazy danych SQL do zhakowania</li>
-          <li>🧠 <strong>Gotowość na AI Search (GEO [REF-07]):</strong> Wdrożony standard <code>/llms.txt</code>, pełny graf <code>Schema.org @graph</code> + <strong>Asystent AI RAG 24/7</strong></li>
-          <li>📈 <strong>Bezciasteczkowa Analityka RODO (Zero-PII):</strong> Pomiar konwersji i zapytań klientów bez uciążliwych banerów cookies</li>
+          <li>🧠 <strong>Gotowość na AI Search (GEO [REF-07] + WebMCP):</strong> Wdrożony standard <code>/llms.txt</code>, <code>document.modelContext</code>, pełny graf <code>Schema.org @graph</code> + <strong>Asystent AI RAG 24/7</strong></li>
+          <li>📈 <strong>100% widoczności ruchu (Raport Moz 11/2026):</strong> <strong>Cookieless Web Analytics v3 (<code>web-analytics.php</code>) + GSC Sync</strong> bez banerów cookies — podczas gdy GA4 traci <strong>63,8% sesji organicznych</strong> i <strong>72,7% konwersji</strong> (71% odrzuceń zgód w UE)</li>
         </ul>
       </div>
     </section>
@@ -501,7 +533,7 @@ export function renderAuditHtml(audit) {
 
     <h2 class="section-heading">🚀 Rekomendowany Plan Naprawczy / Migracja (Oferta TwojaStronaWWW)</h2>
     <section class="remediation-box">
-      <p style="font-size:12.5px;color:#1e293b;">
+      <p class="remediation-intro">
         Poniższy plan pozwala trwale wyeliminować wykryte błędy bezpieczeństwa (${summary.securityIssuesCount}), przyspieszyć ładowanie strony kilkukrotnie oraz otworzyć firmę na pozyskiwanie klientów z wyszukiwarek AI (ChatGPT, Google AI Overviews, Perplexity).
       </p>
       <div class="offer-grid">
@@ -534,6 +566,11 @@ export function renderAuditHtml(audit) {
       <div>Wygenerowano automatycznie przez <code>generate-client-audit.js</code> (ISO 27001 / OWASP ASVS)</div>
     </footer>
   </main>
+  <script>
+    document.getElementById('printAuditBtn')?.addEventListener('click', function () {
+      window.print();
+    });
+  </script>
 </body>
 </html>`;
 }

@@ -1,0 +1,13 @@
+# TwojaStronaWWW — AI Router & DevOps Stack
+
+> Scentralizowana bramka AI RAG, bezciasteczkowa analityka ruchu WWW (100% Cookieless RODO / Zero-PII) oraz monitoring infrastruktury TwojaStronaWWW.
+
+## Główne Usługi i Endpointy Publiczne
+- **Widget Asystenta AI (`/widget.js`, `/ai-widget.js`)**: Uniwersalny widget czatu AI (Single Source of Truth v4.0) z lokalnym hybrydowym indeksem RAG.
+- **Bramka Czatbota AI (`POST /chat-router.php`)**: 15-modelowa kaskada LLM chroniona przez WAF warstwy 7 oraz 15-minutowy IP Penalty Box.
+- **Bezciasteczkowa Analityka WWW (`POST /analytics`)**: Telemetria ruchu i Core Web Vitals zgodna z RODO bez zapisu adresów IP na dysku.
+- **Polityka Bezpieczeństwa (`/.well-known/security.txt`)**: Zgodna z RFC 9116 oraz ISO/IEC 27001.
+
+## Kontakt
+- Strona główna: https://twojastronawww.pl
+- Kontakt: mailto:kontakt@twojastronawww.pl

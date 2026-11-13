@@ -1,0 +1,4 @@
+Contact: mailto:kontakt@twojastronawww.pl
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: pl, en
+Canonical: https://ai.twojastronawww.pl/.well-known/security.txt

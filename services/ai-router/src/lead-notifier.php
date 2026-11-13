@@ -100,6 +100,21 @@ function aiSanitizeHeaderValue(string $value, bool $stripSemicolons = false): st
 }
 
 /**
+ * [REF-05] Koduje wartość nagłówka HTTP/MIME ze znakami spoza ASCII zgodnie ze standardem RFC 2047 UTF-8 (`=?UTF-8?B?...?=`),
+ * zachowując czystość ASCII i odporność na CRLF Injection (np. dla nagłówka `Title:` w Ntfy.sh oraz powiadomień e-mail).
+ */
+function aiEncodeRfc2047Header(string $value): string {
+    $clean = aiSanitizeHeaderValue($value);
+    if ($clean === '') {
+        return '';
+    }
+    if (preg_match('/[^\x20-\x7E]/', $clean) === 1) {
+        return '=?UTF-8?B?' . base64_encode($clean) . '?=';
+    }
+    return $clean;
+}
+
+/**
  * Weryfikuje zewnętrzny adres URL webhooka pod kątem ochrony przed SSRF
  * (wymaga HTTPS, blokuje localhost, sieci prywatne RFC1918, loopback 127.0.0.0/8 oraz OCI IMDS 169.254.169.254).
  */
@@ -224,7 +239,7 @@ function aiDispatchLeadNotifications(
                 }
             }
 
-            $ntfyTitle = aiSanitizeHeaderValue('Lead (' . $aiSite . ') - ' . implode(' | ', $titleParts));
+            $ntfyTitle = aiEncodeRfc2047Header('Lead (' . $aiSite . ') — ' . implode(' | ', $titleParts));
             $ntfyHeaders = [
                 "Title: {$ntfyTitle}",
                 'Priority: high',
@@ -317,7 +332,7 @@ function aiDispatchLeadNotifications(
                 }
             }
 
-            $hotTitle = aiSanitizeHeaderValue("Goracy Lead na Czatbocie ({$aiSite})");
+            $hotTitle = aiEncodeRfc2047Header("Gorący Lead na Czatbocie ({$aiSite})");
             $hotHeaders = [
                 "Title: {$hotTitle}",
                 'Priority: high',

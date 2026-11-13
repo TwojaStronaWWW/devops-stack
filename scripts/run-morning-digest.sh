@@ -159,21 +159,11 @@ if [[ -f "${ENV_FILE:-}" ]]; then
             KSH_EV_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("events_cnt",0))' 2>/dev/null || echo '0')"
             KSH_CLS_CNT="$(echo "${KSH_SCRAPER_DATA}" | python3 -c 'import sys,json; d=json.loads(sys.stdin.read() or "{}"); print(d.get("classes_cnt",0))' 2>/dev/null || echo '0')"
 
-            AUDIT_BODY="✅ Audyt VPS (${TOTAL_TESTS} testów, Auto-Heal): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
-${LH_SHORT:-🟢 LH.pl (Auto-Heal): OK}
-${NAZWA_SHORT:-🟢 nazwa.pl (Read-Only): OK}
-💾 Backupy (03:00 UTC / 05:00 PL): VPS ${AGE_HOURS:-?}h temu | WWW LH.pl ${W_AGE_HOURS:-?}h temu
-🧠 Zasoby: Dysk ${DISK_USE_PCT}% (wolne ${DISK_AVAIL_HUMAN}) | SWAP ${SWAP_TOTAL_MB:-0}M | ${MEM_INFO}
-📊 Analityka WWW & AI: ${WA_PV_TOTAL:-0} odsł. | ${WA_UV_TOTAL:-0} unik. (${WA_ENG_TOTAL:-0} zaangaż.) | LCP: ${WA_LCP_AVG:-b/d} | Leady: ${WA_LEADS_TOTAL:-0}
-🔍 Puls SEO & AI: Top temat AI: ${WA_TOP_TOPIC:-brak} | Top fraza: ${WA_TOP_TERM:-brak}
-🛡️ Ochrona: NTP=${NTP_STATE:-yes} | BBR=${TCP_CC:-bbr} | WAF L7: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Skaner 24h: ${LOG_CRITICAL_24H:-0} wyjątków${HINTS_SUMMARY}"
-            if [[ -n "${LH_FULL}" || -n "${NAZWA_FULL}" ]]; then
-                AUDIT_BODY="${AUDIT_BODY}
-
-🌐 SKAN HOSTINGÓW ZEWNĘTRZNYCH (LH.PL AUTO-HEAL + NAZWA.PL READ-ONLY):
-${LH_FULL}
-${NAZWA_FULL}"
-            fi
+            AUDIT_BODY="✅ Serwer VPS (${TOTAL_TESTS} testów, Auto-Heal): ${OK_COUNT} OK | ${WARN_COUNT} WARN | ${FAIL_COUNT} FAIL
+${LH_SHORT:-✅ Hosting LH.pl (Auto-Heal): OK}
+${NAZWA_SHORT:-✅ Hosting nazwa.pl (Read-Only): OK}
+✅ Backupy R2 (AES-256) & Zasoby: VPS ${AGE_HOURS:-?}h temu | WWW ${W_AGE_HOURS:-?}h temu | Dysk ${DISK_USE_PCT}%, ${MEM_INFO}
+✅ Ochrona & Ruch 24h: WAF: ${WAF_BLOCKED_TOTAL:-0} | Fail2ban: ${F2B_BANNED:-0} IP | Wyjątki: ${LOG_CRITICAL_24H:-0} | WWW: ${WA_PV_TOTAL:-0} odsł. (Leady: ${WA_LEADS_TOTAL:-0})${HINTS_SUMMARY}"
             if [[ -n "${AI_AUDIT_INSIGHT}" ]]; then
                 AUDIT_BODY="${AUDIT_BODY}
 
@@ -181,7 +171,7 @@ ${AI_AUDIT_INSIGHT}"
                 printf "\n${C_CYAN}%s${C_RESET}\n" "${AI_AUDIT_INSIGHT}"
             fi
 
-            NTFY_BODY="${KSH_SHORT:-🕺 Scrapery KSH & DancePuls: Zsynchronizowane}
+            NTFY_BODY="${KSH_SHORT:-✅ KSH: Zsynchronizowane}
 ${AUDIT_BODY}"
 
             # 1. Wysyłka powiadomienia Push na Ntfy (Self-Hosted / Ntfy.sh)
@@ -193,23 +183,20 @@ ${AUDIT_BODY}"
                 -d "${NTFY_BODY}" \
                 "${NTFY_BASE_URL}/${NTFY_AUDIT_TOPIC}" >/dev/null 2>&1 || true
 
-            # 2. Wysyłka pełnego, połączonego raportu (Scrapery KSH + Audyt ISO 27001 VPS/LH/nazwa + 3 AI + Antigravity) na E-mail (poczatek.krzysztof@gmail.com)
-            EMAIL_SUBJECT="☀️ Raport 06:00 (${PL_DATE}): VPS [${OK_COUNT} OK / ${FAIL_COUNT} FAIL] + LH.pl + nazwa.pl + KSH (${KSH_EV_CNT} impr.)"
+            # 2. Wysyłka zwięzłego raportu 06:00 (Scrapery KSH + Audyt Serwerów + Podsumowanie Arbitra) na E-mail (poczatek.krzysztof@gmail.com)
+            EMAIL_SUBJECT="☀️ Raport 06:00 (${PL_DATE}): VPS [${OK_COUNT} OK / ${FAIL_COUNT} FAIL] + LH.pl + nazwa.pl + KSH"
             EMAIL_BODY="☀️ PORANNY RAPORT SYSTEMOWY (06:00) — ${PL_DATE}
-TwojaStronaWWW DevOps Stack (VPS + LH.pl Auto-Heal + nazwa.pl Read-Only) & Kato Salsa Hub / DancePuls
 
-🕺 CZĘŚĆ 1: SCRAPERY KATO SALSA HUB & DANCEPULS
+🕺 1. KATO SALSA HUB & DANCEPULS
 ──────────────────────────────────────────────────────
 ${KSH_FULL:-Brak danych ze scraperów.}
 
-🛡️ CZĘŚĆ 2: AUDYT BEZPIECZEŃSTWA VPS, LH.PL (AUTO-HEAL) I NAZWA.PL (READ-ONLY) + RADA 3 AI + ARBITER ANTIGRAVITY
+🛡️ 2. AUDYT SERWERÓW (VPS + LH.PL + NAZWA.PL)
 ──────────────────────────────────────────────────────
 ${AUDIT_BODY}
 
 ──────────────────────────────────────────────────────
-🔗 Panel DancePuls: https://katosalsahub.pl/dancepuls/
-🔗 Wspólny Grafik:  https://katosalsahub.pl/grafik.html
-🔗 Panel Grafana:   https://monitoring.twojastronawww.pl"
+🔗 DancePuls: https://katosalsahub.pl/dancepuls/ | Grafik: https://katosalsahub.pl/grafik.html | Grafana: https://monitoring.twojastronawww.pl"
 
             sudo ENV_FILE="${ENV_FILE}" EMAIL_SUBJECT="${EMAIL_SUBJECT}" EMAIL_BODY="${EMAIL_BODY}" python3 "${STACK_ROOT}/scripts/morning-digest.py" send-email >/dev/null 2>&1 || true
         fi

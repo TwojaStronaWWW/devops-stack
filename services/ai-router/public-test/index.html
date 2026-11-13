@@ -8,10 +8,31 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <meta name="description" content="Tester scentralizowanej bramki AI Router i lokalnego hybrydowego indeksu RAG platformy TwojaStronaWWW.">
+  <link rel="alternate" type="text/markdown" href="/llms.txt" title="LLMs.txt — Baza wiedzy dla AI">
+  <script type="speculationrules">
+  {
+    "prerender": [
+      {
+        "where": {
+          "and": [
+            { "href_matches": "/*" },
+            { "not": { "href_matches": "/api/*" } },
+            { "not": { "href_matches": "/chat-router.php" } },
+            { "not": { "href_matches": "/analytics" } },
+            { "not": { "href_matches": "/collect" } }
+          ]
+        },
+        "eagerness": "moderate"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
+  <a href="#main-content" class="skip-link">Przejdź do głównej treści</a>
 
-  <main class="chat-card">
+  <main id="main-content" class="chat-card">
     <header class="header">
       <div class="badge">
         <span class="badge-dot"></span>
@@ -57,10 +78,10 @@
     </form>
 
     <!-- Komunikat o błędzie -->
-    <div id="errorAlert" class="alert-error" role="alert"></div>
+    <div id="errorAlert" class="alert-error is-hidden" role="alert" aria-live="assertive" hidden></div>
 
     <!-- Karta odpowiedzi modelu -->
-    <section id="responseCard" class="response-card" aria-live="polite">
+    <section id="responseCard" class="response-card is-hidden" aria-live="polite" hidden>
       <div class="response-header">
         <span class="response-title">Odpowiedź Asystenta</span>
         <span id="responseLatency" class="response-meta"></span>
@@ -69,6 +90,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>

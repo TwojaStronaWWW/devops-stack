@@ -1,5 +1,6 @@
 /* Modern Zero-Bloat Dark Theme - TwojaStronaWWW AI Router */
 :root {
+  color-scheme: dark light;
   --bg-primary: #0a0e17;
   --bg-surface: rgba(18, 24, 38, 0.75);
   --bg-surface-border: rgba(255, 255, 255, 0.08);
@@ -19,10 +20,50 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 1000;
+  padding: 10px 16px;
+  background: var(--accent-cyan);
+  color: #0a0e17;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 16px;
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 2px;
+}
+
+.is-hidden {
+  display: none !important;
 }
 
 body {
@@ -91,12 +132,20 @@ body {
   box-shadow: 0 0 8px var(--accent-cyan);
 }
 
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
 h1 {
   font-size: 1.6rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
   margin-bottom: 6px;
+}
+
+p, .subtitle, .response-body {
+  text-wrap: pretty;
 }
 
 .subtitle {
@@ -211,7 +260,6 @@ textarea:focus {
   margin-top: 24px;
   border-top: 1px solid var(--bg-surface-border);
   padding-top: 20px;
-  display: none;
 }
 
 .response-header {
@@ -254,7 +302,6 @@ textarea:focus {
   padding: 12px 16px;
   color: #fca5a5;
   font-size: 0.88rem;
-  display: none;
 }
 
 .spinner {

@@ -406,14 +406,14 @@ open -p {lh_port} -u "{lh_usr}","{lh_pwd}" {lh_srv}
     dom_warn_suffix = f" [⚠️ DOMENA DO OPŁACENIA: {expiring_soon[0]}]" if expiring_soon else ""
 
     if lh_issues:
-        lh_status_short = f"⚠️ LH.pl: {len(lh_issues)} ostrz. (Auto-Heal: {len(lh_healed)}){dom_warn_suffix}"
+        lh_status_short = f"⚠️ Hosting LH.pl (Auto-Heal): {len(lh_issues)} ostrz. (naprawiono: {len(lh_healed)}){dom_warn_suffix}"
         lh_status_full = f"⚠️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): wykryto {len(lh_issues)} uwag ({', '.join(lh_issues)}) | Automatycznie naprawiono: {len(lh_healed)} ({', '.join(lh_healed) if lh_healed else 'brak'}){lh_ops_footer}"
     elif lh_healed:
-        lh_status_short = f"🛡️ LH.pl: OK (Auto-Heal naprawił {len(lh_healed)} poz.){dom_warn_suffix}"
-        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS OK) — automatycznie oczyszczono: {', '.join(lh_healed)}{lh_ops_footer}"
+        lh_status_short = f"✅ Hosting LH.pl (Auto-Heal): OK (naprawiono {len(lh_healed)} poz.){dom_warn_suffix}"
+        lh_status_full = f"✅ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS OK) — automatycznie oczyszczono: {', '.join(lh_healed)}{lh_ops_footer}"
     else:
-        lh_status_short = f"🛡️ LH.pl: CZYSTO ({lh_ok_checks}/{lh_ok_checks} OK, Auto-Heal czuwa){dom_warn_suffix}"
-        lh_status_full = f"🛡️ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS/.htaccess/PoLP OK, 0 webshelli, 0 wycieków){lh_ops_footer}"
+        lh_status_short = f"✅ Hosting LH.pl (Auto-Heal): CZYSTO ({lh_ok_checks}/{lh_ok_checks} OK){dom_warn_suffix}"
+        lh_status_full = f"✅ Twój Hosting LH.pl (Auto-Heal AKTYWNY): CZYSTO ({lh_ok_checks}/{lh_ok_checks} testów HTTP/FTPS/.htaccess/PoLP OK, 0 webshelli, 0 wycieków){lh_ops_footer}"
 
     # -------------------------------------------------------------------------
     # CZĘŚĆ B: HOSTING KLIENTA NAZWA.PL (TRYB 100% READ-ONLY — TYLKO INFORMACJA!)
@@ -519,15 +519,15 @@ quit
     )
 
     if nz_alerts:
-        nz_status_short = f"🚨 nazwa.pl (Tylko Raport): WYKRYTO {len(nz_alerts)} ANOMALII!"
+        nz_status_short = f"🚨 Hosting nazwa.pl (Read-Only): WYKRYTO {len(nz_alerts)} ANOMALII!"
         nz_status_full = (
             f"🚨 Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
             f"Wykryto {len(nz_alerts)} anomalii: {'; '.join(nz_alerts)}. Czekam na Twoją decyzję przed podjęciem działań!{nz_ops_footer}"
         )
     else:
-        nz_status_short = f"👁️ nazwa.pl (Read-Only): CZYSTO ({nz_checks_ok}/{nz_checks_ok} OK)"
+        nz_status_short = f"✅ Hosting nazwa.pl (Read-Only): CZYSTO ({nz_checks_ok}/{nz_checks_ok} OK)"
         nz_status_full = (
-            f"👁️ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
+            f"✅ Hosting Klienta nazwa.pl (TRYB READ-ONLY — TYLKO INFORMACJA, ZERO AUTOMATYCZNYCH ZMIAN): "
             f"CZYSTO ({nz_checks_ok}/{nz_checks_ok} kontroli FTPS TLS + DOM HTTPS OK: kwarantanna 0000 nienaruszona, "
             f"medycyna-regeneracyjna 0444 bez zmian, medicusnoster statyczny szablon TSW + .env 0600 OK, 0 obcych plików PHP, czysty kod HTML). Nic nie ruszano.{nz_ops_footer}"
         )
@@ -691,12 +691,12 @@ def cmd_ai_audit(env_vars: dict) -> int:
     sys_prompt_arbiter = (
         "Jesteś Głównym Arbitrem Końcowym #4 (Antigravity / Gemini High-Reasoning — Senior DevOps & ISO 27001 Lead Auditor). "
         "Masz przed sobą surowy 24-godzinny Rentgen wszystkich 3 przestrzeni ORAZ 3 niezależne audyty krzyżowe od Audytora #1 (Groq Red Team), "
-        "Audytora #2 (Cerebras Blue Team) i Audytora #3 (Cloudflare ISO 27001), z których każdy badał wszystkie 3 środowiska. "
-        "Zbadaj osobiście wszystkie 3 obszary, skonfrontuj wnioski całej trójki audytorów i wypisz po polsku dokładnie 4 zwięzłe punkty:\n"
-        "1) [1. Twój Hosting LH.pl (Auto-Heal, Poczta & Domeny)]: Twoja weryfikacja + konsensus 3 audytorów (bezpieczeństwo, zajętość dysku i skrzynek pocztowych IMAP, tickety osTicket, RBL oraz zbliżające się terminy opłacenia domen/SSL),\n"
-        "2) [2. Serwer VPS (Auto-Heal)]: Twoja weryfikacja + konsensus 3 audytorów (stan 78 testów, kontenerów, WAF/Fail2ban, IoC, RBL i kopii R2),\n"
-        "3) [3. Hosting Klienta nazwa.pl (100% Read-Only — ZERO ZMIAN)]: Twoja weryfikacja + konsensus 3 audytorów (stan 11/11 kontroli kwarantanny 0000, plików 0444 na medycyna-regeneracyjna.pl, szablonu statycznego TSW + .env 0600 na medicusnoster.pl, DOM HTTPS oraz stan SSL/domen klienta),\n"
-        "4) [4. Werdykt Końcowy Arbitra (Matryca 3×3)]: CZYSTO / PRZYPOMNIENIE O PŁATNOŚCI DOMENY / WYMAGA DECYZJI."
+        "Audytora #2 (Cerebras Blue Team) i Audytora #3 (Cloudflare ISO 27001). "
+        "Właściciel wymaga krótkiego, żołnierskiego podsumowania bez ściany tekstu (maksymalnie 4 krótkie linijki, po 1 zdaniu na punkt, z ikonami ✅ lub ⚠️):\n"
+        "✅ LH.pl: [1 krótkie zdanie: status bezpieczeństwa, poczty/dysku i ewentualne przypomnienie o domenie <35 dni]\n"
+        "✅ VPS: [1 krótkie zdanie: status testów, kontenerów, backupów R2 i ochrony WAF/Fail2ban]\n"
+        "✅ nazwa.pl (Read-Only): [1 krótkie zdanie: status 11/11 kontroli i domen klienta]\n"
+        "⚖️ Werdykt: [CZYSTO / PRZYPOMNIENIE O PŁATNOŚCI DOMENY / WYMAGA DECYZJI — 1 zdanie podsumowania]"
     )
 
     if gemini_key:
@@ -790,25 +790,12 @@ def cmd_ai_audit(env_vars: dict) -> int:
 
     rem_usd = max(0.0, round(float(budget["initial_usd"]) - float(budget.get("spent_usd", 0.0)), 4))
     out_lines = []
-    if aud1_ans:
-        t1 = f" [myślenie: {aud1_think} tok. / łącznie: {aud1_tot} tok.]" if aud1_think > 0 else f" [{aud1_tot} tok.]"
-        out_lines.append(f"🧠 Audytor Krzyżowy #1 (LH.pl + VPS + nazwa.pl | Red Team) — {aud1_label}{t1}:\n{aud1_ans}")
-    if aud2_ans:
-        t2 = f" [myślenie: {aud2_think} tok. / łącznie: {aud2_tot} tok.]" if aud2_think > 0 else f" [{aud2_tot} tok.]"
-        out_lines.append(f"🔍 Audytor Krzyżowy #2 (LH.pl + VPS + nazwa.pl | Blue Team & DR) — {aud2_label}{t2}:\n{aud2_ans}")
-    if aud3_ans:
-        t3 = f" [{aud3_tot} tok.]" if aud3_tot > 0 else ""
-        out_lines.append(f"🌐 Audytor Krzyżowy #3 (LH.pl + VPS + nazwa.pl | ISO 27001) — {aud3_label}{t3}:\n{aud3_ans}")
-    if arbiter_ans:
-        t4 = f" [myślenie: {arbiter_think} tok. / łącznie: {arbiter_tot} tok.]" if arbiter_think > 0 else f" [{arbiter_tot} tok.]"
-        out_lines.append(f"⚖️ Arbiter Końcowy #4 (Synteza 3×3: LH.pl + VPS + nazwa.pl) — {arbiter_label}{t4}:\n{arbiter_ans}")
+    final_summary = arbiter_ans or aud1_ans or aud2_ans or aud3_ans
+    if final_summary:
+        out_lines.append(f"⚖️ Podsumowanie ostatecznego audytu:\n{final_summary}")
     if claude_section:
         out_lines.append(claude_section.strip())
 
-    out_lines.append(
-        f"💰 Koszt dzisiejszego audytu krzyżowego 3×3 (3 Niezależnych + Arbiter Antigravity): ${cost_today_usd:.4f} ($0.00 Always Free)\n"
-        f"• Zamrożona rezerwa czatbota Anthropic ($5.00): pozostało ${rem_usd:.4f} (0.00 USD poboru w audytach)"
-    )
     print("\n\n".join(out_lines))
     return 0
 
@@ -1019,28 +1006,31 @@ def cmd_ksh_scrapers(env_vars: dict, pl_date: str) -> int:
             raw_c = m_c.group(1).strip()
             csv_cnt = 0 if "brak" in raw_c.lower() else len([u for u in raw_c.split(",") if "http" in u])
 
-    if bot_modified_today:
-        mod_status_line = f"🔄 Modyfikacja ze scraperów (dziś): TAK — wdrożono na LH.pl (commit {bot_commit_sha}, {bot_commit_time})"
+    added_ev_cnt = len(added_ev)
+    removed_ev_cnt = len(removed_ev)
+    if added_ev_cnt == 0 and removed_ev_cnt == 0:
+        ev_status_str = "0 (bez zmian)"
     else:
-        mod_status_line = f"🔄 Modyfikacja ze scraperów (dziś): BRAK ZMIAN (strona na LH.pl nie wymagała aktualizacji, skan #{run_id} {run_status})"
+        ev_status_str = f"+{added_ev_cnt} / -{removed_ev_cnt}"
 
-    ev_delta_str = f"+{len(added_ev)} nowych | -{len(removed_ev)} minionych usuniętych"
-    if added_ev:
-        ev_delta_str += " (" + ", ".join(added_ev[:3]) + (f" i +{len(added_ev)-3} więcej" if len(added_ev) > 3 else "") + ")"
+    if added_cls_cnt == 0 and removed_cls_cnt == 0:
+        cls_status_str = "0 (bez zmian)"
+    else:
+        cls_status_str = f"+{added_cls_cnt} / -{removed_cls_cnt} zajęć"
 
-    cls_delta_str = f"+{added_cls_cnt} nowych | ~{modified_cls_cnt} zaktualizowanych (np. daty START) | -{removed_cls_cnt} usuniętych"
-    price_delta_str = (", ".join(pricing_changes)) if pricing_changes else "0 zmian (stawki w szkołach bez zmian)"
+    added_price_cnt = len(pricing_changes)
+    removed_price_cnt = 0
+    if added_price_cnt == 0 and removed_price_cnt == 0:
+        price_status_str = "0 (bez zmian)"
+    else:
+        price_status_str = f"+{added_price_cnt} / -{removed_price_cnt}"
 
-    short_mod_tag = "ZAKTUALIZOWANO LH.pl" if bot_modified_today else "BEZ ZMIAN"
-    short_line = f"🕺 Scrapery KSH ({short_mod_tag}): {events_cnt} impr. (+{len(added_ev)}/-{len(removed_ev)}) | Grafiki: {classes_cnt} kursów (~{modified_cls_cnt} zm.) | Cenniki: OK"
+    short_line = f"✅ KSH: Wydarzenia {ev_status_str} | Grafik {cls_status_str} | Cennik {price_status_str}"
 
     lines = [
-        mod_status_line,
-        f"📝 Zmiany ze scraperów: Imprezy [{ev_delta_str}] | Grafiki [{cls_delta_str}] | Cenniki [{price_delta_str}]",
-        f"🚀 Modyfikacje strony (ostatnie 24h): {latest_commit_info}",
-        f"📅 Kalendarz Imprez: {events_cnt} wydarzeń ({days_cnt} dni) | Weekend: {wknd_info} | Kolejne tyg.: {future_info} | Formularz CSV: {csv_cnt} zgłosz.",
-        f"🏫 Grafiki Szkół ({classes_cnt} kursów): La Clave: {by_school.get('LC', 0)} | Good Mood: {by_school.get('GM', 0)} | Mil Pasos: {by_school.get('MP', 0)} (P0:{by_level.get('P0',0)}, P1:{by_level.get('P1',0)}, P2:{by_level.get('P2',0)}, S1:{by_level.get('S1',0)}, OPEN:{by_level.get('OPEN',0)})",
-        f"💰 Cenniki (Live OK): " + (" | ".join(pricing_parts) if pricing_parts else "Zweryfikowane"),
+        f"✅ Wydarzenia taneczne: {ev_status_str} (łącznie w bazie: {events_cnt})",
+        f"✅ Grafik szkół: {cls_status_str} (łącznie w bazie: {classes_cnt} zajęć)",
+        f"✅ Cennik szkół: {price_status_str}",
     ]
 
     print(
