@@ -496,11 +496,16 @@ if (isset($chatMailboxes['whatsapp'])) {
         $waCustomer = fsFindOrCreateCustomer('whatsapp@katosalsahub.pl', 'Kato Salsa Hub', '— WhatsApp Business');
         $waBodyHtml = <<<'HTML'
 <div>
+  <p>
+    <strong>⚠️ OSTRZEŻENIE:</strong> Obecnie na Fanpage'u <code>KatoSalsaHub</code> podpięty jest prywatny numer WhatsApp!
+    <strong>NIE dodawaj prywatnego numeru do Meta WhatsApp Cloud API</strong> (wypięłoby to prywatną aplikację WhatsApp z telefonu!).
+    Gdy dokupisz nowy starter/eSIM fundacyjny (~5–15 zł/rok), najpierw podmień numer WhatsApp na Fanpage'u <code>KatoSalsaHub</code> na nowy numer eSIM (dodatkowy plus OPSEC: ukryjesz swój prywatny numer telefonu na publicznym FB!) i dopiero ten nowy numer podepnij w <code>Meta WhatsApp</code>.
+  </p>
   <h3>Instrukcja wdrożenia WhatsApp Business dla Fundacji Kato Salsa Hub</h3>
   <ol>
     <li>
       <strong>Karta eSIM pod dedykowany numer fundacji:</strong><br>
-      Kupić najtańszy starter / <strong>eSIM z roczną ważnością konta (~5–15 zł/rok)</strong> wyłącznie pod oficjalnego WhatsAppa Fundacji Kato Salsa Hub <em>(aby nie wypinać prywatnego WhatsAppa z telefonu)</em>.
+      Kupić najtańszy starter / <strong>eSIM z roczną ważnością konta (~5–15 zł/rok)</strong> wyłącznie pod oficjalnego WhatsAppa Fundacji Kato Salsa Hub <em>(aby nie wypinać prywatnego WhatsAppa z telefonu)</em>, a następnie podmienić numer WhatsApp na Fanpage'u <code>KatoSalsaHub</code> z prywatnego na nowy numer eSIM.
     </li>
     <li>
       <strong>Konfiguracja w Meta Business Suite:</strong><br>
