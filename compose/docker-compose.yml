@@ -331,9 +331,8 @@ services:
       - GITHUB_EXPORTER_TOKEN=${GITHUB_TOKEN}
       - GITHUB_EXPORTER_REQUEST_TIMEOUT=15s
       - GITHUB_EXPORTER_WEB_TIMEOUT=20s
-      - GITHUB_EXPORTER_ORGS=TwojaStronaWWW,zeslownikiem
-      # Lista monitorowanych repozytoriów (domyślnie projekty platformy + strony klientów B2B)
-      - GITHUB_EXPORTER_REPOS=${GITHUB_EXPORTER_REPOS:-TwojaStronaWWW/devops-stack,TwojaStronaWWW/twojastronawww,TwojaStronaWWW/katosalsahub,TwojaStronaWWW/fuegolingua,TwojaStronaWWW/raricart,TwojaStronaWWW/medicusnoster,TwojaStronaWWW/medycyna-regeneracyjna,TwojaStronaWWW/krzysztofpoczatek,TwojaStronaWWW/wspolnekamienice,TwojaStronaWWW/hd-osticket-helpdesk,zeslownikiem/gal-anonym,zeslownikiem/gal-anonim-web}
+      # Lista monitorowanych repozytoriów (z wykluczeniem twojastronawww*, radar-p1*, katosalsahub* oraz archiwalnych)
+      - GITHUB_EXPORTER_REPOS=TwojaStronaWWW/devops-stack,TwojaStronaWWW/_site-template,TwojaStronaWWW/tsw-enterprise-plugin,TwojaStronaWWW/raricart,TwojaStronaWWW/medicusnoster,TwojaStronaWWW/medycyna-regeneracyjna,TwojaStronaWWW/Moje-CV,TwojaStronaWWW/pawel-krzewinski-cv,TwojaStronaWWW/wspolnekamienice,TwojaStronaWWW/hd-osticket-helpdesk,zeslownikiem/gal-anonym,zeslownikiem/gal-anonim-web
     deploy:
       resources:
         limits:

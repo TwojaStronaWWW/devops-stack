@@ -408,6 +408,19 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     ]) {
       assert.ok(webExprs.includes(metric), `Dashboard web-analytics-overview nie wizualizuje metryki ${metric}`);
     }
+
+    // Weryfikacja wykluczenia twojastronawww, radar-p1 oraz katosalsahub z raportów i paneli Grafany
+    const siteVar = webDash.templating?.list?.find((v) => v.name === 'site');
+    const siteOptionValues = (siteVar?.options || []).map((o) => o.value);
+    for (const excludedSite of ['twojastronawww', 'radar-p1', 'katosalsahub', 'dancepuls', 'fuegolingua']) {
+      assert.strictEqual(
+        siteOptionValues.includes(excludedSite),
+        false,
+        `Wykluczony serwis '${excludedSite}' nie może występować na liście wyboru $site w Grafanie`
+      );
+    }
+    assert.match(kumaExprs, /github_repo_issues\{[^}]*twojastronawww/);
+    assert.match(webExprs, /site!~\\"twojastronawww\|radar-p1\|katosalsahub\|dancepuls\|fuegolingua\\"/);
   });
 
   it('reguły alertów Prometheusa dla AI Routera oraz infrastruktury VPS powinny być zamontowane i wczytywane', () => {

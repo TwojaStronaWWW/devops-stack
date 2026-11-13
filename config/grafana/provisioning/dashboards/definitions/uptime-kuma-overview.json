@@ -942,7 +942,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sort_desc(github_repo_size)",
+          "expr": "sort_desc(github_repo_size{name!~\"(?i)(twojastronawww.*|radar.*|katosalsahub.*|dancepuls.*|fuegolingua.*)\"})",
           "instant": true,
           "legendFormat": "{{owner}}/{{name}}",
           "range": false,
@@ -1011,7 +1011,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(github_repo_issues{owner=\"TwojaStronaWWW\"}) or vector(0)",
+          "expr": "sum(github_repo_issues{owner=\"TwojaStronaWWW\",name!~\"(?i)(twojastronawww.*|radar.*|katosalsahub.*|dancepuls.*|fuegolingua.*)\"}) or vector(0)",
           "instant": true,
           "legendFormat": "TwojaStronaWWW",
           "range": false,
@@ -1023,7 +1023,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(github_repo_issues{owner=\"zeslownikiem\"}) or vector(0)",
+          "expr": "sum(github_repo_issues{owner=\"zeslownikiem\",name!~\"(?i)(twojastronawww.*|radar.*|katosalsahub.*|dancepuls.*|fuegolingua.*)\"}) or vector(0)",
           "instant": true,
           "legendFormat": "zeslownikiem",
           "range": false,
@@ -1035,7 +1035,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(github_repo_issues) or vector(0)",
+          "expr": "sum(github_repo_issues{name!~\"(?i)(twojastronawww.*|radar.*|katosalsahub.*|dancepuls.*|fuegolingua.*)\"}) or vector(0)",
           "instant": true,
           "legendFormat": "Łącznie (Cross-Org)",
           "range": false,

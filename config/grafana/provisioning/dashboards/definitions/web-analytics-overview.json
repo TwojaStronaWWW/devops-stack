@@ -90,7 +90,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (effective_label) (web_analytics_period_unique_visitors{site=~\"$site\",period=\"$period\"}) or on() vector(0)",
+          "expr": "sum by (effective_label) (web_analytics_period_unique_visitors{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}) or on() vector(0)",
           "instant": true,
           "legendFormat": "{{effective_label}}",
           "refId": "A"
@@ -126,7 +126,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_pageviews{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -161,7 +161,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_period_sources{site=~\"$site\",period=\"$period\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_sources{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",source=~\"google|bing|duckduckgo|ai_search\",label!=\"\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -196,7 +196,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_period_engaged_visits{site=~\"$site\",period=\"$period\"}) or vector(0)",
+          "expr": "sum(web_analytics_period_engaged_visits{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -234,7 +234,7 @@
       },
       "targets": [
         {
-          "expr": "100 * sum(web_analytics_period_devices{site=~\"$site\",period=\"$period\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_period_devices{site=~\"$site\",period=\"$period\",label!=\"\"}), 1) or vector(0)",
+          "expr": "100 * sum(web_analytics_period_devices{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",device=~\"mobile|tablet\",label!=\"\"}) / clamp_min(sum(web_analytics_period_devices{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}), 1) or vector(0)",
           "instant": true,
           "refId": "A"
         }
@@ -271,7 +271,7 @@
       },
       "targets": [
         {
-          "expr": "sum(web_analytics_period_lcp_seconds_sum{site=~\"$site\",period=\"$period\"}) / (sum(web_analytics_period_lcp_seconds_count{site=~\"$site\",period=\"$period\"}) > 0) or (sum(web_analytics_cwv_lcp_seconds_sum{site=~\"$site\"}) / clamp_min(sum(web_analytics_cwv_lcp_seconds_count{site=~\"$site\"}), 1))",
+          "expr": "sum(web_analytics_period_lcp_seconds_sum{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}) / (sum(web_analytics_period_lcp_seconds_count{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}) > 0) or (sum(web_analytics_cwv_lcp_seconds_sum{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}) / clamp_min(sum(web_analytics_cwv_lcp_seconds_count{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}), 1))",
           "instant": true,
           "refId": "A"
         }
@@ -305,7 +305,7 @@
       },
       "targets": [
         {
-          "expr": "sort_desc(sum by (label) (web_analytics_period_sources{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "sort_desc(sum by (label) (web_analytics_period_sources{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -340,7 +340,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or on() topk(5, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "topk(10, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}) > 0) or on() topk(5, sum by (label) (web_analytics_period_pageviews{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -375,7 +375,7 @@
       },
       "targets": [
         {
-          "expr": "topk(12, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",period=\"$period\"}) > 0) or on() topk(3, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",period=\"$period\"}))",
+          "expr": "topk(12, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}) > 0) or on() topk(3, sum by (term) (web_analytics_period_search_terms{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\"}))",
           "instant": true,
           "legendFormat": "🔍 {{term}}",
           "refId": "A"
@@ -408,12 +408,12 @@
       },
       "targets": [
         {
-          "expr": "sum by (site, label) (increase(web_analytics_pageviews_total{site=~\"$site\",label!=\"\"}[1m]))",
+          "expr": "sum by (site, label) (increase(web_analytics_pageviews_total{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",label!=\"\"}[1m]))",
           "legendFormat": "{{site}} • {{label}}",
           "refId": "A"
         },
         {
-          "expr": "sum by (site) (increase(web_analytics_unique_visitors_total{site=~\"$site\"}[5m]))",
+          "expr": "sum by (site) (increase(web_analytics_unique_visitors_total{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}[5m]))",
           "legendFormat": "👤 Nowi odwiedzający ({{site}})",
           "refId": "B"
         }
@@ -447,7 +447,7 @@
       },
       "targets": [
         {
-          "expr": "sort_desc(sum by (label) (web_analytics_period_devices{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "sort_desc(sum by (label) (web_analytics_period_devices{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -482,7 +482,7 @@
       },
       "targets": [
         {
-          "expr": "topk(8, sum by (label) (web_analytics_period_countries{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or on() topk(4, sum by (label) (web_analytics_period_countries{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "topk(8, sum by (label) (web_analytics_period_countries{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}) > 0) or on() topk(4, sum by (label) (web_analytics_period_countries{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -517,7 +517,7 @@
       },
       "targets": [
         {
-          "expr": "sort_desc(sum by (label) (web_analytics_period_events{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "sort_desc(sum by (label) (web_analytics_period_events{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -528,7 +528,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Porównanie liczby odsłon pomiędzy wszystkimi serwisami platformy TwojaStronaWWW w wybranym okresie.",
+      "description": "Porównanie liczby odsłon pomiędzy aktywnymi serwisami klientów w wybranym okresie.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -537,28 +537,20 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "🌐 katosalsahub (odsłony)" },
-            "properties": [{ "id": "displayName", "value": "💃 Kato Salsa Hub (katosalsahub.pl) — odsłony" }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "🌐 dancepuls (odsłony)" },
-            "properties": [{ "id": "displayName", "value": "🎉 DancePuls (dancepuls.pl) — odsłony" }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "🌐 fuegolingua (odsłony)" },
-            "properties": [{ "id": "displayName", "value": "🇪🇸 FuegoLingua (fuegolingua.pl) — odsłony" }]
-          },
-          {
-            "matcher": { "id": "byName", "options": "🌐 twojastronawww (odsłony)" },
-            "properties": [{ "id": "displayName", "value": "🚀 TwojaStronaWWW (twojastronawww.pl) — odsłony" }]
-          },
-          {
             "matcher": { "id": "byName", "options": "🌐 raricart (odsłony)" },
             "properties": [{ "id": "displayName", "value": "🥂 Raricart (raricart.pl) — odsłony" }]
           },
           {
-            "matcher": { "id": "byName", "options": "🌐 radar-p1 (odsłony)" },
-            "properties": [{ "id": "displayName", "value": "🏥 Radar P1 e-Zdrowie (radar-p1) — odsłony" }]
+            "matcher": { "id": "byName", "options": "🌐 medicusnoster (odsłony)" },
+            "properties": [{ "id": "displayName", "value": "🏥 Medicus Noster (medicusnoster.pl) — odsłony" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "🌐 medycyna-regeneracyjna (odsłony)" },
+            "properties": [{ "id": "displayName", "value": "🧬 Medycyna Regeneracyjna (medycyna-regeneracyjna.pl) — odsłony" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "🌐 wspolnekamienice (odsłony)" },
+            "properties": [{ "id": "displayName", "value": "🏢 Wspólne Kamienice (wspolnekamienice.pl) — odsłony" }]
           }
         ]
       },
@@ -578,7 +570,7 @@
       },
       "targets": [
         {
-          "expr": "sort_desc(sum by (site) (web_analytics_period_pageviews{period=\"$period\",label!=\"\"}))",
+          "expr": "sort_desc(sum by (site) (web_analytics_period_pageviews{site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "🌐 {{site}} (odsłony)",
           "refId": "A"
@@ -613,7 +605,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (label) (ai_router_period_question_topics{site=~\"$site\",period=\"$period\",label!=\"\"}) > 0) or on() topk(5, sum by (label) (ai_router_period_question_topics{site=~\"$site\",period=\"$period\",label!=\"\"}))",
+          "expr": "topk(10, sum by (label) (ai_router_period_question_topics{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}) > 0) or on() topk(5, sum by (label) (ai_router_period_question_topics{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\",period=\"$period\",label!=\"\"}))",
           "instant": true,
           "legendFormat": "{{label}}",
           "refId": "A"
@@ -648,13 +640,13 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (query) (web_analytics_gsc_keyword_clicks_total{site=~\"$site\"}) > 0)",
+          "expr": "topk(10, sum by (query) (web_analytics_gsc_keyword_clicks_total{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}) > 0)",
           "instant": true,
           "legendFormat": "🖱️ {{query}} (kliknięcia)",
           "refId": "A"
         },
         {
-          "expr": "topk(10, sum by (query) (web_analytics_gsc_keyword_impressions_total{site=~\"$site\"}) > 0) or on() topk(3, sum by (query) (web_analytics_gsc_keyword_impressions_total{site=~\"$site\"}))",
+          "expr": "topk(10, sum by (query) (web_analytics_gsc_keyword_impressions_total{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}) > 0) or on() topk(3, sum by (query) (web_analytics_gsc_keyword_impressions_total{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}))",
           "instant": true,
           "legendFormat": "👁️ {{query}} (wyświetlenia)",
           "refId": "B"
@@ -698,7 +690,7 @@
       },
       "targets": [
         {
-          "expr": "bottomk(15, avg by (query) (web_analytics_gsc_keyword_position{site=~\"$site\"}) > 0) or on() topk(3, avg by (query) (web_analytics_gsc_keyword_position{site=~\"$site\"}))",
+          "expr": "bottomk(15, avg by (query) (web_analytics_gsc_keyword_position{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}) > 0) or on() topk(3, avg by (query) (web_analytics_gsc_keyword_position{site=~\"$site\",site!~\"twojastronawww|radar-p1|katosalsahub|dancepuls|fuegolingua\"}))",
           "instant": true,
           "legendFormat": "🎯 {{query}} (pozycja)",
           "refId": "A"
@@ -710,7 +702,7 @@
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["twojastronawww", "analytics", "seo", "katosalsahub"],
+  "tags": ["twojastronawww", "analytics", "seo"],
   "templating": {
     "list": [
       {
@@ -723,14 +715,12 @@
         "name": "site",
         "options": [
           { "selected": true, "text": "🌐 Wszystkie serwisy", "value": "$__all" },
-          { "selected": false, "text": "💃 Kato Salsa Hub (katosalsahub.pl)", "value": "katosalsahub" },
-          { "selected": false, "text": "🎉 DancePuls (dancepuls.pl)", "value": "dancepuls" },
-          { "selected": false, "text": "🇪🇸 FuegoLingua (fuegolingua.pl)", "value": "fuegolingua" },
-          { "selected": false, "text": "🚀 TwojaStronaWWW (twojastronawww.pl)", "value": "twojastronawww" },
           { "selected": false, "text": "🥂 Raricart (raricart.pl)", "value": "raricart" },
-          { "selected": false, "text": "🏥 Radar P1 e-Zdrowie (radar-p1)", "value": "radar-p1" }
+          { "selected": false, "text": "🏥 Medicus Noster (medicusnoster.pl)", "value": "medicusnoster" },
+          { "selected": false, "text": "🧬 Medycyna Regeneracyjna (medycyna-regeneracyjna.pl)", "value": "medycyna-regeneracyjna" },
+          { "selected": false, "text": "🏢 Wspólne Kamienice (wspolnekamienice.pl)", "value": "wspolnekamienice" }
         ],
-        "query": "💃 Kato Salsa Hub (katosalsahub.pl) : katosalsahub,🎉 DancePuls (dancepuls.pl) : dancepuls,🇪🇸 FuegoLingua (fuegolingua.pl) : fuegolingua,🚀 TwojaStronaWWW (twojastronawww.pl) : twojastronawww,🥂 Raricart (raricart.pl) : raricart,🏥 Radar P1 e-Zdrowie (radar-p1) : radar-p1",
+        "query": "🥂 Raricart (raricart.pl) : raricart,🏥 Medicus Noster (medicusnoster.pl) : medicusnoster,🧬 Medycyna Regeneracyjna (medycyna-regeneracyjna.pl) : medycyna-regeneracyjna,🏢 Wspólne Kamienice (wspolnekamienice.pl) : wspolnekamienice",
         "type": "custom"
       },
       {
