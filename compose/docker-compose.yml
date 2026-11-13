@@ -628,6 +628,7 @@ services:
       - FREESCOUT_APP_LOCALE=pl
       - FREESCOUT_APP_DEBUG=false
       - FREESCOUT_APP_TRUSTED_PROXIES=*
+      - PHP_MEMORY_LIMIT=256M
     deploy:
       resources:
         limits:

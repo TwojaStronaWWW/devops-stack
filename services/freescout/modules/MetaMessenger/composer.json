@@ -1,0 +1,14 @@
+{
+    "name": "twojastronawww/metamessenger",
+    "description": "Facebook Page Messenger & Instagram DM channel for FreeScout via Meta Graph API v21.0",
+    "license": "AGPL-3.0",
+    "type": "library",
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\MetaMessenger\\": ""
+        }
+    }
+}

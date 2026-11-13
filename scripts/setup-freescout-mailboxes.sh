@@ -8,6 +8,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PHP_SCRIPT="${SCRIPT_DIR}/setup-freescout-mailboxes.php"
+SOCIAL_INSTALLER="${SCRIPT_DIR}/install-freescout-social-modules.sh"
+
+SKIP_SOCIAL="0"
+if [[ "${1:-}" == "--skip-social" ]]; then
+    SKIP_SOCIAL="1"
+fi
 
 if [[ ! -f "${PHP_SCRIPT}" ]]; then
     echo "[BŁĄD] Brak pliku ${PHP_SCRIPT}!" >&2
@@ -17,6 +23,10 @@ fi
 if ! docker inspect -f '{{.State.Running}}' freescout 2>/dev/null | grep -qx "true"; then
     echo "[BŁĄD] Kontener 'freescout' nie jest uruchomiony!" >&2
     exit 1
+fi
+
+if [[ "${SKIP_SOCIAL}" != "1" && -f "${SOCIAL_INSTALLER}" ]]; then
+    bash "${SOCIAL_INSTALLER}"
 fi
 
 # Przekazanie wyłącznie nazw zmiennych (-e NAZWA bez =wartość) chroni przed wyciekiem do ps aux

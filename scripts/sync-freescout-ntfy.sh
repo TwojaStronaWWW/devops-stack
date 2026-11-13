@@ -181,6 +181,10 @@ def resolve_badge(email_addr: str, mb_name: str) -> str:
     el = email_addr.lower().strip()
     if el == "kontakt@katosalsahub.pl":
         return "[KatoSalsaHub]"
+    if el == "messenger@katosalsahub.pl":
+        return "[KSH Messenger/IG]"
+    if el == "whatsapp@katosalsahub.pl":
+        return "[KSH WhatsApp]"
     if el == "kontakt@twojastronawww.pl":
         return "[TwojaStronaWWW]"
     if el == "kontakt@wspolnekamienice.pl":

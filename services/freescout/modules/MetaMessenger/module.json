@@ -1,0 +1,28 @@
+{
+    "name": "MetaMessenger",
+    "display_name": "Meta Messenger & Instagram",
+    "alias": "metamessenger",
+    "description": "Natywny kanał Facebook Page Messenger (object=page) oraz Instagram DM (object=instagram) przez Meta Graph API v21.0.",
+    "keywords": [
+        "facebook",
+        "messenger",
+        "instagram",
+        "meta",
+        "channel"
+    ],
+    "active": 1,
+    "order": 0,
+    "providers": [
+        "Modules\\MetaMessenger\\Providers\\MetaMessengerServiceProvider"
+    ],
+    "aliases": {},
+    "files": [
+        "autoload.php",
+        "start.php"
+    ],
+    "version": "1.0.0",
+    "freescout_version": "1.8.234",
+    "author": "TwojaStronaWWW",
+    "license": "AGPL-3.0",
+    "requires": []
+}

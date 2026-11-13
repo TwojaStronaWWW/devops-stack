@@ -484,6 +484,8 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
 
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.php')), 'Brak scripts/setup-freescout-mailboxes.php');
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.sh')), 'Brak scripts/setup-freescout-mailboxes.sh');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'install-freescout-social-modules.sh')), 'Brak scripts/install-freescout-social-modules.sh');
+    assert.ok(fs.existsSync(path.join(ROOT_DIR, 'services', 'freescout', 'modules', 'MetaMessenger', 'module.json')), 'Brak services/freescout/modules/MetaMessenger/module.json');
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'sync-freescout-ntfy.sh')), 'Brak scripts/sync-freescout-ntfy.sh');
     assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'setup-freescout-ntfy-timer.sh')), 'Brak scripts/setup-freescout-ntfy-timer.sh');
 

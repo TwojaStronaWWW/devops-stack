@@ -151,6 +151,20 @@ describe('Defensywne testy regresji bezpieczeństwa (OWASP / ISO 27001 / Zero Tr
       const fsSetupPhp = path.join(ROOT_DIR, 'scripts', 'setup-freescout-mailboxes.php');
       const fsRes = spawnSync('php', ['-l', fsSetupPhp], { encoding: 'utf-8' });
       assert.strictEqual(fsRes.status, 0, `Błąd składni PHP w setup-freescout-mailboxes.php: ${fsRes.stderr || fsRes.stdout}`);
+
+      const metaMessengerDir = path.join(ROOT_DIR, 'services', 'freescout', 'modules', 'MetaMessenger');
+      function checkPhpSyntaxRecursive(dir) {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            checkPhpSyntaxRecursive(full);
+          } else if (entry.name.endsWith('.php') && !entry.name.endsWith('.blade.php')) {
+            const mRes = spawnSync('php', ['-l', full], { encoding: 'utf-8' });
+            assert.strictEqual(mRes.status, 0, `Błąd składni PHP w ${full}: ${mRes.stderr || mRes.stdout}`);
+          }
+        }
+      }
+      checkPhpSyntaxRecursive(metaMessengerDir);
     });
 
     it('funkcje pomocnicze PHP (getClientIp, load_env, aiExtractContactLeads, executeJsonPost) powinny przechodzić testy jednostkowe CLI', { skip: !hasPhpCli() }, () => {
