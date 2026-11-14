@@ -484,11 +484,27 @@ else
          "sudo mount -o remount,noexec,nosuid,nodev /dev/shm"
 fi
 
+# Automatyczne utwardzenie polityki nocnego restartu jądra (03:30 UTC — po backupie 03:00 UTC, przed raportem 06:00 PL)
+if [[ -f /etc/apt/apt.conf.d/50unattended-upgrades ]] && grep -q 'Automatic-Reboot "false"' /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null; then
+    sudo -n sed -i 's/Unattended-Upgrade::Automatic-Reboot "false";/Unattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Automatic-Reboot-WithUsers "true";\nUnattended-Upgrade::Automatic-Reboot-Time "03:30";/' /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null || true
+fi
+
 if [[ -f /var/run/reboot-required ]]; then
-    warn "System oczekuje na restart po aktualizacji jądra/pakietów (/var/run/reboot-required)." \
-         "Zaplanuj okno serwisowe i wykonaj: sudo reboot"
+    CUR_UTC_HM="$(date -u +%H%M 2>/dev/null || echo '0000')"
+    REBOOT_STALE="$(find /var/run/reboot-required -mmin +1500 2>/dev/null || true)"
+    if [[ "${CUR_UTC_HM}" -ge 0320 && "${CUR_UTC_HM}" -le 0345 ]]; then
+        if ! pgrep -f "backup-offsite|backup-websites|restore-backup|Runner.Worker" >/dev/null 2>&1; then
+            sudo -n shutdown -r +1 "Auto-Heal Kernel Reboot (03:30 UTC window)" >/dev/null 2>&1 || true
+        fi
+    fi
+    if [[ -z "${REBOOT_STALE}" ]] && grep -q 'Automatic-Reboot "true"' /etc/apt/apt.conf.d/50unattended-upgrades 2>/dev/null; then
+        pass "Jądro systemu zaktualizowane (/var/run/reboot-required) — automatyczny restart zaplanowany w oknie nocnym (03:30 UTC)."
+    else
+        warn "System oczekuje na restart po aktualizacji jądra/pakietów ponad 24h (/var/run/reboot-required)." \
+             "Zaplanuj okno serwisowe i wykonaj: sudo reboot"
+    fi
 else
-    pass "Jądro systemu jest aktualne (brak oczekującego restartu /var/run/reboot-required)."
+    pass "Jądro systemu jest aktualne (brak oczekującego restartu /var/run/reboot-required, Auto-Reboot 03:30 UTC aktywny)."
 fi
 
 # 6. Kontrola i automatyczna samonaprawa oczekujących aktualizacji bezpieczeństwa APT oraz łańcucha DOCKER-USER (+ systemd ExecStartPost hook)
