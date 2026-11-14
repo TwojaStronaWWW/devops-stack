@@ -9,6 +9,7 @@ services:
   runner-unified:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-zeslownikiem-unified
+    command: ["/actions-runner/run.sh", "--startuptype", "service"]
     labels:
       dev.dozzle.name: "runner-zeslownikiem • CI/CD ZeSłownikiem"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji zeslownikiem"
@@ -65,6 +66,7 @@ services:
   runner-twojastronawww:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-twojastronawww-unified
+    command: ["/actions-runner/run.sh", "--startuptype", "service"]
     labels:
       dev.dozzle.name: "runner-twojastronawww • CI/CD TwojaStronaWWW"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla organizacji TwojaStronaWWW"
@@ -123,6 +125,7 @@ services:
   runner-desktop:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-gal-anonym
+    command: ["/actions-runner/run.sh", "--startuptype", "service"]
     profiles: ["split"]
     restart: unless-stopped
     pids_limit: 256
@@ -167,6 +170,7 @@ services:
   runner-web:
     image: myoung34/github-runner:ubuntu-jammy
     container_name: runner-gal-anonim-web
+    command: ["/actions-runner/run.sh", "--startuptype", "service"]
     labels:
       dev.dozzle.name: "runner-gal-anonim-web • CI/CD GalAnonim Web"
       org.opencontainers.image.description: "Self-Hosted GitHub Actions Runner ARM64 dla repozytorium zeslownikiem/gal-anonim-web"
