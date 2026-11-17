@@ -2,7 +2,7 @@
 # AI ROUTER MICROSERVICE - DOCKERFILE (PHP 8.3 ALPINE)
 # Standard: Zero-Bloat, ISO 27001 (PoLP / Non-Root), Architecture: ARM64 & AMD64
 # ==============================================================================
-FROM php:8.3-alpine
+FROM php:8.5-alpine
 
 # Zainstaluj najnowsze łatki bezpieczeństwa musl/Alpine (ochrona m.in. przed sshole) i niezbędne pakiety runtime (cURL, CA), zweryfikuj PDO SQLite FTS5 i utwardź php.ini (CIS/OWASP/PHP2Shell)
 RUN apk upgrade --no-cache && \
