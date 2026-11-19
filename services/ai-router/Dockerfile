@@ -1,5 +1,5 @@
 # ==============================================================================
-# AI ROUTER MICROSERVICE - DOCKERFILE (PHP 8.3 ALPINE)
+# AI ROUTER MICROSERVICE - DOCKERFILE (PHP 8.5 ALPINE)
 # Standard: Zero-Bloat, ISO 27001 (PoLP / Non-Root), Architecture: ARM64 & AMD64
 # ==============================================================================
 FROM php:8.5-alpine

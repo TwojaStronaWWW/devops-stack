@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   dependabot:
@@ -94,3 +95,10 @@ jobs:
 
           echo "✅ CI & Quality Gate zakończone sukcesem dla PR #${PR_NUMBER} (${PR_AUTHOR}). Wykonywanie automatycznego Squash & Merge..."
           gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --squash --delete-branch || gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --auto --squash --delete-branch || true
+
+          sleep 3
+          MERGED_STATE=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json state --jq '.state' 2>/dev/null || echo "")
+          if [ "$MERGED_STATE" = "MERGED" ]; then
+            echo "🚀 PR #${PR_NUMBER} scalony do main — wyzwalanie wdrożenia na VPS (deploy.yml przez workflow_dispatch)..."
+            gh workflow run deploy.yml --repo "${{ github.repository }}" --ref main
+          fi

@@ -570,6 +570,11 @@ describe('Higiena repozytorium DevOps i bezpieczeństwo infrastruktury (ISO 2700
     assert.match(rulesYml, /alert:\s*CloudflareTunnelDown/);
     assert.match(rulesYml, /alert:\s*AIRouterModelDeprecated/);
     assert.match(rulesYml, /alert:\s*VPSSecurityBreachIoCDetected/);
+    assert.match(rulesYml, /alert:\s*VPSCodeDriftDetected/);
+
+    const automergeYml = fs.readFileSync(path.join(ROOT_DIR, '.github', 'workflows', 'dependabot-automerge.yml'), 'utf-8');
+    assert.match(automergeYml, /actions:\s*write/);
+    assert.match(automergeYml, /gh workflow run deploy\.yml/);
 
     const offsiteBackup = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'backup-offsite.sh'), 'utf-8');
     assert.match(offsiteBackup, /devops_backup_verified/);

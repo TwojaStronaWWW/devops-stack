@@ -162,13 +162,22 @@ groups:
           description: "Sredni czas renderowania najwiekszego elementu (LCP w oknie 6h) u uzytkownikow serwisu {{ $labels.site }} wynosi {{ $value | printf \"%.2f\" }}s (prog Google Good <= 2.5s)."
 
       - alert: VPSSecurityBreachIoCDetected
-        expr: devops_security_ioc_clean == 0 or devops_audit_status == 0
+        expr: devops_security_ioc_clean == 0 or devops_audit_os_hardened == 0 or (devops_audit_status == 0 and devops_audit_git_synced == 1)
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: "Wykryto slady kompromitacji IoC lub blad krytyczny audytu bezpieczenstwa VPS"
-          description: "Straznik 24/7 (audit-server.sh) zglosil naruszenie integralnosci IoC (devops_security_ioc_clean=0) lub awarie warstwy obronnej (devops_audit_status=0)."
+          summary: "Wykryto slady kompromitacji IoC lub blad krytyczny bezpieczenstwa VPS"
+          description: "Straznik 24/7 (audit-server.sh) zglosil naruszenie integralnosci IoC (devops_security_ioc_clean=0), oslabienie zapory/OS (devops_audit_os_hardened=0) lub awarie warstwy obronnej niezwiązana z rozjazdem Git."
+
+      - alert: VPSCodeDriftDetected
+        expr: devops_audit_git_synced == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Rozjazd wersji kodu (Git Code Drift) miedzy serwerem VPS a GitHub origin/main"
+          description: "Katalog /opt/devops-stack na serwerze VPS nie jest zsynchronizowany z origin/main od ponad 15 minut (devops_audit_git_synced=0). Uruchom workflow deploy.yml."
 
       - alert: VPSHostHighCPU
         expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85

@@ -132,7 +132,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── prometheus/
 │   │   ├── prometheus.yml         # Scrape: Kuma, Node Exporter, cAdvisor, GitHub Exporter, AI Router (/metrics co 5s)
 │   │   └── rules/
-│   │       └── ai-router.yml      # 21 reguł alertów Prometheusa (kaskada AI, WAF, Fail2Ban IPS, IoC, CPU, Inodes, NTP, certyfikaty, dysk, RAM, backupy)
+│   │       └── ai-router.yml      # 25 reguł alertów Prometheusa (kaskada AI, WAF, Fail2Ban IPS, IoC, Code Drift, CPU, Inodes, NTP, certyfikaty, dysk, RAM, backupy)
 │   └── grafana/
 │       └── provisioning/
 │           ├── datasources/       # Automatyczne podpinanie Prometheus API (uid: prometheus)
@@ -160,7 +160,7 @@ Wszystkie mechanizmy obronne są wdrażane automatycznie przez skrypt [`scripts/
 │   ├── warm-ai-cache.sh           # Idempotentny pre-warming pamięci podręcznej RAG (Quick Prompts) po wdrożeniu
 │   └── runners/                   # Skrypty sterowania runnerami CI/CD
 ├── services/
-│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, Multi-Provider RAG, Cache <5ms, WAF L7)
+│   └── ai-router/                 # Scentralizowany mikro-router AI & Analityki WWW (PHP 8.5 Alpine + PDO SQLite FTS5, Multi-Provider RAG, Cache <5ms, WAF L7)
 │       ├── Dockerfile             # Izolowany kontener non-root, minimalny footprint (~12 MB RAM, 4 workery PHP)
 │       ├── src/
 │       │   ├── chat-router.php    # Obsługa POST, CORS whitelist, WAF L7 + 15m Penalty Box, Cache RAG (<5ms), Leady Ntfy 1-Klik, 11-modelowa kaskada LLM, /analytics
@@ -392,7 +392,7 @@ Serwer VPS udostępnia scentralizowany mikro-router AI oraz kolektor bezciastecz
 - **Inteligentny Cache odpowiedzi RAG (`~1.8 ms` / `0` tokenów) + Automatyczny Pre-warming (`scripts/warm-ai-cache.sh`):** Powtarzalne pytania o ofertę i cennik są serwowane z atomowej pamięci podręcznej `/app/storage/cache` w niecałe **2 milisekundy**, bez zużywania dziennych limitów API. Klucz cache normalizuje interpunkcji i wielkość liter oraz uwzględnia `filemtime` pliku wiedzy, a skrypt `scripts/warm-ai-cache.sh` automatycznie rozgrzewa przyciski Quick Prompts podczas każdego wdrożenia CI/CD (`deploy.yml`).
 - **Ochrona przed ucinaniem zdań i ukrytymi tokenami myślenia (`thoughtsTokenCount` / `reasoning_tokens`):** Router wymusza `maxOutputTokens: 2048`, przekazuje `'thinkingLevel' => 'MINIMAL'` dla `gemini-3.5-*` (lub `'LOW'` dla `gemini-3.7/3.8`), `'reasoning_effort' => 'low'` / `'disable_reasoning' => true` dla Cerebras WSE, `'reasoning' => ['effort' => 'none']` dla OpenRoutera, wykorzystuje domyślnie wyłączone *Extended Thinking* + *Prompt Caching* (`ephemeral` `-90%`) w Claude Haiku 4.5 oraz odrzuca odpowiedzi z `finishReason === 'MAX_TOKENS'` (`length` / `max_tokens`).
 - **Detektor „Gorącego Leada” i Natychmiastowa Ekstrakcja Telefonu / E-maila (Zero-PII na dysku):** Gdy klient poda w rozmowie numer telefonu lub adres e-mail (`event=contact_lead_captured`), router automatycznie wyciąga i formatuje numer (`📞 TELEFON: +48 ...`) oraz adres (`✉️ E-MAIL: ...`), umieszcza je bezpośrednio w tytule powiadomienia i w pierwszych linijkach wiadomości Ntfy.sh (wraz z wcześniejszymi pytaniami z sesji) oraz dodaje natywne przyciski akcji 1-Klik (`Zadzwoń tel:...` / `Napisz e-mail mailto:...`). Przy 4. pytaniu klienta w jednej sesji (`count($sanitizedHistory) === 6`) wysyła ponadto sygnał `event=hot_lead_detected`.
-- **0 MB wag modeli na serwerze VPS:** Wszystkie 11 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.3 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~14 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
+- **0 MB wag modeli na serwerze VPS:** Wszystkie 11 modeli LLM działa w chmurze zewnętrznych dostawców. Sam kontener `ai-router` (PHP 8.5 Alpine, `PHP_CLI_SERVER_WORKERS=4`) zużywa jedynie **~14 MiB RAM** oraz **0,00 PLN / mies.** kosztów utrzymania.
 
 ### B. 6-Dostawczowa Kaskada Odporności na Awarie (11 Modeli LLM) + Smart Fast-Fail
 Router posiada skonfigurowanych **6 niezależnych kluczy API**, nakłada wydłużony cooldown na przeciążone modele (`600 s` po timeoucie 4s, `180 s` po HTTP `503`) i wykonuje **natychmiastowy Fast-Fail do Groq LPU (`~0.6 s`) / Cerebras WSE (`~0.15 s`)** po pierwszym timeoucie sieciowym lub gdy $\ge 2$ modele Gemini są zawieszone:

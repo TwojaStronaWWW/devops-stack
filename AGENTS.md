@@ -38,7 +38,7 @@ VPS/
 │   ├── ntfy/ & privatebin/        # Konfiguracje Zero-Trust dla własnego serwera Push (server.yml) oraz sejfu haseł (conf.php)
 │   ├── change-radar/              # Cele monitoringu zmian zewnętrznych (targets.json: CeZ P1, KSeF, NFZ, LH.pl, NGO Katowice)
 │   ├── node-exporter/             # Prometheus Textfile Collector (*.prom: backupy, Fail2ban IPS, IoC, audyt, change_radar)
-│   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 21 reguł alertów (rules/ai-router.yml)
+│   └── prometheus/                # Reguły scrapingu (prometheus.yml, ai-router 5s) oraz 25 reguł alertów (rules/ai-router.yml)
 ├── docs/                          # AI_ROUTER_RAPORT.md, CLOUDFLARE_STAGING_GUIDE.md
 ├── scripts/
 │   ├── 01-harden-os.sh / 02-install-docker.sh / optimize-wsl-shell.sh
@@ -53,7 +53,7 @@ VPS/
 │   ├── setup-kuma.js / setup-ntfy.js / sync-gsc-keywords.sh / sync-p1-status.sh / warm-ai-cache.sh
 │   ├── open-dashboard.cmd/.ps1 / open-amms-assistant.cmd/.ps1 / verify-remote.ps1/.cmd / ai-router-report.sh/.ps1 / ai-review-staged.sh/.ps1
 │   └── oracle-arm-hunter.sh / preview-tunnel.ps1/.sh / runners/
-├── services/ai-router/            # Mikro-router AI, AMMS RAG & Analityki WWW (PHP 8.3 Alpine + PDO SQLite FTS5, 4 workery PHP)
+├── services/ai-router/            # Mikro-router AI, AMMS RAG & Analityki WWW (PHP 8.5 Alpine + PDO SQLite FTS5, 4 workery PHP)
 │   ├── src/                       # chat-router.php, router-endpoints.php, llm-cascade.php, lead-notifier.php, ai-stats.php, web-analytics.php, amms-rag-search.php, amms-teams.html, p1-radar.html, widget.js
 │   ├── data/                      # Bazy wiedzy RAG :ro (*-knowledge.txt + amms-knowledge.sqlite)
 │   ├── storage/                   # Wolumen ai_router_storage (rate_limits, cache RAG, ai_stats.json)
