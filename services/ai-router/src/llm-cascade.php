@@ -543,7 +543,7 @@ function aiRunModelCascade(array $ctx, int &$aiAttempts, ?int &$aiDepth): array 
         }
     }
 
-    // Darmowy Fallback 5: OpenRouter Free Models (cohere/north-mini-code:free [TYLKO AMMS SQL] + nemotron-3-super-120b + nemotron-3-ultra-550b)
+    // Darmowy Fallback 5: OpenRouter Free Models (cohere/north-mini-code:free [TYLKO AMMS SQL] + nemotron-3.5-lightning + nemotron-3-ultra-550b)
     if ($answer === null && $openRouterApiKey !== '') {
         $messages = [['role' => 'system', 'content' => $systemInstruction]];
         foreach ($sanitizedHistory as $turn) {

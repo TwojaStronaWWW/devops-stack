@@ -408,7 +408,7 @@ Router posiada skonfigurowanych **6 niezależnych kluczy API**, nakłada wydłu�
 | **6 (Fallback 6)** | Cerebras WSE (`CEREBRAS_API_KEY`) | `gpt-oss-120b` (`low`) | `2 400` / doba | Wafer-Scale Engine (`~2000 tok/s`, odpowiedź w `~0.15 s`, 1 mln tok/doba) |
 | **7 (Fallback 7)** | Cerebras WSE (`CEREBRAS_API_KEY`) | `qwen-3.8-27b` (`no-think`) | `648 000` / doba | Gigantyczna pula 648 tys. zapytań/doba (450 RPM, `0` reasoning tokens) |
 | **8 (Fallback 8)** | Cloudflare Workers AI (`CF_AI_API_TOKEN`) | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | `1 000` / doba | Edge AI na sieci Cloudflare (`10 000 Neurons/doba`, `~7.5` neurona/zapytanie) |
-| **9 (Fallback 9)** | OpenRouter (`OPENROUTER_API_KEY`) | `nvidia/nemotron-3-super-120b-a12b:free` | `200` / doba | Niezależny zapasowy klaster chmurowy (`:free`, `reasoning: none`) |
+| **9 (Fallback 9)** | OpenRouter (`OPENROUTER_API_KEY`) | `nvidia/nemotron-3.5-lightning:free` | `200` / doba | Niezależny zapasowy klaster chmurowy (`:free`, `reasoning: none`) |
 | **10 (Bezpiecznik)** | Anthropic Claude (`ANTHROPIC_API_KEY`) | `claude-haiku-4-5` | `1 000` / doba | Ostatni bezpiecznik Pre-paid $5 (`~0.9 s`, `0` myśli, Prompt Cache `-90%`) |
 
 ### C. Pełna Obserwowalność, Alerting i Raportowanie CLI (ISO 27001 Zero-PII)

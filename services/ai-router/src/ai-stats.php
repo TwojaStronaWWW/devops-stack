@@ -71,13 +71,16 @@ function aiCerebrasChain(): array
  */
 function aiOpenRouterChain(bool $includeAmmsSql = false): array
 {
-    $primary = trim((string)(getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3-super-120b-a12b:free'));
+    $primary = trim((string)(getenv('OPENROUTER_MODEL') ?: 'nvidia/nemotron-3.5-lightning:free'));
+    if ($primary === 'nvidia/nemotron-3-super-120b-a12b:free') {
+        $primary = 'nvidia/nemotron-3.5-lightning:free';
+    }
     $models = [];
     if ($includeAmmsSql) {
         $models[] = 'cohere/north-mini-code:free';
     }
     $models[] = $primary;
-    $models[] = 'nvidia/nemotron-3-super-120b-a12b:free';
+    $models[] = 'nvidia/nemotron-3.5-lightning:free';
     $models[] = 'nvidia/nemotron-3-ultra-550b-a55b:free';
     return array_values(array_unique($models));
 }
@@ -466,7 +469,7 @@ function aiDailyLimits(): array
         'mistral/codestral-latest'                         => 1500,
         'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 1000,
         'openrouter/cohere/north-mini-code:free'           => 200,
-        'openrouter/nvidia/nemotron-3-super-120b-a12b:free' => 200,
+        'openrouter/nvidia/nemotron-3.5-lightning:free'    => 200,
         'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free' => 200,
         'anthropic/claude-haiku-4-5'                       => 1000,
     ];
@@ -503,7 +506,7 @@ function aiReadableSourceLabel(int $pos, string $model): string
         'mistral/codestral-latest'                            => 'Codestral SQL (AMMS)',
         'cloudflare/@cf/meta/llama-3.3-70b-instruct-fp8-fast' => 'CF Llama 3.3 70B',
         'openrouter/cohere/north-mini-code:free'              => 'Cohere Code SQL (AMMS)',
-        'openrouter/nvidia/nemotron-3-super-120b-a12b:free'   => 'Nemotron 120B',
+        'openrouter/nvidia/nemotron-3.5-lightning:free'       => 'Nemotron 3.5 Lightning',
         'openrouter/nvidia/nemotron-3-ultra-550b-a55b:free'   => 'Nemotron Ultra 550B',
         'anthropic/claude-haiku-4-5'                          => 'Claude Haiku 4.5',
     ];
@@ -621,7 +624,7 @@ function aiRenderMetrics(): string
     }
 
     $defaultResults = ['ok' => 0, 'rate_limited' => 0, 'quota_daily' => 0, 'unavailable' => 0, 'not_found' => 0, 'auth' => 0, 'network' => 0];
-    $names = array_unique(array_merge(array_column($chain, 'model'), array_keys($s['models'])));
+    $names = array_unique(array_column($chain, 'model'));
     foreach ($names as $name) {
         $name = (string)$name;
         $m = $s['models'][$name] ?? aiModelDefault($providerOf[$name] ?? 'unknown');
