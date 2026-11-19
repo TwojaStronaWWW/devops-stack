@@ -62,7 +62,7 @@ groups:
           description: "{{ $value }} zablokowanych zapytan w 10 min - mozliwy abuse lub zbyt niski limit per IP."
 
       - alert: AIRouterModelDeprecated
-        expr: increase(ai_router_model_attempts_total{result="not_found"}[1h]) > 0
+        expr: increase(ai_router_model_attempts_total{result="not_found"}[1h]) > 0 and on(model) ai_router_model_suspended >= 0
         labels:
           severity: warning
         annotations:
